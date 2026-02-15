@@ -7,8 +7,8 @@ import api from '../../services/api';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { 
   LogOut, FileText, Search, Bell, User, Plus, Edit2, Trash2, Eye, 
-  Upload, X, Calendar, Building2, Mail, Phone, MapPin, Save, XCircle,
-  CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Users, Power, PowerOff
+  Upload, X, Calendar, Building2, Save, XCircle,
+  CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Users, Power, PowerOff
 } from 'lucide-react';
 
 interface Document {
@@ -793,7 +793,7 @@ const ProcuringEntityDashboard = () => {
                               </button>
                             )}
                             <button
-                              onClick={() => handleToggleQuestionnaireStatus(questionnaire.id, questionnaire.isActive)}
+                              onClick={() => handleToggleQuestionnaireStatus(questionnaire.id, questionnaire.isActive ?? false)}
                               className={`px-4 py-2 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2 ${
                                 questionnaire.isActive
                                   ? 'bg-orange-50 hover:bg-orange-100 text-orange-700'
@@ -1951,11 +1951,11 @@ const EditQuestionnaireModal = ({
 
   // Provide default functions if props are missing (shouldn't happen, but safety check)
   const safeAddQuestion = addQuestion || (() => console.error('addQuestion not provided'));
-  const safeUpdateQuestion = updateQuestion || ((i: number, f: string, v: any) => console.error('updateQuestion not provided'));
-  const safeRemoveQuestion = removeQuestion || ((i: number) => console.error('removeQuestion not provided'));
-  const safeAddOption = addOption || ((i: number) => console.error('addOption not provided'));
-  const safeUpdateOption = updateOption || ((qi: number, oi: number, v: string) => console.error('updateOption not provided'));
-  const safeRemoveOption = removeOption || ((qi: number, oi: number) => console.error('removeOption not provided'));
+  const safeUpdateQuestion = updateQuestion || ((_i: number, _f: string, _v: any) => console.error('updateQuestion not provided'));
+  const safeRemoveQuestion = removeQuestion || ((_i: number) => console.error('removeQuestion not provided'));
+  const safeAddOption = addOption || ((_i: number) => console.error('addOption not provided'));
+  const safeUpdateOption = updateOption || ((_qi: number, _oi: number, _v: string) => console.error('updateOption not provided'));
+  const safeRemoveOption = removeOption || ((_qi: number, _oi: number) => console.error('removeOption not provided'));
 
   // Convert deadline to datetime-local format for editing
   const formatDeadlineForInput = (deadline: string) => {
@@ -2256,7 +2256,7 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
                   </span>
                 </div>
                 <div className="space-y-4">
-                  {response.answers?.map((answer: any, index: number) => {
+                  {response.answers?.map((answer: any, _index: number) => {
                     const raw = answer.answerText ?? answer.answerValue ?? '';
                     const isDate = answer.question?.questionType === 'date';
                     const displayText = isDate && raw
@@ -2309,7 +2309,7 @@ const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/
 
 // Supplier Detail Modal – profile, submitted responses, answers, documents (download)
 const SupplierDetailModal = ({
-  supplierId,
+  supplierId: _supplierId,
   supplier,
   responses,
   loading,

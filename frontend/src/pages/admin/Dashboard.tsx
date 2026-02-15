@@ -17,6 +17,7 @@ interface Supplier {
     firstName: string;
     lastName: string;
     isActive: boolean;
+    phone?: string;
   };
 }
 
@@ -29,6 +30,7 @@ interface ProcuringEntity {
     firstName: string;
     lastName: string;
     isActive: boolean;
+    phone?: string;
   };
 }
 
@@ -2100,6 +2102,7 @@ const EditAnnouncementModal = ({ announcement, onClose, onSuccess }: { announcem
 
 // Edit Supplier Modal Component
 const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplier & { address?: string; city?: string; country?: string; turnover?: number; employeeCount?: number; yearEstablished?: number }; onClose: () => void; onSuccess: () => void }) => {
+  const { t } = useTranslation();
   const { showToast } = useToast();
   const [formData, setFormData] = useState({
     firstName: '',
@@ -2448,6 +2451,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
 
 // Edit Entity Modal Component
 const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEntity & { address?: string; city?: string; country?: string; companyId?: string }; onClose: () => void; onSuccess: () => void }) => {
+  const { t } = useTranslation();
   const { showToast } = useToast();
   const [formData, setFormData] = useState({
     firstName: '',
@@ -2755,6 +2759,7 @@ const ResetPasswordModal = ({
   onClose: () => void;
   onSuccess: () => void;
 }) => {
+  const { t } = useTranslation();
   const { showToast } = useToast();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

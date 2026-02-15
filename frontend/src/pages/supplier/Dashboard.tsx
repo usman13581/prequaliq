@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useTranslation } from 'react-i18next';
@@ -7,8 +7,8 @@ import { DateOnlyPicker } from '../../components/DateOnlyPicker';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { 
   LogOut, FileText, History, User, Upload, Plus, Edit2, Trash2, Eye, 
-  Save, XCircle, Calendar, Building2, Mail, Phone, MapPin, CheckCircle,
-  Clock, X, Search, ChevronDown, ChevronUp, Bell
+  Save, XCircle, Calendar, Building2, CheckCircle,
+  Search, ChevronDown, Bell
 } from 'lucide-react';
 
 interface Document {
@@ -434,22 +434,6 @@ const SupplierDashboard = () => {
     }
   };
 
-  // Handle questionnaire response change
-  const handleResponseChange = (questionId: string, value: any) => {
-    setQuestionnaireResponse({
-      ...questionnaireResponse,
-      [questionId]: { ...questionnaireResponse[questionId], answerText: value, answerValue: value }
-    });
-  };
-
-  // Handle document upload for question
-  const handleQuestionDocumentUpload = (questionId: string, file: File) => {
-    setResponseDocuments({
-      ...responseDocuments,
-      [questionId]: file
-    });
-  };
-
   // Save draft - simple save, no auto-save
   const handleSaveDraft = async () => {
     if (!selectedQuestionnaire) return;
@@ -477,7 +461,7 @@ const SupplierDashboard = () => {
       // Map answers with documentIds (use new uploads if available, otherwise use existing documentIds)
       // Include all answers that have been entered (even if empty, user can save empty draft)
       const answers = Object.entries(questionnaireResponse)
-        .filter(([questionId, data]) => data) // Only include entries that exist
+        .filter(([_questionId, data]) => data) // Only include entries that exist
         .map(([questionId, data]) => ({
           questionId,
           answerText: data.answerText || '',
@@ -740,7 +724,7 @@ const SupplierDashboard = () => {
                   <div className="space-y-4">
                     {activeQuestionnaires.map((questionnaire) => {
                       const hasResponse = questionnaire.responses && questionnaire.responses.length > 0;
-                      const isSubmitted = hasResponse && questionnaire.responses[0].status === 'submitted';
+                      const isSubmitted = hasResponse && questionnaire.responses?.[0]?.status === 'submitted';
                       const isExpired = new Date(questionnaire.deadline) < new Date();
 
                       return (
@@ -1679,7 +1663,7 @@ const QuestionnaireResponseModal = ({
                 name={`question-${question.id}`}
                 value="yes"
                 checked={response[question.id]?.answerValue === 'yes'}
-                onChange={(e) => {
+                onChange={() => {
                   const currentAnswer = response[question.id] || {};
                   setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: 'Yes', answerValue: 'yes' } });
                 }}
@@ -1694,7 +1678,7 @@ const QuestionnaireResponseModal = ({
                 name={`question-${question.id}`}
                 value="no"
                 checked={response[question.id]?.answerValue === 'no'}
-                onChange={(e) => {
+                onChange={() => {
                   const currentAnswer = response[question.id] || {};
                   setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: 'No', answerValue: 'no' } });
                 }}
