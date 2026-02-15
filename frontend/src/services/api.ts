@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// In production use VITE_API_URL (e.g. https://prequaliq-production.up.railway.app); in dev use /api (Vite proxy)
+const baseURL = import.meta.env.VITE_API_URL || '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },

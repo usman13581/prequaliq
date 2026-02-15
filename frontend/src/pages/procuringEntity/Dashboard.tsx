@@ -1032,7 +1032,7 @@ const ProcuringEntityDashboard = () => {
                                 </div>
                                 <div className="flex items-center gap-1 flex-shrink-0">
                                   <a
-                                    href={`http://localhost:5001/uploads/${doc.filePath.replace(/^.*[\\\/]/, '')}`}
+                                    href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${doc.filePath.replace(/^.*[\\\/]/, '')}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-all duration-200"
@@ -2282,7 +2282,7 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
                             <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
                               <FileText size={16} />
                               <a
-                                href={`http://localhost:5001/uploads/${answer.document.filePath.replace(/^.*[\\\/]/, '')}`}
+                                href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${answer.document.filePath.replace(/^.*[\\\/]/, '')}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:underline"

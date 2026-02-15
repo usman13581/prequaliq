@@ -1,0 +1,8 @@
+# Railway config for PrequaliQ backend (use Root Directory = "backend" in Railway)
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node server.js"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
