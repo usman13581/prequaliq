@@ -29,6 +29,16 @@ app.use('/api/documents', require('./routes/documents'));
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/cpv', require('./routes/cpv'));
 
+// Root - so visiting the URL shows something friendly
+app.get('/', (req, res) => {
+  res.json({
+    message: 'PrequaliQ API',
+    status: 'running',
+    health: '/api/health',
+    docs: 'Use the frontend app or API routes under /api/...'
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'PrequaliQ API is running' });
