@@ -1716,7 +1716,7 @@ const QuestionnaireResponseModal = ({
                   name={`question-${question.id}`}
                   value={option}
                   checked={response[question.id]?.answerValue === option}
-                  onChange={(e) => {
+                  onChange={() => {
                     const currentAnswer = response[question.id] || {};
                     setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: option, answerValue: option } });
                   }}
