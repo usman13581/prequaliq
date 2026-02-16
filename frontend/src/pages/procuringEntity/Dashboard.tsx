@@ -554,7 +554,7 @@ const ProcuringEntityDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Navbar */}
       <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-2 sm:px-3 lg:px-4">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
               <div>
@@ -590,14 +590,14 @@ const ProcuringEntityDashboard = () => {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-8">
+      <div className="w-full mx-auto px-2 sm:px-3 py-8">
         {/* Tabs */}
         <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 mb-6">
           <div className="border-b border-gray-200/50">
             <nav className="flex overflow-x-auto">
               <button
                 onClick={() => setActiveTab('questionnaires')}
-                className={`relative py-4 px-6 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
                   activeTab === 'questionnaires'
                     ? 'text-primary-700'
                     : 'text-gray-600 hover:text-gray-900'
@@ -611,7 +611,7 @@ const ProcuringEntityDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('suppliers')}
-                className={`relative py-4 px-6 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
                   activeTab === 'suppliers'
                     ? 'text-primary-700'
                     : 'text-gray-600 hover:text-gray-900'
@@ -625,7 +625,7 @@ const ProcuringEntityDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('announcements')}
-                className={`relative py-4 px-6 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
                   activeTab === 'announcements'
                     ? 'text-primary-700'
                     : 'text-gray-600 hover:text-gray-900'
@@ -639,7 +639,7 @@ const ProcuringEntityDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('profile')}
-                className={`relative py-4 px-6 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
                   activeTab === 'profile'
                     ? 'text-primary-700'
                     : 'text-gray-600 hover:text-gray-900'
@@ -654,7 +654,7 @@ const ProcuringEntityDashboard = () => {
             </nav>
           </div>
 
-          <div className="px-3 py-6">
+          <div className="px-2 py-6">
             {/* Questionnaires Tab */}
             {activeTab === 'questionnaires' && (
               <div className="space-y-6">

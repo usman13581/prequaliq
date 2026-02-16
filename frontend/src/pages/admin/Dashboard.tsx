@@ -227,7 +227,7 @@ const AdminDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Modern Navbar */}
       <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-2 sm:px-3 lg:px-4">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center shadow-lg">
@@ -266,7 +266,7 @@ const AdminDashboard = () => {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-8">
+      <div className="w-full mx-auto px-2 sm:px-3 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-white/50 hover:shadow-2xl transition-all duration-300">
@@ -317,10 +317,10 @@ const AdminDashboard = () => {
         <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/50 overflow-hidden">
           {/* Modern Tab Navigation */}
           <div className="bg-gradient-to-r from-gray-50 to-blue-50/50 border-b border-gray-200/50">
-            <nav className="flex space-x-1 px-6">
+            <nav className="flex space-x-1 px-2">
               <button
                 onClick={() => setActiveTab('suppliers')}
-                className={`relative py-4 px-6 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
                   activeTab === 'suppliers'
                     ? 'text-primary-700'
                     : 'text-gray-600 hover:text-gray-900'
@@ -341,7 +341,7 @@ const AdminDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('entities')}
-                className={`relative py-4 px-6 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
                   activeTab === 'entities'
                     ? 'text-primary-700'
                     : 'text-gray-600 hover:text-gray-900'
@@ -362,7 +362,7 @@ const AdminDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('announcements')}
-                className={`relative py-4 px-6 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
                   activeTab === 'announcements'
                     ? 'text-primary-700'
                     : 'text-gray-600 hover:text-gray-900'
@@ -384,7 +384,7 @@ const AdminDashboard = () => {
             </nav>
           </div>
 
-          <div className="px-3 py-6">
+          <div className="px-2 py-6">
             {loading && (
               <div className="text-center py-16">
                 <div className="inline-flex flex-col items-center">
@@ -400,7 +400,7 @@ const AdminDashboard = () => {
             )}
 
             {!loading && activeTab === 'suppliers' && (
-              <div className="px-3 py-6">
+              <div className="px-2 py-6">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{t('sections.supplierManagement')}</h2>
@@ -599,7 +599,7 @@ const AdminDashboard = () => {
             )}
 
             {!loading && activeTab === 'entities' && (
-              <div className="px-3 py-6">
+              <div className="px-2 py-6">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{t('sections.entityManagement')}</h2>
@@ -773,7 +773,7 @@ const AdminDashboard = () => {
             )}
 
             {!loading && activeTab === 'announcements' && (
-              <div className="px-3 py-6">
+              <div className="px-2 py-6">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{t('sections.announcementManagement')}</h2>
