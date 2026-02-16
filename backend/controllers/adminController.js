@@ -761,6 +761,43 @@ const resetProcuringEntityPassword = async (req, res) => {
   }
 };
 
+// Debug endpoint to see what database connection Railway is using
+const debugSuppliers = async (req, res) => {
+  try {
+    const db = require('../models');
+    const totalCount = await db.Supplier.count();
+    const suppliers = await db.Supplier.findAll({
+      include: [
+        {
+          model: db.User,
+          as: 'user',
+          attributes: ['email', 'isActive'],
+          required: true
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    const dbUrl = process.env.DATABASE_URL ? 
+      process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@') : 'Not set';
+    
+    res.json({
+      databaseUrl: dbUrl,
+      totalSuppliers: totalCount,
+      suppliersWithUsers: suppliers.length,
+      suppliers: suppliers.map(s => ({
+        email: s.user?.email,
+        companyName: s.companyName,
+        status: s.status,
+        createdAt: s.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Debug suppliers error:', error);
+    res.status(500).json({ message: 'Error', error: error.message });
+  }
+};
+
 module.exports = {
   createSupplier,
   createProcuringEntity,
@@ -776,5 +813,6 @@ module.exports = {
   updateProcuringEntity,
   toggleProcuringEntityStatus,
   resetProcuringEntityPassword,
-  getCompanies
+  getCompanies,
+  debugSuppliers
 };

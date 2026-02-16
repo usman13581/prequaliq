@@ -22,5 +22,6 @@ router.put('/procuring-entities/:entityId/toggle-status', adminController.toggle
 router.put('/procuring-entities/:entityId/reset-password', adminController.resetProcuringEntityPassword);
 router.put('/procuring-entities/:entityId', adminController.updateProcuringEntity);
 router.get('/companies', adminController.getCompanies);
+router.get('/debug/suppliers', adminController.debugSuppliers);
 
 module.exports = router;
