@@ -10,7 +10,9 @@
     "force-migrate": "node scripts/forceMigrations.js",
     "seed": "sequelize-cli db:seed:all",
     "create-admin": "node scripts/createAdmin.js",
-    "clean-db": "node scripts/cleanDatabase.js"
+    "clean-db": "node scripts/cleanDatabase.js",
+    "seed-prod-questionnaires": "node scripts/seedProdQuestionnaires.js",
+    "seed-cpv-from-api": "node scripts/seedCpvFromApi.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
