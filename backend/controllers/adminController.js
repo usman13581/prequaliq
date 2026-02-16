@@ -208,21 +208,32 @@ const getSuppliers = async (req, res) => {
     const where = {};
     if (status) where.status = status;
 
+    // First check total count without includes
+    const totalCount = await db.Supplier.count({ where });
+    console.log(`[getSuppliers] Total suppliers in DB: ${totalCount}`);
+
     const suppliers = await db.Supplier.findAll({
       where,
       include: [
         {
           model: db.User,
           as: 'user',
-          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'isActive']
+          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'isActive'],
+          required: true // Explicitly require user (INNER JOIN)
         },
         {
           model: db.CPVCode,
           as: 'cpvCodes',
-          through: { attributes: [] }
+          through: { attributes: [] },
+          required: false // LEFT JOIN for CPV codes
         }
       ],
       order: [['createdAt', 'DESC']]
+    });
+
+    console.log(`[getSuppliers] Suppliers returned: ${suppliers.length}`);
+    suppliers.forEach(s => {
+      console.log(`  - ${s.user?.email || 'NO USER'} | ${s.companyName} | ${s.status}`);
     });
 
     res.json({ suppliers });
