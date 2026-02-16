@@ -761,6 +761,68 @@ const resetProcuringEntityPassword = async (req, res) => {
   }
 };
 
+// Delete supplier
+const deleteSupplier = async (req, res) => {
+  try {
+    const { supplierId } = req.params;
+    const db = require('../models');
+
+    const supplier = await db.Supplier.findByPk(supplierId, {
+      include: [{ model: db.User, as: 'user' }]
+    });
+
+    if (!supplier) {
+      return res.status(404).json({ message: 'Supplier not found' });
+    }
+
+    const userId = supplier.userId;
+
+    // Delete supplier (this will cascade delete related records if foreign keys are set up)
+    await supplier.destroy();
+
+    // Delete the associated user
+    if (userId) {
+      await db.User.destroy({ where: { id: userId } });
+    }
+
+    res.json({ message: 'Supplier deleted successfully' });
+  } catch (error) {
+    console.error('Delete supplier error:', error);
+    res.status(500).json({ message: 'Error deleting supplier', error: error.message });
+  }
+};
+
+// Delete procuring entity
+const deleteProcuringEntity = async (req, res) => {
+  try {
+    const { entityId } = req.params;
+    const db = require('../models');
+
+    const entity = await db.ProcuringEntity.findByPk(entityId, {
+      include: [{ model: db.User, as: 'user' }]
+    });
+
+    if (!entity) {
+      return res.status(404).json({ message: 'Procuring entity not found' });
+    }
+
+    const userId = entity.userId;
+
+    // Delete entity (this will cascade delete related records if foreign keys are set up)
+    await entity.destroy();
+
+    // Delete the associated user
+    if (userId) {
+      await db.User.destroy({ where: { id: userId } });
+    }
+
+    res.json({ message: 'Procuring entity deleted successfully' });
+  } catch (error) {
+    console.error('Delete procuring entity error:', error);
+    res.status(500).json({ message: 'Error deleting procuring entity', error: error.message });
+  }
+};
+
 // Debug endpoint to see what database connection Railway is using
 const debugSuppliers = async (req, res) => {
   try {
@@ -814,5 +876,7 @@ module.exports = {
   toggleProcuringEntityStatus,
   resetProcuringEntityPassword,
   getCompanies,
-  debugSuppliers
+  debugSuppliers,
+  deleteSupplier,
+  deleteProcuringEntity
 };

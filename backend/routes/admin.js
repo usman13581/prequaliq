@@ -16,11 +16,13 @@ router.put('/suppliers/:supplierId/review', adminController.reviewSupplier);
 router.put('/suppliers/:supplierId/toggle-status', adminController.toggleSupplierStatus);
 router.put('/suppliers/:supplierId/reset-password', adminController.resetSupplierPassword);
 router.put('/suppliers/:supplierId', adminController.updateSupplier);
+router.delete('/suppliers/:supplierId', adminController.deleteSupplier);
 router.get('/procuring-entities', adminController.getProcuringEntities);
 router.get('/procuring-entities/:entityId', adminController.getProcuringEntityById);
 router.put('/procuring-entities/:entityId/toggle-status', adminController.toggleProcuringEntityStatus);
 router.put('/procuring-entities/:entityId/reset-password', adminController.resetProcuringEntityPassword);
 router.put('/procuring-entities/:entityId', adminController.updateProcuringEntity);
+router.delete('/procuring-entities/:entityId', adminController.deleteProcuringEntity);
 router.get('/companies', adminController.getCompanies);
 router.get('/debug/suppliers', adminController.debugSuppliers);
 

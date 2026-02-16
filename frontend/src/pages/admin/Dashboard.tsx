@@ -65,6 +65,8 @@ const AdminDashboard = () => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [resetPasswordSupplier, setResetPasswordSupplier] = useState<Supplier | null>(null);
   const [resetPasswordEntity, setResetPasswordEntity] = useState<ProcuringEntity | null>(null);
+  const [deleteSupplierConfirm, setDeleteSupplierConfirm] = useState<Supplier | null>(null);
+  const [deleteEntityConfirm, setDeleteEntityConfirm] = useState<ProcuringEntity | null>(null);
 
   // Fetch suppliers
   const fetchSuppliers = async (showLoading = true) => {
@@ -158,6 +160,46 @@ const AdminDashboard = () => {
     } catch (error: any) {
       console.error('Error toggling entity status:', error);
       showToast(error.response?.data?.message || t('msg.failedToggleEntity'), 'error');
+    }
+  };
+
+  // Delete supplier
+  const handleDeleteSupplier = async () => {
+    if (!deleteSupplierConfirm) return;
+    const supplierId = deleteSupplierConfirm.id;
+    try {
+      await api.delete(`/admin/suppliers/${supplierId}`);
+      showToast(t('msg.supplierDeleted'), 'success');
+      setDeleteSupplierConfirm(null);
+      fetchSuppliers(false);
+      // Reset to first page if current page becomes empty
+      const currentPageStart = (supplierPage - 1) * itemsPerPage;
+      if (currentPageStart >= suppliers.length - 1 && supplierPage > 1) {
+        setSupplierPage(prev => Math.max(1, prev - 1));
+      }
+    } catch (error: any) {
+      console.error('Error deleting supplier:', error);
+      showToast(error.response?.data?.message || t('msg.failedDeleteSupplier'), 'error');
+    }
+  };
+
+  // Delete procuring entity
+  const handleDeleteEntity = async () => {
+    if (!deleteEntityConfirm) return;
+    const entityId = deleteEntityConfirm.id;
+    try {
+      await api.delete(`/admin/procuring-entities/${entityId}`);
+      showToast(t('msg.entityDeleted'), 'success');
+      setDeleteEntityConfirm(null);
+      fetchProcuringEntities(false);
+      // Reset to first page if current page becomes empty
+      const currentPageStart = (entityPage - 1) * itemsPerPage;
+      if (currentPageStart >= procuringEntities.length - 1 && entityPage > 1) {
+        setEntityPage(prev => Math.max(1, prev - 1));
+      }
+    } catch (error: any) {
+      console.error('Error deleting procuring entity:', error);
+      showToast(error.response?.data?.message || t('msg.failedDeleteEntity'), 'error');
     }
   };
 
@@ -492,6 +534,14 @@ const AdminDashboard = () => {
                                   <Key size={14} />
                                   {t('buttons.resetPassword')}
                                 </button>
+                                <button
+                                  onClick={() => setDeleteSupplierConfirm(supplier)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                  title="Delete Supplier"
+                                >
+                                  <Trash2 size={14} />
+                                  {t('common.delete')}
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -657,6 +707,14 @@ const AdminDashboard = () => {
                                 >
                                   <Key size={14} />
                                   {t('buttons.resetPassword')}
+                                </button>
+                                <button
+                                  onClick={() => setDeleteEntityConfirm(entity)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                  title="Delete Entity"
+                                >
+                                  <Trash2 size={14} />
+                                  {t('common.delete')}
                                 </button>
                               </div>
                             </td>
@@ -917,6 +975,26 @@ const AdminDashboard = () => {
             setResetPasswordEntity(null);
             showToast(t('msg.entityPasswordReset'), 'success');
           }}
+        />
+      )}
+
+      {/* Delete Supplier Confirmation Modal */}
+      {deleteSupplierConfirm && (
+        <DeleteConfirmationModal
+          type="supplier"
+          name={deleteSupplierConfirm.companyName}
+          onClose={() => setDeleteSupplierConfirm(null)}
+          onConfirm={handleDeleteSupplier}
+        />
+      )}
+
+      {/* Delete Entity Confirmation Modal */}
+      {deleteEntityConfirm && (
+        <DeleteConfirmationModal
+          type="procuring entity"
+          name={deleteEntityConfirm.entityName}
+          onClose={() => setDeleteEntityConfirm(null)}
+          onConfirm={handleDeleteEntity}
         />
       )}
     </div>
@@ -2929,6 +3007,106 @@ const ResetPasswordModal = ({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// Delete Confirmation Modal Component
+const DeleteConfirmationModal = ({
+  type,
+  name,
+  onClose,
+  onConfirm
+}: {
+  type: 'supplier' | 'procuring entity';
+  name: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) => {
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    try {
+      await onConfirm();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" style={{ top: 0, left: 0, right: 0, bottom: 0 }}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform">
+        <div className="sticky top-0 bg-gradient-to-r from-white to-red-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-2xl font-bold bg-gradient-to-r from-red-600 to-red-800 bg-clip-text text-transparent flex items-center gap-2">
+                <Trash2 size={24} />
+                {t('common.delete')} {type === 'supplier' ? t('nav.suppliers') : t('nav.entities')}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">{name}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all duration-200"
+            >
+              <XCircle size={24} />
+            </button>
+          </div>
+        </div>
+        
+        <div className="p-6 space-y-5">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <Trash2 className="text-red-600" size={24} />
+            </div>
+            <div className="flex-1">
+              <p className="text-gray-900 font-semibold mb-2">
+                {type === 'supplier' ? t('sections.confirmDeleteSupplier') : t('sections.confirmDeleteEntity')}
+              </p>
+              <p className="text-sm text-gray-600">
+                {t('common.delete')} <strong>{name}</strong>?
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex gap-3 justify-end pt-6 border-t border-gray-200/50">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={loading}
+              className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white font-semibold rounded-xl hover:from-red-700 hover:to-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  {t('common.loading')}...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={18} />
+                  {t('common.delete')}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
