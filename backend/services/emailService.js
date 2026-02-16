@@ -3,7 +3,7 @@ const nodemailer = require('nodemailer');
 // Create transporter for Hostinger SMTP (info@Prequaliq.com)
 const createTransporter = () => {
   const host = process.env.SMTP_HOST || 'smtp.hostinger.com';
-  const port = parseInt(process.env.SMTP_PORT || '465', 10);
+  const port = parseInt(process.env.SMTP_PORT || '587', 10); // Default to 587 (TLS) instead of 465 (SSL)
   const user = process.env.SMTP_USER || process.env.EMAIL_FROM;
   const pass = process.env.SMTP_PASS;
 
@@ -15,13 +15,18 @@ const createTransporter = () => {
   return nodemailer.createTransport({
     host,
     port,
-    secure: port === 465,
+    secure: port === 465, // true for 465, false for other ports
+    requireTLS: port === 587, // Use STARTTLS for port 587
     auth: {
       user,
       pass
     },
     // Force IPv4 to avoid ENETUNREACH errors on Railway
-    family: 4
+    family: 4,
+    // Additional options for better connectivity
+    tls: {
+      rejectUnauthorized: false // Allow self-signed certificates if needed
+    }
   });
 };
 
