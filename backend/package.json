@@ -7,6 +7,7 @@
     "start": "node scripts/runMigrations.js && node server.js",
     "dev": "nodemon server.js",
     "migrate": "sequelize-cli db:migrate",
+    "force-migrate": "node scripts/forceMigrations.js",
     "seed": "sequelize-cli db:seed:all",
     "create-admin": "node scripts/createAdmin.js",
     "clean-db": "node scripts/cleanDatabase.js"
