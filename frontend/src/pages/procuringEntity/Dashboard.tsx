@@ -554,7 +554,7 @@ const ProcuringEntityDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Navbar */}
       <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
-        <div className="w-full mx-auto px-2 sm:px-3 lg:px-4">
+        <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
               <div>
@@ -590,7 +590,7 @@ const ProcuringEntityDashboard = () => {
         </div>
       </nav>
 
-      <div className="w-full mx-auto px-2 sm:px-3 py-8">
+      <div className="w-full mx-auto px-5 sm:px-6 lg:px-8 py-8">
         {/* Tabs */}
         <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 mb-6">
           <div className="border-b border-gray-200/50">
