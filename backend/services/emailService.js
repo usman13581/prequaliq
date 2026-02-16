@@ -19,7 +19,9 @@ const createTransporter = () => {
     auth: {
       user,
       pass
-    }
+    },
+    // Force IPv4 to avoid ENETUNREACH errors on Railway
+    family: 4
   });
 };
 
