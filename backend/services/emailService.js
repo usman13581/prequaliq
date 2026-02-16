@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 // Create transporter for Hostinger SMTP (info@Prequaliq.com)
 const createTransporter = () => {
@@ -31,7 +32,10 @@ const createTransporter = () => {
 };
 
 const transporter = createTransporter();
+// Initialize Resend if API key is available (works better on Railway)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM = process.env.EMAIL_FROM || 'info@Prequaliq.com';
+const RESEND_FROM = process.env.RESEND_FROM_EMAIL || FROM; // Use verified domain email for Resend
 const APP_NAME = process.env.APP_NAME || 'PrequaliQ';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
@@ -184,9 +188,33 @@ const templates = {
 };
 
 /**
- * Send email
+ * Send email - uses Resend API if available (better for Railway), otherwise falls back to SMTP
  */
 const sendEmail = async (to, subject, html) => {
+  // Try Resend API first (works better on Railway)
+  if (resend) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: RESEND_FROM,
+        to,
+        subject,
+        html
+      });
+      
+      if (error) {
+        console.error('[Email] Resend failed:', { to, error: error.message });
+        // Fall through to SMTP fallback
+      } else {
+        console.log('[Email] Sent via Resend:', { to, subject: subject?.substring(0, 40), messageId: data?.id });
+        return { success: true, messageId: data?.id, method: 'resend' };
+      }
+    } catch (error) {
+      console.error('[Email] Resend error:', { to, error: error.message });
+      // Fall through to SMTP fallback
+    }
+  }
+
+  // Fallback to SMTP (for local/dev or if Resend fails)
   if (!transporter) {
     console.log('[Email] Skipped (not configured):', { to, subject: subject?.substring(0, 50) });
     return { skipped: true, reason: 'Email not configured' };
@@ -199,10 +227,10 @@ const sendEmail = async (to, subject, html) => {
       subject,
       html
     });
-    console.log('[Email] Sent:', { to, subject: subject?.substring(0, 40), messageId: info.messageId });
-    return { success: true, messageId: info.messageId };
+    console.log('[Email] Sent via SMTP:', { to, subject: subject?.substring(0, 40), messageId: info.messageId });
+    return { success: true, messageId: info.messageId, method: 'smtp' };
   } catch (error) {
-    console.error('[Email] Failed:', { to, error: error.message });
+    console.error('[Email] SMTP failed:', { to, error: error.message });
     return { success: false, error: error.message };
   }
 };
