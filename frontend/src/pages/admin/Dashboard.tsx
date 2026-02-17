@@ -230,15 +230,9 @@ const AdminDashboard = () => {
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-xl">PQ</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                  PrequaliQ
-                </h1>
-                <p className="text-xs text-gray-500 font-medium">{t('nav.adminDashboard')}</p>
-              </div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
+                PrequaliQ
+              </h1>
             </div>
             <div className="flex items-center gap-4">
               <LanguageSwitcher />

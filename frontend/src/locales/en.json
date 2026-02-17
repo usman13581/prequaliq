@@ -389,5 +389,34 @@
     "viewResponse": "View Response",
     "search": "Search",
     "clear": "Clear"
+  },
+  "cpvCodes": {
+    "title": "CPV Codes",
+    "editButton": "Edit CPV Codes",
+    "modalTitle": "Select CPV Codes",
+    "modalDescription": "Select the CPV codes that match your business categories",
+    "searchPlaceholder": "Search CPV codes...",
+    "saveButton": "Save CPV Codes",
+    "noCodesLoaded": "No CPV codes loaded",
+    "noCodesLoadedHint": "Ensure the database is seeded (run seed-cpv-from-api with production DATABASE_URL) and that the API URL is correct. Check the browser console (F12) for errors.",
+    "noCodesSelected": "No CPV codes selected",
+    "failedToLoad": "Failed to load CPV codes"
+  },
+  "nutsCodes": {
+    "title": "NUTS Codes",
+    "editButton": "Edit NUTS Codes",
+    "modalTitle": "Select NUTS Codes",
+    "modalDescription": "Select the NUTS codes for your business regions",
+    "searchPlaceholder": "Search NUTS codes...",
+    "saveButton": "Save NUTS Codes",
+    "noCodesLoaded": "No NUTS codes loaded",
+    "noCodesLoadedHint": "Ensure the database is seeded and that the API URL is correct. Check the browser console (F12) for errors.",
+    "noCodesSelected": "No NUTS codes selected",
+    "updatedSuccessfully": "NUTS codes updated successfully",
+    "failedToLoad": "Failed to load NUTS codes",
+    "failedToUpdate": "Failed to update NUTS codes",
+    "level1": "NUTS 1 - Regions",
+    "level2": "NUTS 2 - Areas",
+    "level3": "NUTS 3 - Counties"
   }
 }

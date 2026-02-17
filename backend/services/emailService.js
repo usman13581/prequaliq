@@ -4,19 +4,26 @@ const { Resend } = require('resend');
 // Create transporter for Hostinger SMTP (info@Prequaliq.com)
 const createTransporter = () => {
   const host = process.env.SMTP_HOST || 'smtp.hostinger.com';
-  const port = parseInt(process.env.SMTP_PORT || '587', 10); // Default to 587 (TLS) instead of 465 (SSL)
+  const port = parseInt(process.env.SMTP_PORT || '465', 10); // Default to 465 (SSL) for Hostinger
   const user = process.env.SMTP_USER || process.env.EMAIL_FROM;
   const pass = process.env.SMTP_PASS;
 
+  console.log('[Email Service] SMTP Configuration:', {
+    host,
+    port,
+    user: user ? `${user.substring(0, 3)}***` : 'not set',
+    hasPassword: !!pass
+  });
+
   if (!user || !pass) {
-    console.warn('Email not configured: SMTP_USER/SMTP_PASS or EMAIL_FROM not set. Emails will not be sent.');
+    console.warn('[Email Service] Email not configured: SMTP_USER/SMTP_PASS or EMAIL_FROM not set. Emails will not be sent.');
     return null;
   }
 
-  return nodemailer.createTransport({
+  const transporterConfig = {
     host,
     port,
-    secure: port === 465, // true for 465, false for other ports
+    secure: port === 465, // true for 465 (SSL), false for other ports
     requireTLS: port === 587, // Use STARTTLS for port 587
     auth: {
       user,
@@ -28,14 +35,32 @@ const createTransporter = () => {
     tls: {
       rejectUnauthorized: false // Allow self-signed certificates if needed
     }
+  };
+
+  console.log('[Email Service] Creating SMTP transporter with config:', {
+    ...transporterConfig,
+    auth: { user: transporterConfig.auth.user, pass: '***hidden***' }
   });
+
+  return nodemailer.createTransport(transporterConfig);
 };
 
 const transporter = createTransporter();
 // Initialize Resend if API key is available (works better on Railway)
+// Only use Resend if explicitly configured, otherwise use SMTP
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM = process.env.EMAIL_FROM || 'info@Prequaliq.com';
 const RESEND_FROM = process.env.RESEND_FROM_EMAIL || FROM; // Use verified domain email for Resend
+
+// Log email configuration status
+console.log('[Email Service] Configuration:', {
+  hasResend: !!resend,
+  hasTransporter: !!transporter,
+  smtpHost: process.env.SMTP_HOST || 'smtp.hostinger.com',
+  smtpPort: process.env.SMTP_PORT || '587',
+  emailFrom: FROM,
+  resendFrom: RESEND_FROM
+});
 const APP_NAME = process.env.APP_NAME || 'PrequaliQ';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
@@ -184,6 +209,24 @@ const templates = {
       ${reason ? `<div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0;"><p style="margin: 0;"><strong>Reason:</strong> ${reason}</p></div>` : ''}
       <p style="margin: 0; color: #6b7280;">If you have questions, please contact your administrator.</p>
     `, { showLoginButton: false })
+  }),
+
+  newQuestionnaire: ({ recipientName, questionnaireTitle, questionnaireDescription, deadline, cpvCode, entityName, questionnaireUrl }) => ({
+    subject: `New questionnaire available: ${questionnaireTitle}`,
+    html: emailLayout(`
+      <h2 style="margin: 0 0 20px 0; font-size: 20px; color: #1e3a8a;">New questionnaire available</h2>
+      <p style="margin: 0 0 16px 0;">Dear ${recipientName},</p>
+      <p style="margin: 0 0 20px 0;">A new questionnaire matching your CPV codes has been created and is now available for you to respond to.</p>
+      <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0;">
+        <p style="margin: 0 0 8px 0; font-weight: 600; color: #1e40af;">Questionnaire details</p>
+        <p style="margin: 0;"><strong>Title:</strong> ${questionnaireTitle}</p>
+        ${questionnaireDescription ? `<p style="margin: 8px 0 0 0;"><strong>Description:</strong> ${questionnaireDescription}</p>` : ''}
+        <p style="margin: 8px 0 0 0;"><strong>CPV Code:</strong> ${cpvCode}</p>
+        <p style="margin: 8px 0 0 0;"><strong>Deadline:</strong> ${deadline}</p>
+        ${entityName ? `<p style="margin: 8px 0 0 0;"><strong>Procuring Entity:</strong> ${entityName}</p>` : ''}
+      </div>
+      <p style="margin: 20px 0 0 0;">Please log in to your supplier portal to view and respond to this questionnaire.</p>
+    `, { showLoginButton: true, buttonText: 'View Questionnaire', buttonHref: questionnaireUrl || FRONTEND_URL, titleColor: '#1e3a8a' })
   })
 };
 
@@ -191,9 +234,12 @@ const templates = {
  * Send email - uses Resend API if available (better for Railway), otherwise falls back to SMTP
  */
 const sendEmail = async (to, subject, html) => {
+  console.log('[Email] Attempting to send email:', { to, subject: subject?.substring(0, 50), hasResend: !!resend, hasTransporter: !!transporter });
+  
   // Try Resend API first (works better on Railway)
   if (resend) {
     try {
+      console.log('[Email] Trying Resend API...');
       const { data, error } = await resend.emails.send({
         from: RESEND_FROM,
         to,
@@ -202,36 +248,55 @@ const sendEmail = async (to, subject, html) => {
       });
       
       if (error) {
-        console.error('[Email] Resend failed:', { to, error: error.message });
+        console.error('[Email] Resend failed:', { to, error: error.message, errorDetails: error });
         // Fall through to SMTP fallback
       } else {
-        console.log('[Email] Sent via Resend:', { to, subject: subject?.substring(0, 40), messageId: data?.id });
+        console.log('[Email] ✓ Sent via Resend:', { to, subject: subject?.substring(0, 40), messageId: data?.id });
         return { success: true, messageId: data?.id, method: 'resend' };
       }
     } catch (error) {
-      console.error('[Email] Resend error:', { to, error: error.message });
+      console.error('[Email] Resend exception:', { to, error: error.message, errorStack: error.stack });
       // Fall through to SMTP fallback
     }
+  } else {
+    console.log('[Email] Resend not available (RESEND_API_KEY not set), using SMTP fallback');
   }
 
   // Fallback to SMTP (for local/dev or if Resend fails)
   if (!transporter) {
-    console.log('[Email] Skipped (not configured):', { to, subject: subject?.substring(0, 50) });
-    return { skipped: true, reason: 'Email not configured' };
+    console.error('[Email] ✗ Skipped - SMTP not configured:', { 
+      to, 
+      subject: subject?.substring(0, 50),
+      reason: 'SMTP_USER/SMTP_PASS or EMAIL_FROM not set',
+      smtpUser: process.env.SMTP_USER || 'not set',
+      smtpPass: process.env.SMTP_PASS ? 'set' : 'not set',
+      emailFrom: process.env.EMAIL_FROM || 'not set'
+    });
+    return { skipped: true, reason: 'Email not configured - SMTP credentials missing' };
   }
 
   try {
+    console.log('[Email] Trying SMTP...', { 
+      host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+      port: process.env.SMTP_PORT || '587',
+      from: FROM
+    });
     const info = await transporter.sendMail({
       from: `"${APP_NAME}" <${FROM}>`,
       to,
       subject,
       html
     });
-    console.log('[Email] Sent via SMTP:', { to, subject: subject?.substring(0, 40), messageId: info.messageId });
+    console.log('[Email] ✓ Sent via SMTP:', { to, subject: subject?.substring(0, 40), messageId: info.messageId });
     return { success: true, messageId: info.messageId, method: 'smtp' };
   } catch (error) {
-    console.error('[Email] SMTP failed:', { to, error: error.message });
-    return { success: false, error: error.message };
+    console.error('[Email] ✗ SMTP failed:', { 
+      to, 
+      error: error.message,
+      errorCode: error.code,
+      errorStack: error.stack?.substring(0, 200)
+    });
+    return { success: false, error: error.message, method: 'smtp' };
   }
 };
 
@@ -317,6 +382,30 @@ const sendSupplierRejectedEmail = async (email, firstName, lastName, reason) => 
   return sendEmail(email, subject, html);
 };
 
+/**
+ * Send new questionnaire notification email to suppliers
+ */
+const sendNewQuestionnaireEmail = async (email, firstName, lastName, questionnaireTitle, questionnaireDescription, deadline, cpvCode, entityName, questionnaireId) => {
+  const recipientName = `${firstName || ''} ${lastName || ''}`.trim() || 'User';
+  const questionnaireUrl = `${FRONTEND_URL}/supplier/questionnaires`;
+  const deadlineFormatted = deadline ? new Date(deadline).toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  }) : 'Not specified';
+  
+  const { subject, html } = templates.newQuestionnaire({
+    recipientName,
+    questionnaireTitle,
+    questionnaireDescription: questionnaireDescription || '',
+    deadline: deadlineFormatted,
+    cpvCode: cpvCode || 'N/A',
+    entityName: entityName || '',
+    questionnaireUrl
+  });
+  return sendEmail(email, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendAccountCreatedEmail,
@@ -326,5 +415,6 @@ module.exports = {
   sendPasswordResetByAdminEmail,
   sendAccountDeletedEmail,
   sendSupplierApprovedEmail,
-  sendSupplierRejectedEmail
+  sendSupplierRejectedEmail,
+  sendNewQuestionnaireEmail
 };

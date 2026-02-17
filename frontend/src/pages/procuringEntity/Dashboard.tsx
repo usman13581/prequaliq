@@ -149,13 +149,18 @@ const ProcuringEntityDashboard = () => {
     }
   };
 
-  // Fetch CPV codes
-  const fetchCPVCodes = async () => {
+  // Fetch CPV codes (limit so large lists don't timeout)
+  const fetchCPVCodes = async (searchTerm?: string) => {
     try {
-      const response = await api.get('/cpv');
-      setCpvCodes(response.data.cpvCodes || []);
+      const params: Record<string, string> = { limit: '2000' };
+      if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim();
+      const response = await api.get('/cpv', { params });
+      const list = response.data.cpvCodes || [];
+      setCpvCodes(Array.isArray(list) ? list : []);
     } catch (error: any) {
       console.error('Failed to fetch CPV codes:', error);
+      showToast(error.response?.data?.message || 'Failed to load CPV codes', 'error');
+      setCpvCodes([]);
     }
   };
 
@@ -557,12 +562,9 @@ const ProcuringEntityDashboard = () => {
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                  PrequaliQ
-                </h1>
-                <p className="text-xs text-gray-500 font-medium">{t('nav.procuringEntityPortal')}</p>
-              </div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
+                PrequaliQ
+              </h1>
             </div>
             <div className="flex items-center gap-4">
               <LanguageSwitcher />
@@ -1569,7 +1571,9 @@ const CPVSearchSelect = ({
               </div>
             </div>
             <div className="max-h-56 overflow-y-auto py-1">
-              {filtered.length === 0 ? (
+              {cpvCodes.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-amber-700 bg-amber-50 rounded">No CPV codes loaded. Ensure the database is seeded (run seed-cpv-from-api) and check the browser console for errors.</p>
+              ) : filtered.length === 0 ? (
                 <p className="px-4 py-3 text-sm text-gray-500">{t('sections.noCPVCodesMatch')}</p>
               ) : (
                 filtered.map((cpv) => (

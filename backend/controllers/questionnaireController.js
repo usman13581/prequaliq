@@ -1,5 +1,140 @@
 const db = require('../models');
 const { Op } = require('sequelize');
+const { sendNewQuestionnaireEmail } = require('../services/emailService');
+
+/**
+ * Helper function to send email notifications to suppliers matching the questionnaire's CPV code
+ */
+const sendQuestionnaireNotifications = async (questionnaire, procuringEntity) => {
+  try {
+    console.log('[Questionnaire Notifications] Starting notification process');
+    console.log('[Questionnaire Notifications] Questionnaire ID:', questionnaire?.id);
+    console.log('[Questionnaire Notifications] CPV Code ID:', questionnaire?.cpvCodeId);
+    
+    if (!questionnaire || !questionnaire.cpvCodeId) {
+      console.log('[Questionnaire Notifications] Skipping - no CPV code');
+      return;
+    }
+
+    // Find all suppliers with matching CPV code who are approved
+    console.log(`[Questionnaire Notifications] Searching for suppliers with CPV code ID: ${questionnaire.cpvCodeId}`);
+    
+    // First, let's check if there are any suppliers at all
+    const allSuppliersCount = await db.Supplier.count();
+    const approvedSuppliersCount = await db.Supplier.count({ where: { status: 'approved' } });
+    console.log(`[Questionnaire Notifications] Total suppliers: ${allSuppliersCount}, Approved: ${approvedSuppliersCount}`);
+    
+    // Check if CPV code exists
+    const cpvCodeExists = await db.CPVCode.findByPk(questionnaire.cpvCodeId);
+    if (!cpvCodeExists) {
+      console.error(`[Questionnaire Notifications] CPV code ${questionnaire.cpvCodeId} does not exist in database!`);
+      return;
+    }
+    console.log(`[Questionnaire Notifications] CPV code exists: ${cpvCodeExists.code} - ${cpvCodeExists.description}`);
+    
+    // Check how many suppliers have this CPV code (without status filter)
+    const suppliersWithCpv = await db.Supplier.findAll({
+      include: [
+        {
+          model: db.CPVCode,
+          as: 'cpvCodes',
+          where: {
+            id: questionnaire.cpvCodeId
+          },
+          required: true
+        }
+      ]
+    });
+    console.log(`[Questionnaire Notifications] Suppliers with this CPV code (any status): ${suppliersWithCpv.length}`);
+    if (suppliersWithCpv.length > 0) {
+      suppliersWithCpv.forEach((s, idx) => {
+        console.log(`[Questionnaire Notifications]   Supplier ${idx + 1}: ID=${s.id}, Status=${s.status}, UserID=${s.userId}`);
+      });
+    }
+    
+    const suppliers = await db.Supplier.findAll({
+      where: {
+        status: 'approved' // Only send to approved suppliers
+      },
+      include: [
+        {
+          model: db.User,
+          as: 'user',
+          where: {
+            isActive: true // Only active users
+          },
+          required: true
+        },
+        {
+          model: db.CPVCode,
+          as: 'cpvCodes',
+          where: {
+            id: questionnaire.cpvCodeId
+          },
+          required: true
+        }
+      ]
+    });
+
+    console.log(`[Questionnaire Notifications] Found ${suppliers?.length || 0} matching supplier(s) (approved + active + CPV match)`);
+    
+    if (!suppliers || suppliers.length === 0) {
+      console.log(`[Questionnaire Notifications] ⚠ No matching suppliers found for CPV code: ${questionnaire.cpvCodeId}`);
+      console.log(`[Questionnaire Notifications] Requirements: status='approved', user.isActive=true, has CPV code ${questionnaire.cpvCodeId}`);
+      console.log(`[Questionnaire Notifications] Check above logs to see what suppliers exist and their status`);
+      return;
+    }
+
+    console.log(`[Questionnaire Notifications] Found ${suppliers.length} matching supplier(s) for questionnaire: ${questionnaire.title}`);
+
+    // Get CPV code details
+    const cpvCode = questionnaire.cpvCode || await db.CPVCode.findByPk(questionnaire.cpvCodeId);
+    const cpvCodeDisplay = cpvCode ? `${cpvCode.code} - ${cpvCode.description}` : 'N/A';
+
+    // Get entity name
+    const entityName = procuringEntity?.entityName || procuringEntity?.user?.firstName + ' ' + procuringEntity?.user?.lastName || 'Procuring Entity';
+
+    // Send emails to all matching suppliers
+    const emailPromises = suppliers.map(async (supplier) => {
+      const user = supplier.user;
+      if (!user || !user.email) {
+        console.log(`[Questionnaire Notifications] Skipping supplier ${supplier.id} - no email`);
+        return;
+      }
+
+      try {
+        console.log(`[Questionnaire Notifications] Attempting to send email to: ${user.email} (${user.firstName} ${user.lastName})`);
+        const emailResult = await sendNewQuestionnaireEmail(
+          user.email,
+          user.firstName,
+          user.lastName,
+          questionnaire.title,
+          questionnaire.description,
+          questionnaire.deadline,
+          cpvCodeDisplay,
+          entityName,
+          questionnaire.id
+        );
+        if (emailResult.success) {
+          console.log(`[Questionnaire Notifications] ✓ Email sent successfully to: ${user.email} (Method: ${emailResult.method})`);
+        } else if (emailResult.skipped) {
+          console.log(`[Questionnaire Notifications] ⚠ Email skipped for ${user.email}: ${emailResult.reason}`);
+        } else {
+          console.error(`[Questionnaire Notifications] ✗ Email failed for ${user.email}:`, emailResult.error);
+        }
+      } catch (error) {
+        console.error(`[Questionnaire Notifications] ✗ Exception sending email to ${user.email}:`, error.message);
+        console.error(`[Questionnaire Notifications] Full error:`, error);
+      }
+    });
+
+    await Promise.allSettled(emailPromises);
+    console.log(`[Questionnaire Notifications] Completed sending notifications for questionnaire: ${questionnaire.title}`);
+  } catch (error) {
+    console.error('[Questionnaire Notifications] Error in sendQuestionnaireNotifications:', error);
+    // Don't throw - we don't want to break the questionnaire creation/update
+  }
+};
 
 // Create questionnaire (Procuring Entity)
 const createQuestionnaire = async (req, res) => {
@@ -59,8 +194,27 @@ const createQuestionnaire = async (req, res) => {
         {
           model: db.CPVCode,
           as: 'cpvCode'
+        },
+        {
+          model: db.ProcuringEntity,
+          as: 'procuringEntity',
+          include: [{
+            model: db.User,
+            as: 'user'
+          }]
         }
       ]
+    });
+
+    console.log(`[Questionnaire Create] Questionnaire created successfully: ${createdQuestionnaire.title}`);
+    console.log(`[Questionnaire Create] CPV Code ID: ${createdQuestionnaire.cpvCodeId}`);
+    console.log(`[Questionnaire Create] Procuring Entity: ${procuringEntity?.entityName || 'N/A'}`);
+    console.log(`[Questionnaire Create] Calling sendQuestionnaireNotifications...`);
+
+    // Send email notifications to matching suppliers (async, don't block response)
+    sendQuestionnaireNotifications(createdQuestionnaire, createdQuestionnaire.procuringEntity || procuringEntity).catch(err => {
+      console.error('[Questionnaire Create] Error sending questionnaire notifications:', err);
+      console.error('[Questionnaire Create] Error stack:', err.stack);
     });
 
     res.status(201).json({
@@ -333,6 +487,8 @@ const submitResponse = async (req, res) => {
 };
 
 // Get questionnaire response (Supplier)
+// IMPORTANT: Always returns submitted responses regardless of questionnaire expiration status.
+// Suppliers should be able to view their submitted answers forever, even if questionnaire expired.
 const getResponse = async (req, res) => {
   try {
     const { questionnaireId } = req.params;
@@ -347,6 +503,7 @@ const getResponse = async (req, res) => {
     }
     console.log('Supplier ID:', supplier.id);
 
+    // Find response - no expiration check; suppliers can always view their submitted responses
     const response = await db.QuestionnaireResponse.findOne({
       where: {
         questionnaireId,
@@ -436,6 +593,9 @@ const updateQuestionnaire = async (req, res) => {
       return res.status(404).json({ message: 'Questionnaire not found' });
     }
 
+    // Store old CPV code ID to check if it changed
+    const oldCpvCodeId = questionnaire.cpvCodeId;
+
     // Update questionnaire basic info
     await questionnaire.update({
       title,
@@ -486,8 +646,27 @@ const updateQuestionnaire = async (req, res) => {
         {
           model: db.CPVCode,
           as: 'cpvCode'
+        },
+        {
+          model: db.ProcuringEntity,
+          as: 'procuringEntity',
+          include: [{
+            model: db.User,
+            as: 'user'
+          }]
         }
       ]
+    });
+
+    // Verify CPV code was updated
+    console.log(`[Questionnaire Update] Old CPV Code ID: ${oldCpvCodeId}, New CPV Code ID: ${cpvCodeId}`);
+    console.log(`[Questionnaire Update] Updated questionnaire CPV Code ID: ${updatedQuestionnaire.cpvCodeId}`);
+    
+    // Send email notifications to matching suppliers on every update (async, don't block response)
+    // This ensures suppliers are notified even if CPV code changes
+    console.log(`[Questionnaire Update] Sending notifications for questionnaire ${questionnaire.id}, CPV Code ID: ${updatedQuestionnaire.cpvCodeId}`);
+    sendQuestionnaireNotifications(updatedQuestionnaire, updatedQuestionnaire.procuringEntity || procuringEntity).catch(err => {
+      console.error('[Questionnaire Update] Error sending questionnaire notifications:', err);
     });
 
     res.json({

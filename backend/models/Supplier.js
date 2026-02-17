@@ -80,6 +80,14 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'supplierId',
       as: 'cpvCodes'
     });
+    // NUTS codes association - only if NUTSCode model exists (after migrations)
+    if (models.NUTSCode) {
+      Supplier.belongsToMany(models.NUTSCode, {
+        through: 'SupplierNUTS',
+        foreignKey: 'supplierId',
+        as: 'nutsCodes'
+      });
+    }
   };
 
   return Supplier;

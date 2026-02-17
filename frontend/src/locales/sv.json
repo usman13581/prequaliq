@@ -383,5 +383,34 @@
     "viewResponse": "Visa svar",
     "search": "Sök",
     "clear": "Rensa"
+  },
+  "cpvCodes": {
+    "title": "CPV-koder",
+    "editButton": "Redigera CPV-koder",
+    "modalTitle": "Välj CPV-koder",
+    "modalDescription": "Välj de CPV-koder som matchar dina affärskategorier",
+    "searchPlaceholder": "Sök CPV-koder...",
+    "saveButton": "Spara CPV-koder",
+    "noCodesLoaded": "Inga CPV-koder laddade",
+    "noCodesLoadedHint": "Se till att databasen är seedad (kör seed-cpv-from-api med production DATABASE_URL) och att API-URL:en är korrekt. Kontrollera webbläsarkonsolen (F12) för fel.",
+    "noCodesSelected": "Inga CPV-koder valda",
+    "failedToLoad": "Kunde inte ladda CPV-koder"
+  },
+  "nutsCodes": {
+    "title": "NUTS-koder",
+    "editButton": "Redigera NUTS-koder",
+    "modalTitle": "Välj NUTS-koder",
+    "modalDescription": "Välj NUTS-koderna för dina affärsregioner",
+    "searchPlaceholder": "Sök NUTS-koder...",
+    "saveButton": "Spara NUTS-koder",
+    "noCodesLoaded": "Inga NUTS-koder laddade",
+    "noCodesLoadedHint": "Se till att databasen är seedad och att API-URL:en är korrekt. Kontrollera webbläsarkonsolen (F12) för fel.",
+    "noCodesSelected": "Inga NUTS-koder valda",
+    "updatedSuccessfully": "NUTS-koder uppdaterade",
+    "failedToLoad": "Kunde inte ladda NUTS-koder",
+    "failedToUpdate": "Kunde inte uppdatera NUTS-koder",
+    "level1": "NUTS 1 - Regioner",
+    "level2": "NUTS 2 - Områden",
+    "level3": "NUTS 3 - Län"
   }
 }

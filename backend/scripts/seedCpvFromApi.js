@@ -2,13 +2,13 @@
  * Fetch EU CPV codes (used by Sweden and all EU) from OpenDataSoft and seed the database.
  * Source: https://public.opendatasoft.com/explore/dataset/nomenclature-cpv/
  *
- * Usage (production):
- *   DATABASE_URL='postgresql://...' NODE_ENV=production node scripts/seedCpvFromApi.js
- *
- * Usage (local):
- *   NODE_ENV=production node scripts/seedCpvFromApi.js
+ * Usage:
+ *   1. Paste your production DB URL into backend/.env.prod (see .env.prod.example)
+ *   2. From project root: cd backend && npm run seed-cpv-prod
+ *   Or with URL inline: DATABASE_URL='postgresql://...' npm run seed-cpv-prod
  */
 require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env.prod') });
 const db = require('../models');
 
 const API_BASE = 'https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/nomenclature-cpv/records';

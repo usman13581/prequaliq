@@ -27,6 +27,14 @@ interface CPVCode {
   description: string;
 }
 
+interface NUTSCode {
+  id: string;
+  code: string;
+  name: string;
+  nameSwedish: string;
+  level: number;
+}
+
 interface Question {
   id: string;
   questionText: string;
@@ -90,6 +98,12 @@ const SupplierDashboard = () => {
   const [cpvSearchTerm, setCpvSearchTerm] = useState('');
   const [showCPVSelector, setShowCPVSelector] = useState(false);
   
+  // NUTS codes state
+  const [selectedNUTSCodes, setSelectedNUTSCodes] = useState<string[]>([]);
+  const [nutsCodes, setNutsCodes] = useState<NUTSCode[]>([]);
+  const [nutsSearchTerm, setNutsSearchTerm] = useState('');
+  const [showNUTSSelector, setShowNUTSSelector] = useState(false);
+  
   // Announcements state
   const [announcements, setAnnouncements] = useState<any[]>([]);
 
@@ -127,6 +141,7 @@ const SupplierDashboard = () => {
       });
       setDocuments(supplier.documents || []);
       setSelectedCPVCodes(supplier.cpvCodes?.map((cpv: CPVCode) => cpv.id) || []);
+      setSelectedNUTSCodes(supplier.nutsCodes?.map((nuts: NUTSCode) => nuts.id) || []);
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedFetchProfile'), 'error');
     } finally {
@@ -134,13 +149,33 @@ const SupplierDashboard = () => {
     }
   };
 
-  // Fetch CPV codes
-  const fetchCPVCodes = async () => {
+  // Fetch CPV codes (limit so large lists don't timeout)
+  const fetchCPVCodes = async (searchTerm?: string) => {
     try {
-      const response = await api.get('/cpv');
-      setCpvCodes(response.data.cpvCodes || []);
+      const params: Record<string, string> = { limit: '2000' };
+      if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim();
+      const response = await api.get('/cpv', { params });
+      const list = response.data.cpvCodes || [];
+      setCpvCodes(Array.isArray(list) ? list : []);
     } catch (error: any) {
       console.error('Failed to fetch CPV codes:', error);
+      showToast(error.response?.data?.message || t('cpvCodes.failedToLoad'), 'error');
+      setCpvCodes([]);
+    }
+  };
+
+  // Fetch NUTS codes
+  const fetchNUTSCodes = async (searchTerm?: string) => {
+    try {
+      const params: Record<string, string> = {};
+      if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim();
+      const response = await api.get('/nuts', { params });
+      const list = response.data.nutsCodes || [];
+      setNutsCodes(Array.isArray(list) ? list : []);
+    } catch (error: any) {
+      console.error('Failed to fetch NUTS codes:', error);
+      showToast(error.response?.data?.message || t('nutsCodes.failedToLoad'), 'error');
+      setNutsCodes([]);
     }
   };
 
@@ -190,18 +225,25 @@ const SupplierDashboard = () => {
       
       if (response.data.response) {
         const answers: Record<string, any> = {};
-        console.log('Loading answers for questionnaire:', questionnaireId);
-        console.log('Raw response data:', response.data.response);
-        console.log('Answers from backend:', response.data.response.answers);
-        console.log('Number of answers:', response.data.response.answers?.length || 0);
+        console.log('=== LOADING ANSWERS ===');
+        console.log('Questionnaire ID:', questionnaireId);
+        console.log('Raw response data:', JSON.stringify(response.data.response, null, 2));
+        console.log('Answers array:', response.data.response.answers);
+        console.log('Answers array length:', response.data.response.answers?.length || 0);
+        console.log('Response status:', response.data.response.status);
+        console.log('Response ID:', response.data.response.id);
         
-        if (response.data.response.answers && response.data.response.answers.length > 0) {
-          response.data.response.answers.forEach((answer: any) => {
-            console.log('Processing answer:', answer);
+        if (response.data.response.answers && Array.isArray(response.data.response.answers) && response.data.response.answers.length > 0) {
+          console.log('Processing', response.data.response.answers.length, 'answers...');
+          response.data.response.answers.forEach((answer: any, index: number) => {
+            console.log(`\n--- Answer ${index + 1} ---`);
+            console.log('Full answer object:', JSON.stringify(answer, null, 2));
             console.log('Question ID:', answer.questionId);
+            console.log('Question ID type:', typeof answer.questionId);
             console.log('Answer text:', answer.answerText);
             console.log('Answer value:', answer.answerValue);
             console.log('Answer value type:', typeof answer.answerValue);
+            console.log('Has document:', !!answer.document);
             
             // Handle different answer value formats
             let answerValue = answer.answerValue;
@@ -209,62 +251,84 @@ const SupplierDashboard = () => {
             // If answerValue is null/undefined, use answerText
             if (answerValue === null || answerValue === undefined) {
               answerValue = answer.answerText || '';
+              console.log('Using answerText as answerValue:', answerValue);
             } else if (typeof answerValue === 'object') {
               // If it's an object (JSONB), try to extract value or stringify
               if (Array.isArray(answerValue)) {
                 answerValue = answerValue.join(',');
+                console.log('Converted array to string:', answerValue);
               } else if (answerValue.value !== undefined) {
                 answerValue = answerValue.value;
+                console.log('Extracted value from object:', answerValue);
               } else {
                 answerValue = JSON.stringify(answerValue);
+                console.log('Stringified object:', answerValue);
               }
             } else if (typeof answerValue !== 'string') {
               // Convert to string if not already
               answerValue = String(answerValue);
+              console.log('Converted to string:', answerValue);
             }
             
             // Fallback to answerText if answerValue is empty
             if (!answerValue && answer.answerText) {
               answerValue = answer.answerText;
+              console.log('Using answerText as fallback:', answerValue);
             }
             
-            // Use questionId as key
-            answers[answer.questionId] = {
+            // Use questionId as key - ensure it's a string
+            const questionIdKey = String(answer.questionId);
+            answers[questionIdKey] = {
               answerText: answer.answerText || answerValue || '',
               answerValue: answerValue || answer.answerText || '',
               documentId: answer.documentId || null,
               document: answer.document || null // Include document info
             };
             
-            console.log(`✓ Set answer for question ${answer.questionId}:`, answers[answer.questionId]);
+            console.log(`✓ Stored answer for questionId "${questionIdKey}":`, answers[questionIdKey]);
           });
         } else {
-          console.log('No answers found in response');
+          console.warn('⚠️ NO ANSWERS FOUND IN RESPONSE!');
+          console.log('Response object keys:', Object.keys(response.data.response));
+          console.log('Answers property:', response.data.response.answers);
+          console.log('Is answers an array?', Array.isArray(response.data.response.answers));
         }
         
-        console.log('=== ALL PROCESSED ANSWERS ===');
+        console.log('\n=== FINAL PROCESSED ANSWERS OBJECT ===');
         console.log('Answer object:', answers);
         console.log('Answer keys:', Object.keys(answers));
         console.log('Number of answer keys:', Object.keys(answers).length);
+        console.log('Answer entries:', Object.entries(answers));
         
         // Set answers directly - use functional update to ensure we merge correctly
         setQuestionnaireResponse((prev) => {
-          const merged = { ...prev, ...answers };
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:233',message:'Setting questionnaireResponse state',data:{prevKeys:Object.keys(prev),mergedKeys:Object.keys(merged),answerCount:Object.keys(answers).length,answers:Object.keys(answers)},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
-          console.log('Setting questionnaire response state:', merged);
+          const merged = { ...answers }; // Replace instead of merge to ensure clean state
+          console.log('\n=== SETTING STATE ===');
+          console.log('Previous state keys:', Object.keys(prev));
+          console.log('New merged state keys:', Object.keys(merged));
+          console.log('Full merged state:', merged);
           return merged;
         });
         
         // Small delay to ensure state is set before continuing
         await new Promise(resolve => setTimeout(resolve, 50));
         
-        // Update the selectedQuestionnaire to include the response status
+        // Update the selectedQuestionnaire to include the response status AND ensure questionnaire has questions
         setSelectedQuestionnaire((prev) => {
           if (prev && prev.id === questionnaireId) {
+            // Merge questionnaire data from response (which includes questions) with existing data
+            const questionnaireFromResponse = response.data.response.questionnaire;
             return {
               ...prev,
+              // Ensure questions are included from the response
+              questions: questionnaireFromResponse?.questions || prev.questions,
+              // Update other questionnaire fields from response if available
+              ...(questionnaireFromResponse && {
+                title: questionnaireFromResponse.title || prev.title,
+                description: questionnaireFromResponse.description || prev.description,
+                deadline: questionnaireFromResponse.deadline || prev.deadline,
+                cpvCode: questionnaireFromResponse.cpvCode || prev.cpvCode,
+              }),
               responses: [{
                 id: response.data.response.id,
                 status: response.data.response.status,
@@ -392,6 +456,21 @@ const SupplierDashboard = () => {
       fetchProfile();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedUpdateCPV'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update NUTS codes
+  const handleUpdateNUTSCodes = async () => {
+    try {
+      setLoading(true);
+      await api.put('/supplier/nuts-codes', { nutsCodeIds: selectedNUTSCodes });
+      showToast(t('nutsCodes.updatedSuccessfully'), 'success');
+      setShowNUTSSelector(false);
+      fetchProfile();
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('nutsCodes.failedToUpdate'), 'error');
     } finally {
       setLoading(false);
     }
@@ -573,6 +652,15 @@ const SupplierDashboard = () => {
     }
   };
 
+  // Toggle NUTS code selection
+  const toggleNUTSCode = (nutsId: string) => {
+    if (selectedNUTSCodes.includes(nutsId)) {
+      setSelectedNUTSCodes(selectedNUTSCodes.filter(id => id !== nutsId));
+    } else {
+      setSelectedNUTSCodes([...selectedNUTSCodes, nutsId]);
+    }
+  };
+
   const filteredCPVCodes = cpvCodes.filter(cpv =>
     cpv.code.toLowerCase().includes(cpvSearchTerm.toLowerCase()) ||
     cpv.description.toLowerCase().includes(cpvSearchTerm.toLowerCase())
@@ -585,12 +673,9 @@ const SupplierDashboard = () => {
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                  PrequaliQ
-                </h1>
-                <p className="text-xs text-gray-500 font-medium">{t('nav.supplierPortal')}</p>
-              </div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
+                PrequaliQ
+              </h1>
             </div>
             <div className="flex items-center gap-4">
               <LanguageSwitcher />
@@ -836,7 +921,11 @@ const SupplierDashboard = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {questionnaireHistory.map((response) => (
+                    {questionnaireHistory.map((response) => {
+                      // For submitted responses in history, don't show as expired even if deadline was changed retroactively
+                      // Submitted responses are always viewable regardless of current deadline status
+                      const isExpired = false; // Always false for submitted responses - they're always viewable
+                      return (
                       <div
                         key={response.id}
                         className="bg-gradient-to-br from-white to-green-50/30 rounded-2xl p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300"
@@ -857,15 +946,65 @@ const SupplierDashboard = () => {
                                   {t('columns.submittedAt')}: {new Date(response.submittedAt).toLocaleDateString()}
                                 </span>
                               )}
+                              {response.questionnaire?.deadline && (
+                                <span className="flex items-center gap-1">
+                                  <Calendar size={16} />
+                                  {t('columns.deadline')}: {new Date(response.questionnaire.deadline).toLocaleDateString()}
+                                </span>
+                              )}
                             </div>
-                            <span className="inline-block px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                              {t('common.submitted')}
-                            </span>
+                            <div className="flex gap-2 flex-wrap">
+                              <span className="inline-block px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                                {t('common.submitted')}
+                              </span>
+                              {isExpired && (
+                                <span className="inline-block px-3 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded-full">
+                                  {t('common.expired')}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <button
-                            onClick={() => {
-                              setSelectedQuestionnaire(response.questionnaire);
-                              loadQuestionnaireResponse(response.questionnaire.id);
+                            onClick={async () => {
+                              // Set questionnaire with response status so modal shows as read-only
+                              // Also pre-populate answers from history if available
+                              const preloadedAnswers: Record<string, any> = {};
+                              if (response.answers && response.answers.length > 0) {
+                                response.answers.forEach((answer: any) => {
+                                  let answerValue = answer.answerValue;
+                                  // Handle different answer value formats
+                                  if (answerValue === null || answerValue === undefined) {
+                                    answerValue = answer.answerText || '';
+                                  } else if (typeof answerValue === 'object') {
+                                    if (Array.isArray(answerValue)) {
+                                      answerValue = answerValue.join(',');
+                                    } else if (answerValue.value !== undefined) {
+                                      answerValue = answerValue.value;
+                                    } else {
+                                      answerValue = JSON.stringify(answerValue);
+                                    }
+                                  } else if (typeof answerValue !== 'string') {
+                                    answerValue = String(answerValue);
+                                  }
+                                  preloadedAnswers[answer.questionId] = {
+                                    answerText: answer.answerText || answerValue || '',
+                                    answerValue: answerValue || answer.answerText || '',
+                                    documentId: answer.documentId || null,
+                                    document: answer.document || null
+                                  };
+                                });
+                              }
+                              setQuestionnaireResponse(preloadedAnswers);
+                              setSelectedQuestionnaire({
+                                ...response.questionnaire,
+                                responses: [{
+                                  id: response.id,
+                                  status: response.status,
+                                  submittedAt: response.submittedAt
+                                }]
+                              });
+                              // Still load to ensure we have the latest data, but preloaded answers will show immediately
+                              await loadQuestionnaireResponse(response.questionnaire.id);
                             }}
                             className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
                           >
@@ -874,7 +1013,8 @@ const SupplierDashboard = () => {
                           </button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1185,7 +1325,7 @@ const SupplierDashboard = () => {
                       {/* CPV Codes */}
                       <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
                         <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-lg font-bold text-gray-900">CPV Codes</h3>
+                          <h3 className="text-lg font-bold text-gray-900">{t('cpvCodes.title')}</h3>
                           {!editingProfile && (
                             <button
                               onClick={() => {
@@ -1195,7 +1335,7 @@ const SupplierDashboard = () => {
                               className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm"
                             >
                               <Edit2 size={16} />
-                              Edit CPV Codes
+                              {t('cpvCodes.editButton')}
                             </button>
                           )}
                         </div>
@@ -1211,7 +1351,44 @@ const SupplierDashboard = () => {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-gray-500 text-sm">No CPV codes selected</p>
+                          <p className="text-gray-500 text-sm">{t('cpvCodes.noCodesSelected')}</p>
+                        )}
+                      </div>
+
+                      {/* NUTS Codes */}
+                      <div className="bg-gradient-to-br from-white to-green-50/30 rounded-2xl p-6 border border-gray-200/50">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg font-bold text-gray-900">{t('nutsCodes.title')}</h3>
+                          {!editingProfile && (
+                            <button
+                              onClick={() => {
+                                // Refresh selected NUTS codes from profile
+                                if (profile?.nutsCodes) {
+                                  setSelectedNUTSCodes(profile.nutsCodes.map((nuts: NUTSCode) => nuts.id));
+                                }
+                                setShowNUTSSelector(true);
+                                fetchNUTSCodes();
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-all duration-200 font-medium text-sm"
+                            >
+                              <Edit2 size={16} />
+                              {t('nutsCodes.editButton')}
+                            </button>
+                          )}
+                        </div>
+                        {profile?.nutsCodes && profile.nutsCodes.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {profile.nutsCodes.map((nuts: NUTSCode) => (
+                              <span
+                                key={nuts.id}
+                                className="px-3 py-1 bg-green-100 text-green-700 text-sm font-semibold rounded-lg"
+                              >
+                                {nuts.code} - {nuts.nameSwedish} ({nuts.name})
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-gray-500 text-sm">{t('nutsCodes.noCodesSelected')}</p>
                         )}
                       </div>
                     </div>
@@ -1330,6 +1507,27 @@ const SupplierDashboard = () => {
         />
       )}
 
+      {/* NUTS Code Selector Modal */}
+      {showNUTSSelector && (
+        <NUTSSelectorModal
+          nutsCodes={nutsCodes.filter(nuts =>
+            nuts.code.toLowerCase().includes(nutsSearchTerm.toLowerCase()) ||
+            nuts.name.toLowerCase().includes(nutsSearchTerm.toLowerCase()) ||
+            nuts.nameSwedish.toLowerCase().includes(nutsSearchTerm.toLowerCase())
+          )}
+          selectedNUTSCodes={selectedNUTSCodes}
+          toggleNUTSCode={toggleNUTSCode}
+          searchTerm={nutsSearchTerm}
+          setSearchTerm={setNutsSearchTerm}
+          onClose={() => {
+            setShowNUTSSelector(false);
+            fetchProfile();
+          }}
+          onSave={handleUpdateNUTSCodes}
+          loading={loading}
+        />
+      )}
+
       {/* Questionnaire Response Modal */}
       {selectedQuestionnaire && (
         <QuestionnaireResponseModal
@@ -1365,6 +1563,7 @@ const CPVSelectorModal = ({
   onSave,
   loading
 }: any) => {
+  const { t } = useTranslation();
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -1376,8 +1575,8 @@ const CPVSelectorModal = ({
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">Select CPV Codes</h3>
-              <p className="text-sm text-gray-500 mt-1">Select the CPV codes that match your business categories</p>
+              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('cpvCodes.modalTitle')}</h3>
+              <p className="text-sm text-gray-500 mt-1">{t('cpvCodes.modalDescription')}</p>
             </div>
             <button
               onClick={onClose}
@@ -1393,7 +1592,7 @@ const CPVSelectorModal = ({
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search CPV codes..."
+                placeholder={t('cpvCodes.searchPlaceholder')}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
               />
             </div>
@@ -1402,8 +1601,9 @@ const CPVSelectorModal = ({
         <div className="p-6">
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {cpvCodes.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <p>No CPV codes found</p>
+              <div className="text-center py-8 text-amber-700 bg-amber-50 rounded-lg px-4">
+                <p className="font-medium">{t('cpvCodes.noCodesLoaded')}</p>
+                <p className="text-sm mt-1">{t('cpvCodes.noCodesLoadedHint')}</p>
               </div>
             ) : (
               cpvCodes.map((cpv: CPVCode) => (
@@ -1430,7 +1630,7 @@ const CPVSelectorModal = ({
               onClick={onClose}
               className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               onClick={onSave}
@@ -1440,12 +1640,186 @@ const CPVSelectorModal = ({
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Saving...
+                  {t('common.loading')}
                 </>
               ) : (
                 <>
                   <Save size={18} />
-                  Save CPV Codes
+                  {t('cpvCodes.saveButton')}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// NUTS Selector Modal
+const NUTSSelectorModal = ({
+  nutsCodes,
+  selectedNUTSCodes,
+  toggleNUTSCode,
+  searchTerm,
+  setSearchTerm,
+  onClose,
+  onSave,
+  loading
+}: any) => {
+  const { t } = useTranslation();
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+  
+  // Group NUTS codes by level
+  const groupedByLevel = {
+    level1: nutsCodes.filter((nuts: NUTSCode) => nuts.level === 1),
+    level2: nutsCodes.filter((nuts: NUTSCode) => nuts.level === 2),
+    level3: nutsCodes.filter((nuts: NUTSCode) => nuts.level === 3)
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" style={{ top: 0, left: 0, right: 0, bottom: 0 }}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto transform">
+        <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('nutsCodes.modalTitle')}</h3>
+              <p className="text-sm text-gray-500 mt-1">{t('nutsCodes.modalDescription')}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all duration-200"
+            >
+              <XCircle size={24} />
+            </button>
+          </div>
+          <div className="mt-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={t('nutsCodes.searchPlaceholder')}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {nutsCodes.length === 0 ? (
+              <div className="text-center py-8 text-amber-700 bg-amber-50 rounded-lg px-4">
+                <p className="font-medium">{t('nutsCodes.noCodesLoaded')}</p>
+                <p className="text-sm mt-1">{t('nutsCodes.noCodesLoadedHint')}</p>
+              </div>
+            ) : (
+              <>
+                {/* NUTS Level 1 */}
+                {groupedByLevel.level1.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('nutsCodes.level1')}</h4>
+                    <div className="space-y-2">
+                      {groupedByLevel.level1.map((nuts: NUTSCode) => (
+                        <label
+                          key={nuts.id}
+                          className="flex items-start gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-all duration-200"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedNUTSCodes.includes(nuts.id)}
+                            onChange={() => toggleNUTSCode(nuts.id)}
+                            className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900">{nuts.code} - {nuts.nameSwedish}</p>
+                            <p className="text-sm text-gray-600">{nuts.name}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* NUTS Level 2 */}
+                {groupedByLevel.level2.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('nutsCodes.level2')}</h4>
+                    <div className="space-y-2">
+                      {groupedByLevel.level2.map((nuts: NUTSCode) => (
+                        <label
+                          key={nuts.id}
+                          className="flex items-start gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-all duration-200"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedNUTSCodes.includes(nuts.id)}
+                            onChange={() => toggleNUTSCode(nuts.id)}
+                            className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900">{nuts.code} - {nuts.nameSwedish}</p>
+                            <p className="text-sm text-gray-600">{nuts.name}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* NUTS Level 3 */}
+                {groupedByLevel.level3.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('nutsCodes.level3')}</h4>
+                    <div className="space-y-2">
+                      {groupedByLevel.level3.map((nuts: NUTSCode) => (
+                        <label
+                          key={nuts.id}
+                          className="flex items-start gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-all duration-200"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedNUTSCodes.includes(nuts.id)}
+                            onChange={() => toggleNUTSCode(nuts.id)}
+                            className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900">{nuts.code} - {nuts.nameSwedish}</p>
+                            <p className="text-sm text-gray-600">{nuts.name}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex gap-3 justify-end pt-6 border-t border-gray-200/50 mt-6">
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={onSave}
+              disabled={loading}
+              className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  {t('common.loading')}
+                </>
+              ) : (
+                <>
+                  <Save size={18} />
+                  {t('nutsCodes.saveButton')}
                 </>
               )}
             </button>
@@ -1483,18 +1857,19 @@ const QuestionnaireResponseModal = ({
   useEffect(() => {
     if (questionnaire?.id && loadResponse) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:1369',message:'Modal useEffect triggered',data:{questionnaireId:questionnaire.id,responseKeys:Object.keys(response),responseCount:Object.keys(response).length},timestamp:Date.now(),runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:1369',message:'Modal useEffect triggered',data:{questionnaireId:questionnaire.id,responseKeys:Object.keys(response),responseCount:Object.keys(response).length,hasQuestions:!!questionnaire.questions,questionsCount:questionnaire.questions?.length||0},timestamp:Date.now(),runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
       console.log('Modal opened, loading response for questionnaire:', questionnaire.id);
       console.log('Current response state:', response);
       console.log('Response keys:', Object.keys(response));
-      // Always load to ensure we have latest data
+      console.log('Questionnaire has questions:', !!questionnaire.questions, 'Count:', questionnaire.questions?.length || 0);
+      // Always load to ensure we have latest data (including answers)
       setLoadingResponse(true);
       loadResponse(questionnaire.id).finally(() => {
         // Small delay to ensure state has updated
         setTimeout(() => {
           setLoadingResponse(false);
-        }, 100);
+        }, 200);
       });
     } else {
       setLoadingResponse(false);
@@ -1502,35 +1877,62 @@ const QuestionnaireResponseModal = ({
   }, [questionnaire?.id]);
 
   // Check if response is submitted - if so, make it read-only
+  // IMPORTANT: Submitted responses should always be viewable (read-only) regardless of expiration.
+  // Suppliers can view their submitted answers forever, even if questionnaire expired.
   const responseStatus = questionnaire.responses && questionnaire.responses.length > 0 
     ? questionnaire.responses[0].status 
     : null;
   const isSubmitted = responseStatus === 'submitted';
-  const isExpired = new Date(questionnaire.deadline) < new Date();
+  
+  // IMPORTANT: For submitted responses, expiration is based on submission date vs deadline at submission time.
+  // If entity changes deadline retroactively after submission, we still allow viewing.
+  // Only show as expired if it's NOT submitted AND current deadline has passed.
+  const isExpired = !isSubmitted && new Date(questionnaire.deadline) < new Date();
 
-  // Read-only if submitted OR expired
+  // Read-only if submitted (always viewable) OR if expired and not submitted (can't edit expired questionnaires)
+  // Submitted responses are always read-only and viewable forever, regardless of current deadline status
   const isReadOnly = isSubmitted || isExpired;
+
+  // Helper function to get answer for a question - handles both string and UUID formats
+  const getAnswer = (questionId: string) => {
+    const questionIdStr = String(questionId);
+    return response[questionIdStr] || response[questionId] || null;
+  };
 
   // Debug: Log current response state
   useEffect(() => {
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:1398',message:'Response prop changed in modal',data:{questionnaireId:questionnaire?.id,responseKeys:Object.keys(response),responseCount:Object.keys(response).length,responseEntries:Object.entries(response).map(([k,v]:[string,any])=>({key:k,hasAnswerText:!!v?.answerText,hasAnswerValue:!!v?.answerValue}))},timestamp:Date.now(),runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:1398',message:'Response prop changed in modal',data:{questionnaireId:questionnaire?.id,responseKeys:Object.keys(response),responseCount:Object.keys(response).length,hasQuestions:!!questionnaire?.questions,questionsCount:questionnaire?.questions?.length||0,responseEntries:Object.entries(response).map(([k,v]:[string,any])=>({key:k,hasAnswerText:!!v?.answerText,hasAnswerValue:!!v?.answerValue}))},timestamp:Date.now(),runId:'run1',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
     console.log('QuestionnaireResponseModal - Current response state:', response);
     console.log('Questionnaire ID:', questionnaire?.id);
+    console.log('Questionnaire has questions:', !!questionnaire?.questions, 'Count:', questionnaire?.questions?.length || 0);
     console.log('Response keys:', Object.keys(response));
     console.log('Response entries:', Object.entries(response));
     
-    // If we have response data, stop loading
-    if (Object.keys(response).length > 0) {
-      setLoadingResponse(false);
+    // Log answer-question matching
+    if (questionnaire?.questions && Object.keys(response).length > 0) {
+      console.log('Answer-Question matching check:');
+      questionnaire.questions.forEach((q: any) => {
+        const answer = response[q.id];
+        console.log(`  Question ${q.id}: ${q.questionText.substring(0, 50)}... - Answer: ${answer ? (answer.answerText || answer.answerValue || 'empty') : 'NOT FOUND'}`);
+      });
     }
-  }, [response, questionnaire?.id]);
+  }, [response, questionnaire?.id, questionnaire?.questions]);
 
   const renderQuestionInput = (question: Question) => {
     if (isReadOnly) {
       // Read-only view (submitted or expired)
-      const answer = response[question.id];
+      const answer = getAnswer(question.id);
+      console.log(`[Render ReadOnly] Question ${question.id}:`, {
+        questionId: question.id,
+        questionIdStr: String(question.id),
+        hasAnswer: !!answer,
+        answerText: answer?.answerText,
+        answerValue: answer?.answerValue,
+        responseKeys: Object.keys(response),
+        allResponseEntries: Object.entries(response).map(([k, v]: [string, any]) => ({ key: k, hasText: !!v?.answerText, hasValue: !!v?.answerValue }))
+      });
       const displayValue = answer?.answerText ?? answer?.answerValue ?? '';
       const formatted =
         question.questionType === 'date' && displayValue
@@ -1567,7 +1969,7 @@ const QuestionnaireResponseModal = ({
 
     switch (question.questionType) {
       case 'text':
-        const textAnswer = response[question.id];
+        const textAnswer = getAnswer(question.id);
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:1428',message:'Rendering text input',data:{questionId:question.id,hasAnswer:!!textAnswer,answerText:textAnswer?.answerText,answerValue:textAnswer?.answerValue,responseKeys:Object.keys(response)},timestamp:Date.now(),runId:'run1',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
@@ -1594,9 +1996,9 @@ const QuestionnaireResponseModal = ({
       case 'textarea':
         return (
           <textarea
-            value={response[question.id]?.answerText || ''}
+            value={getAnswer(question.id)?.answerText || ''}
             onChange={(e) => {
-              const currentAnswer = response[question.id] || {};
+              const currentAnswer = getAnswer(question.id) || {};
               setResponse({ 
                 ...response, 
                 [question.id]: { 
@@ -1615,9 +2017,9 @@ const QuestionnaireResponseModal = ({
         return (
           <input
             type="number"
-            value={response[question.id]?.answerText || ''}
+            value={getAnswer(question.id)?.answerText || ''}
             onChange={(e) => {
-              const currentAnswer = response[question.id] || {};
+              const currentAnswer = getAnswer(question.id) || {};
               setResponse({ 
                 ...response, 
                 [question.id]: { 
@@ -1633,13 +2035,14 @@ const QuestionnaireResponseModal = ({
         );
       case 'date': {
         // Date only (no time) - normalize in case backend returns ISO datetime
-        const raw = response[question.id]?.answerText || response[question.id]?.answerValue || '';
+        const answer = getAnswer(question.id);
+        const raw = answer?.answerText || answer?.answerValue || '';
         const dateOnly = typeof raw === 'string' && raw.length >= 10 ? raw.slice(0, 10) : raw;
         return (
           <DateOnlyPicker
             value={dateOnly}
             onChange={(val) => {
-              const currentAnswer = response[question.id] || {};
+              const currentAnswer = getAnswer(question.id) || {};
               setResponse({
                 ...response,
                 [question.id]: {
@@ -1662,9 +2065,9 @@ const QuestionnaireResponseModal = ({
                 type="radio"
                 name={`question-${question.id}`}
                 value="yes"
-                checked={response[question.id]?.answerValue === 'yes'}
+                checked={getAnswer(question.id)?.answerValue === 'yes'}
                 onChange={() => {
-                  const currentAnswer = response[question.id] || {};
+                  const currentAnswer = getAnswer(question.id) || {};
                   setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: 'Yes', answerValue: 'yes' } });
                 }}
                 className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
@@ -1677,9 +2080,9 @@ const QuestionnaireResponseModal = ({
                 type="radio"
                 name={`question-${question.id}`}
                 value="no"
-                checked={response[question.id]?.answerValue === 'no'}
+                checked={getAnswer(question.id)?.answerValue === 'no'}
                 onChange={() => {
-                  const currentAnswer = response[question.id] || {};
+                  const currentAnswer = getAnswer(question.id) || {};
                   setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: 'No', answerValue: 'no' } });
                 }}
                 className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
@@ -1699,9 +2102,9 @@ const QuestionnaireResponseModal = ({
                   type="radio"
                   name={`question-${question.id}`}
                   value={option}
-                  checked={response[question.id]?.answerValue === option}
+                  checked={getAnswer(question.id)?.answerValue === option}
                   onChange={() => {
-                    const currentAnswer = response[question.id] || {};
+                    const currentAnswer = getAnswer(question.id) || {};
                     setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: option, answerValue: option } });
                   }}
                   className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
@@ -1713,7 +2116,7 @@ const QuestionnaireResponseModal = ({
           </div>
         );
       case 'checkbox':
-        const selectedValues = response[question.id]?.answerValue?.split(',') || [];
+        const selectedValues = getAnswer(question.id)?.answerValue?.split(',') || [];
         return (
           <div className="space-y-2">
             {question.options?.map((option: string, index: number) => (
@@ -1728,7 +2131,7 @@ const QuestionnaireResponseModal = ({
                     } else {
                       newValues = newValues.filter(v => v !== option);
                     }
-                    const currentAnswer = response[question.id] || {};
+                    const currentAnswer = getAnswer(question.id) || {};
                     setResponse({
                       ...response,
                       [question.id]: {
@@ -1749,7 +2152,7 @@ const QuestionnaireResponseModal = ({
         return (
           <div className="relative">
             <select
-              value={response[question.id]?.answerValue ?? response[question.id]?.answerText ?? ''}
+              value={getAnswer(question.id)?.answerValue ?? getAnswer(question.id)?.answerText ?? ''}
               onChange={(e) => {
                 const val = e.target.value;
                 const currentAnswer = response[question.id] || {};
@@ -1788,7 +2191,8 @@ const QuestionnaireResponseModal = ({
               <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{questionnaire.title}</h3>
               <p className="text-sm text-gray-500 mt-1">
                 {t('columns.deadline')}: {new Date(questionnaire.deadline).toLocaleDateString()}
-                {isExpired && <span className="text-red-600 ml-2">(Expired)</span>}
+                {/* Only show expired if NOT submitted - submitted responses are always viewable */}
+                {isExpired && !isSubmitted && <span className="text-red-600 ml-2">(Expired)</span>}
                 {isSubmitted && <span className="text-green-600 ml-2">(Submitted)</span>}
                 {responseStatus === 'draft' && <span className="text-yellow-600 ml-2">(Draft)</span>}
               </p>
@@ -1837,7 +2241,7 @@ const QuestionnaireResponseModal = ({
                       </label>
                       {isReadOnly ? (
                         <div>
-                          {response[question.id]?.document ? (
+                          {getAnswer(question.id)?.document ? (
                             <div className="flex items-center gap-2 text-sm text-blue-600">
                               <FileText size={16} />
                               <a 
@@ -1855,7 +2259,7 @@ const QuestionnaireResponseModal = ({
                         </div>
                       ) : (
                         <div>
-                          {response[question.id]?.document ? (
+                          {getAnswer(question.id)?.document ? (
                             <div className="mb-2 flex items-center gap-2 text-sm text-green-600">
                               <FileText size={16} />
                               <span>{response[question.id].document.fileName}</span>

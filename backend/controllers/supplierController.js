@@ -20,7 +20,14 @@ const getProfile = async (req, res) => {
         {
           model: db.Document,
           as: 'documents'
-        }
+        },
+        // NUTS codes - will be empty array if table doesn't exist yet
+        ...(db.NUTSCode ? [{
+          model: db.NUTSCode,
+          as: 'nutsCodes',
+          through: { attributes: [] },
+          required: false
+        }] : [])
       ]
     });
 
@@ -57,19 +64,30 @@ const updateProfile = async (req, res) => {
       );
     }
 
+    const updateIncludes = [
+      {
+        model: db.User,
+        as: 'user',
+        attributes: { exclude: ['password'] }
+      },
+      {
+        model: db.CPVCode,
+        as: 'cpvCodes',
+        through: { attributes: [] }
+      }
+    ];
+
+    // Add NUTS codes if model exists
+    if (db.NUTSCode) {
+      updateIncludes.push({
+        model: db.NUTSCode,
+        as: 'nutsCodes',
+        through: { attributes: [] }
+      });
+    }
+
     const updatedSupplier = await db.Supplier.findByPk(supplier.id, {
-      include: [
-        {
-          model: db.User,
-          as: 'user',
-          attributes: { exclude: ['password'] }
-        },
-        {
-          model: db.CPVCode,
-          as: 'cpvCodes',
-          through: { attributes: [] }
-        }
-      ]
+      include: updateIncludes
     });
 
     res.json({ message: 'Profile updated successfully', supplier: updatedSupplier });
@@ -105,6 +123,39 @@ const updateCPVCodes = async (req, res) => {
   } catch (error) {
     console.error('Update CPV codes error:', error);
     res.status(500).json({ message: 'Error updating CPV codes', error: error.message });
+  }
+};
+
+// Update NUTS codes
+const updateNUTSCodes = async (req, res) => {
+  try {
+    if (!db.NUTSCode) {
+      return res.status(503).json({ message: 'NUTS codes feature not available. Please run migrations first.' });
+    }
+
+    const { nutsCodeIds } = req.body;
+
+    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+    if (!supplier) {
+      return res.status(404).json({ message: 'Supplier profile not found' });
+    }
+
+    await supplier.setNutsCodes(nutsCodeIds || []);
+
+    const updatedSupplier = await db.Supplier.findByPk(supplier.id, {
+      include: [
+        {
+          model: db.NUTSCode,
+          as: 'nutsCodes',
+          through: { attributes: [] }
+        }
+      ]
+    });
+
+    res.json({ message: 'NUTS codes updated successfully', supplier: updatedSupplier });
+  } catch (error) {
+    console.error('Update NUTS codes error:', error);
+    res.status(500).json({ message: 'Error updating NUTS codes', error: error.message });
   }
 };
 
@@ -177,6 +228,8 @@ const getActiveQuestionnaires = async (req, res) => {
 };
 
 // Get questionnaire history
+// IMPORTANT: Returns all submitted responses regardless of questionnaire expiration status.
+// Suppliers should be able to view their submitted answers forever, even if questionnaire expired.
 const getQuestionnaireHistory = async (req, res) => {
   try {
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
@@ -184,6 +237,7 @@ const getQuestionnaireHistory = async (req, res) => {
       return res.status(404).json({ message: 'Supplier not found' });
     }
 
+    // Get all submitted responses - no expiration filter; suppliers can always view their history
     const responses = await db.QuestionnaireResponse.findAll({
       where: {
         supplierId: supplier.id,
@@ -208,6 +262,21 @@ const getQuestionnaireHistory = async (req, res) => {
               order: [['order', 'ASC']]
             }
           ]
+        },
+        {
+          model: db.Answer,
+          as: 'answers',
+          include: [
+            {
+              model: db.Question,
+              as: 'question'
+            },
+            {
+              model: db.Document,
+              as: 'document',
+              required: false
+            }
+          ]
         }
       ],
       order: [['submittedAt', 'DESC']]
@@ -224,6 +293,7 @@ module.exports = {
   getProfile,
   updateProfile,
   updateCPVCodes,
+  updateNUTSCodes,
   getActiveQuestionnaires,
   getQuestionnaireHistory
 };

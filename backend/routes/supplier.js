@@ -9,6 +9,7 @@ router.use(authorize('supplier'));
 router.get('/profile', supplierController.getProfile);
 router.put('/profile', supplierController.updateProfile);
 router.put('/cpv-codes', supplierController.updateCPVCodes);
+router.put('/nuts-codes', supplierController.updateNUTSCodes);
 router.get('/questionnaires/active', supplierController.getActiveQuestionnaires);
 router.get('/questionnaires/history', supplierController.getQuestionnaireHistory);
 

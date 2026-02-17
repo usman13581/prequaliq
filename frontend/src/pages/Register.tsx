@@ -51,11 +51,10 @@ const Register = () => {
         <LanguageSwitcher />
       </div>
       <div className="max-w-md w-full bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/50">
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-            <span className="text-white font-bold text-3xl">PQ</span>
-          </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent mb-2">{t('register.title')}</h1>
+        <div className="text-center mb-4">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent mb-2">
+            PrequaliQ
+          </h1>
           <p className="text-gray-600 font-medium">{t('register.tagline')}</p>
         </div>
 

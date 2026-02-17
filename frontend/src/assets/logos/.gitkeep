@@ -1,0 +1,6 @@
+# Logos folder
+# Place your logo files here (PNG, SVG, JPG, etc.)
+# Example usage in components:
+# import logo from '@/assets/logos/logo.png';
+# or
+# import logo from '../assets/logos/logo.svg';

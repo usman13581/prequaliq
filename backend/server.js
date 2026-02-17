@@ -28,6 +28,7 @@ app.use('/api/questionnaires', require('./routes/questionnaires'));
 app.use('/api/documents', require('./routes/documents'));
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/cpv', require('./routes/cpv'));
+app.use('/api/nuts', require('./routes/nuts'));
 
 // Root - so visiting the URL shows something friendly
 app.get('/', (req, res) => {

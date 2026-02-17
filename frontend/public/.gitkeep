@@ -1,0 +1,4 @@
+# Public folder for static assets
+# Files placed here will be served at the root URL
+# Example: public/favicon.ico will be available at /favicon.ico
+# Use this for files that don't need to be imported in code
