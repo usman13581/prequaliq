@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
@@ -25,6 +26,14 @@ interface CPVCode {
   id: string;
   code: string;
   description: string;
+}
+
+interface NUTSCode {
+  id: string;
+  code: string;
+  name: string;
+  nameSwedish?: string;
+  level: number;
 }
 
 interface Question {
@@ -106,6 +115,8 @@ const ProcuringEntityDashboard = () => {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [supplierSearch, setSupplierSearch] = useState('');
   const [supplierCpvFilter, setSupplierCpvFilter] = useState('');
+  const [supplierNutsFilter, setSupplierNutsFilter] = useState('');
+  const [nutsCodesForSearch, setNutsCodesForSearch] = useState<NUTSCode[]>([]);
   const [suppliersPagination, setSuppliersPagination] = useState({ page: 1, limit: 12, total: 0, totalPages: 0 });
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [selectedSupplierDetail, setSelectedSupplierDetail] = useState<any>(null);
@@ -177,6 +188,18 @@ const ProcuringEntityDashboard = () => {
     }
   };
 
+  // Fetch NUTS codes for supplier search filter
+  const fetchNUTSCodesForSearch = async () => {
+    try {
+      const response = await api.get('/nuts');
+      const list = response.data.nutsCodes || [];
+      setNutsCodesForSearch(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error('Failed to fetch NUTS codes:', error);
+      setNutsCodesForSearch([]);
+    }
+  };
+
   // Fetch suppliers (approved who submitted to this entity's questionnaires)
   const fetchSuppliers = async (page = 1) => {
     try {
@@ -184,6 +207,7 @@ const ProcuringEntityDashboard = () => {
       const params: any = { page, limit: 12 };
       if (supplierSearch.trim()) params.search = supplierSearch.trim();
       if (supplierCpvFilter) params.cpvCodeId = supplierCpvFilter;
+      if (supplierNutsFilter) params.nutsCodeId = supplierNutsFilter;
       const response = await api.get('/procuring-entity/suppliers', { params });
       setSuppliers(response.data.suppliers || []);
       setSuppliersPagination(response.data.pagination || { page: 1, limit: 12, total: 0, totalPages: 0 });
@@ -226,6 +250,7 @@ const ProcuringEntityDashboard = () => {
     } else if (activeTab === 'suppliers') {
       fetchSuppliers(1);
       fetchCPVCodes();
+      fetchNUTSCodesForSearch();
     } else if (activeTab === 'announcements') {
       fetchAnnouncements();
     }
@@ -562,9 +587,9 @@ const ProcuringEntityDashboard = () => {
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
+              <Link to="/procuring-entity" className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent hover:opacity-90 transition-opacity cursor-pointer">
                 PrequaliQ
-              </h1>
+              </Link>
             </div>
             <div className="flex items-center gap-4">
               <LanguageSwitcher />
@@ -1141,6 +1166,28 @@ const ProcuringEntityDashboard = () => {
                       )}
                     </div>
                   </div>
+                  <div className="w-full sm:w-72 min-w-0">
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('sections.filterByNUTS')}</label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <NUTSSearchSelect
+                          nutsCodes={nutsCodesForSearch}
+                          value={supplierNutsFilter}
+                          onChange={(id) => { setSupplierNutsFilter(id); fetchSuppliers(1); }}
+                          placeholder={t('placeholders.allNUTSCodes')}
+                        />
+                      </div>
+                      {supplierNutsFilter && (
+                        <button
+                          type="button"
+                          onClick={() => { setSupplierNutsFilter(''); fetchSuppliers(1); }}
+                          className="text-sm text-gray-500 hover:text-primary-600 whitespace-nowrap"
+                        >
+                          {t('buttons.clear')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <button
                     onClick={() => fetchSuppliers(1)}
                     className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-colors shrink-0"
@@ -1593,6 +1640,99 @@ const CPVSearchSelect = ({
                   >
                     <span className="font-medium text-gray-900">{cpv.code}</span>
                     <span className="text-gray-600"> – {cpv.description}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+      )}
+    </div>
+  );
+};
+
+// Searchable NUTS Code selector - themed list with search (same style as CPVSearchSelect)
+const NUTSSearchSelect = ({
+  nutsCodes,
+  value,
+  onChange,
+  placeholder = 'Select NUTS Code'
+}: {
+  nutsCodes: NUTSCode[];
+  value: string;
+  onChange: (nutsCodeId: string) => void;
+  placeholder?: string;
+}) => {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = nutsCodes.find((n) => n.id === value);
+  const filtered = nutsCodes.filter(
+    (n) =>
+      !search ||
+      n.code.toLowerCase().includes(search.toLowerCase()) ||
+      n.name.toLowerCase().includes(search.toLowerCase()) ||
+      (n.nameSwedish && n.nameSwedish.toLowerCase().includes(search.toLowerCase()))
+  );
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full px-4 py-3 flex items-center justify-between gap-2 rounded-xl border border-gray-300 bg-white hover:border-primary-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 text-left"
+      >
+        <span className={selected ? 'text-gray-900' : 'text-gray-500'}>
+          {selected ? `${selected.code} – ${selected.nameSwedish || selected.name}` : placeholder}
+        </span>
+        <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+            <div className="p-2 border-b border-gray-100 bg-gray-50/80">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t('placeholders.searchByCodeOrDescription')}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+            </div>
+            <div className="max-h-56 overflow-y-auto py-1">
+              {nutsCodes.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-amber-700 bg-amber-50 rounded">No NUTS codes loaded. Ensure the database is seeded and check the browser console for errors.</p>
+              ) : filtered.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-gray-500">{t('sections.noNUTSCodesMatch')}</p>
+              ) : (
+                filtered.map((nuts) => (
+                  <button
+                    key={nuts.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(nuts.id);
+                      setOpen(false);
+                      setSearch('');
+                    }}
+                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
+                      value === nuts.id
+                        ? 'bg-primary-50 text-primary-800 font-medium'
+                        : 'text-gray-700 hover:bg-primary-50/60'
+                    }`}
+                  >
+                    <span className="font-medium text-gray-900">{nuts.code}</span>
+                    <span className="text-gray-600"> – {nuts.nameSwedish || nuts.name}</span>
                   </button>
                 ))
               )}
@@ -2383,6 +2523,23 @@ const SupplierDetailModal = ({
                           >
                             <span className="font-semibold text-sm">{c.code}</span>
                             {c.description && <span className="text-xs text-primary-700/90 truncate max-w-[200px]">{c.description}</span>}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {supplier.nutsCodes?.length > 0 && (
+                    <div className="sm:col-span-2">
+                      <span className="text-gray-500 block mb-2">NUTS codes</span>
+                      <div className="flex flex-wrap gap-2">
+                        {supplier.nutsCodes.map((nuts: any) => (
+                          <span
+                            key={nuts.id}
+                            className="inline-flex flex-col px-3 py-1.5 rounded-lg bg-purple-50 border border-purple-100 text-purple-800"
+                            title={nuts.nameSwedish || nuts.name}
+                          >
+                            <span className="font-semibold text-sm">{nuts.code}</span>
+                            <span className="text-xs text-purple-700/90 truncate max-w-[200px]">{nuts.nameSwedish || nuts.name}</span>
                           </span>
                         ))}
                       </div>

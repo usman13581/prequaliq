@@ -108,6 +108,7 @@ const getSuppliers = async (req, res) => {
       minTurnover,
       maxTurnover,
       cpvCodeId,
+      nutsCodeId,
       page = 1,
       limit = 20
     } = req.query;
@@ -185,6 +186,17 @@ const getSuppliers = async (req, res) => {
         through: { attributes: [] }
       }
     ];
+
+    // Filter by NUTS code when provided (only if NUTSCode model exists)
+    if (nutsCodeId && db.NUTSCode) {
+      include.push({
+        model: db.NUTSCode,
+        as: 'nutsCodes',
+        through: { attributes: [] },
+        required: true,
+        where: { id: nutsCodeId }
+      });
+    }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
@@ -265,23 +277,34 @@ const getSupplierDetails = async (req, res) => {
       return res.status(404).json({ message: 'Procuring entity not found' });
     }
 
+    const include = [
+      {
+        model: db.User,
+        as: 'user',
+        attributes: { exclude: ['password'] }
+      },
+      {
+        model: db.CPVCode,
+        as: 'cpvCodes',
+        through: { attributes: [] }
+      },
+      {
+        model: db.Document,
+        as: 'documents'
+      }
+    ];
+
+    // Add NUTS codes if model exists
+    if (db.NUTSCode) {
+      include.push({
+        model: db.NUTSCode,
+        as: 'nutsCodes',
+        through: { attributes: [] }
+      });
+    }
+
     const supplier = await db.Supplier.findByPk(supplierId, {
-      include: [
-        {
-          model: db.User,
-          as: 'user',
-          attributes: { exclude: ['password'] }
-        },
-        {
-          model: db.CPVCode,
-          as: 'cpvCodes',
-          through: { attributes: [] }
-        },
-        {
-          model: db.Document,
-          as: 'documents'
-        }
-      ]
+      include
     });
 
     if (!supplier || supplier.status !== 'approved') {

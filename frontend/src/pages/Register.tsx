@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -52,9 +52,11 @@ const Register = () => {
       </div>
       <div className="max-w-md w-full bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/50">
         <div className="text-center mb-4">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent mb-2">
-            PrequaliQ
-          </h1>
+          <Link to="/" className="block">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent mb-2 hover:opacity-90 transition-opacity cursor-pointer">
+              PrequaliQ
+            </h1>
+          </Link>
           <p className="text-gray-600 font-medium">{t('register.tagline')}</p>
         </div>
 
