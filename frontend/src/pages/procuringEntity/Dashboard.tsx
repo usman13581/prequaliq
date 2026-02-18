@@ -1166,12 +1166,12 @@ const ProcuringEntityDashboard = () => {
                       )}
                     </div>
                   </div>
-                  <div className="w-full sm:w-72 min-w-0">
+                  <div className="w-full sm:w-72 min-w-0" data-section="supplier-search-nuts-filter">
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('sections.filterByNUTS')}</label>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
                         <NUTSSearchSelect
-                          nutsCodes={nutsCodesForSearch}
+                          nutsCodes={nutsCodesForSearch || []}
                           value={supplierNutsFilter}
                           onChange={(id) => { setSupplierNutsFilter(id); fetchSuppliers(1); }}
                           placeholder={t('placeholders.allNUTSCodes')}
@@ -1652,12 +1652,12 @@ const CPVSearchSelect = ({
 
 // Searchable NUTS Code selector - themed list with search (same style as CPVSearchSelect)
 const NUTSSearchSelect = ({
-  nutsCodes,
+  nutsCodes = [],
   value,
   onChange,
   placeholder = 'Select NUTS Code'
 }: {
-  nutsCodes: NUTSCode[];
+  nutsCodes?: NUTSCode[];
   value: string;
   onChange: (nutsCodeId: string) => void;
   placeholder?: string;
@@ -1666,13 +1666,16 @@ const NUTSSearchSelect = ({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
-  const selected = nutsCodes.find((n) => n.id === value);
-  const filtered = nutsCodes.filter(
+  const list = Array.isArray(nutsCodes) ? nutsCodes : [];
+  const selected = list.find((n) => n && n.id === value);
+  const searchLower = (search || '').toLowerCase();
+  const filtered = list.filter(
     (n) =>
-      !search ||
-      n.code.toLowerCase().includes(search.toLowerCase()) ||
-      n.name.toLowerCase().includes(search.toLowerCase()) ||
-      (n.nameSwedish && n.nameSwedish.toLowerCase().includes(search.toLowerCase()))
+      n &&
+      (!searchLower ||
+        (n.code && n.code.toLowerCase().includes(searchLower)) ||
+        (n.name && n.name.toLowerCase().includes(searchLower)) ||
+        (n.nameSwedish && n.nameSwedish.toLowerCase().includes(searchLower)))
   );
   useEffect(() => {
     if (!open) return;
@@ -1692,7 +1695,7 @@ const NUTSSearchSelect = ({
         className="w-full px-4 py-3 flex items-center justify-between gap-2 rounded-xl border border-gray-300 bg-white hover:border-primary-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 text-left"
       >
         <span className={selected ? 'text-gray-900' : 'text-gray-500'}>
-          {selected ? `${selected.code} – ${selected.nameSwedish || selected.name}` : placeholder}
+          {selected ? `${selected.code || ''} – ${selected.nameSwedish || selected.name || ''}` : placeholder}
         </span>
         <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -1711,7 +1714,7 @@ const NUTSSearchSelect = ({
               </div>
             </div>
             <div className="max-h-56 overflow-y-auto py-1">
-              {nutsCodes.length === 0 ? (
+              {list.length === 0 ? (
                 <p className="px-4 py-3 text-sm text-amber-700 bg-amber-50 rounded">No NUTS codes loaded. Ensure the database is seeded and check the browser console for errors.</p>
               ) : filtered.length === 0 ? (
                 <p className="px-4 py-3 text-sm text-gray-500">{t('sections.noNUTSCodesMatch')}</p>
@@ -1731,8 +1734,8 @@ const NUTSSearchSelect = ({
                         : 'text-gray-700 hover:bg-primary-50/60'
                     }`}
                   >
-                    <span className="font-medium text-gray-900">{nuts.code}</span>
-                    <span className="text-gray-600"> – {nuts.nameSwedish || nuts.name}</span>
+                    <span className="font-medium text-gray-900">{nuts.code || ''}</span>
+                    <span className="text-gray-600"> – {nuts.nameSwedish || nuts.name || ''}</span>
                   </button>
                 ))
               )}
