@@ -140,7 +140,9 @@
     "selectCPVCode": "Välj CPV-kod",
     "selectDeadlineDate": "Välj deadline",
     "selectExpiryDate": "Välj utgångsdatum",
-    "optional": "Valfritt"
+    "optional": "Valfritt",
+    "updateSupplierInfo": "Uppdatera leverantörsinformation",
+    "updateEntityInfo": "Uppdatera upphandlande enhetsinformation"
   },
   "placeholders": {
     "enterEmail": "Ange din e-post",

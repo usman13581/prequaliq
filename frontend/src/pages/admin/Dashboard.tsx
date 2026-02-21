@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { LogOut, Users, Building2, Bell, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, ChevronLeft, ChevronRight, User, Lock, Eye, EyeOff, Key } from 'lucide-react';
+import { LogOut, Users, Building2, Bell, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, ChevronLeft, ChevronRight, User, Lock, Eye, EyeOff, Key, Camera, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { DateOnlyPicker } from '../../components/DateOnlyPicker';
@@ -225,7 +225,7 @@ const AdminDashboard = () => {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-slate-100">
       {/* Modern Navbar */}
       <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
@@ -239,7 +239,7 @@ const AdminDashboard = () => {
               <LanguageSwitcher />
               <button
                 onClick={() => setShowProfileModal(true)}
-                className="hidden md:flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-primary-50 to-blue-50 rounded-xl border border-primary-200/50 hover:from-primary-100 hover:to-blue-100 transition-all duration-200 cursor-pointer"
+                className="hidden md:flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-primary-50 to-teal-50 rounded-xl border border-primary-200/50 hover:from-primary-100 hover:to-primary-100 transition-all duration-200 cursor-pointer"
               >
                 <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
                   {user?.firstName?.[0]}{user?.lastName?.[0]}
@@ -273,7 +273,7 @@ const AdminDashboard = () => {
                   {suppliers.filter(s => s.status === 'approved').length} {t('nav.approved')}
                 </p>
               </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+              <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg">
                 <Users className="text-white" size={28} />
               </div>
             </div>
@@ -288,7 +288,7 @@ const AdminDashboard = () => {
                   {procuringEntities.filter(e => e.user?.isActive).length} {t('nav.active')}
                 </p>
               </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+              <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-lg">
                 <Building2 className="text-white" size={28} />
               </div>
             </div>
@@ -311,7 +311,7 @@ const AdminDashboard = () => {
         {/* Main Content Card */}
         <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/50 overflow-hidden">
           {/* Modern Tab Navigation */}
-          <div className="bg-gradient-to-r from-gray-50 to-blue-50/50 border-b border-gray-200/50">
+          <div className="bg-gradient-to-r from-primary-50/80 to-primary-100/50 border-b border-gray-200/50">
             <nav className="flex space-x-1 px-2">
               <button
                 onClick={() => setActiveTab('suppliers')}
@@ -403,7 +403,7 @@ const AdminDashboard = () => {
                   </div>
                   <button
                     onClick={() => setShowCreateSupplier(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                    className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
                   >
                     <Plus size={20} />
                     {t('actions.createSupplier')}
@@ -411,7 +411,7 @@ const AdminDashboard = () => {
                 </div>
 
                 {suppliers.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center mx-auto mb-4">
                       <Users className="text-gray-400" size={40} />
                     </div>
@@ -422,19 +422,19 @@ const AdminDashboard = () => {
                   <>
                     <div className="overflow-x-auto rounded-xl border border-gray-200/50 shadow-inner">
                       <table className="min-w-full divide-y divide-gray-200/50">
-                        <thead className="bg-gradient-to-r from-gray-50 to-blue-50/50">
+                        <thead className="bg-slate-700">
                           <tr>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{t('columns.companyName')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{t('columns.contact')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{t('columns.status')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{t('columns.actions')}</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.companyName')}</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.contact')}</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.status')}</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.actions')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200/50">
                           {suppliers
                             .slice((supplierPage - 1) * itemsPerPage, supplierPage * itemsPerPage)
                             .map((supplier) => (
-                          <tr key={supplier.id} className="hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-transparent transition-all duration-150">
+                          <tr key={supplier.id} className="hover:bg-gradient-to-r hover:from-primary-50/50 hover:to-transparent transition-all duration-150">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center text-white font-bold shadow-md">
@@ -458,7 +458,7 @@ const AdminDashboard = () => {
                                 </span>
                                 <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
                                   supplier.user?.isActive 
-                                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' 
+                                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white' 
                                     : 'bg-gradient-to-r from-gray-400 to-gray-500 text-white'
                                 }`}>
                                   {supplier.user?.isActive ? `✓ ${t('common.active')}` : `✗ ${t('common.inactive')}`}
@@ -486,14 +486,14 @@ const AdminDashboard = () => {
                                   <>
                                     <button
                                       onClick={() => reviewSupplier(supplier.id, 'approve')}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                      className="btn-approve flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
                                     >
                                       <CheckCircle size={14} />
                                       {t('buttons.approve')}
                                     </button>
                                     <button
                                       onClick={() => reviewSupplier(supplier.id, 'reject')}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                      className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
                                     >
                                       <XCircle size={14} />
                                       {t('buttons.reject')}
@@ -504,8 +504,8 @@ const AdminDashboard = () => {
                                   onClick={() => toggleSupplierStatus(supplier.id, supplier.user?.isActive || false)}
                                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow ${
                                     supplier.user?.isActive
-                                      ? 'bg-orange-50 hover:bg-orange-100 text-orange-700'
-                                      : 'bg-green-50 hover:bg-green-100 text-green-700'
+                                      ? 'btn-reject'
+                                      : 'btn-approve'
                                   }`}
                                   title={supplier.user?.isActive ? 'Deactivate Supplier' : 'Activate Supplier'}
                                 >
@@ -531,7 +531,7 @@ const AdminDashboard = () => {
                                 </button>
                                 <button
                                   onClick={() => setDeleteSupplierConfirm(supplier)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                  className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
                                   title="Delete Supplier"
                                 >
                                   <Trash2 size={14} />
@@ -602,7 +602,7 @@ const AdminDashboard = () => {
                   </div>
                   <button
                     onClick={() => setShowCreateEntity(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                    className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
                   >
                     <Plus size={20} />
                     {t('actions.createEntity')}
@@ -610,7 +610,7 @@ const AdminDashboard = () => {
                 </div>
 
                 {procuringEntities.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-purple-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <div className="w-20 h-20 bg-gradient-to-br from-purple-200 to-purple-300 rounded-full flex items-center justify-center mx-auto mb-4">
                       <Building2 className="text-purple-400" size={40} />
                     </div>
@@ -621,22 +621,22 @@ const AdminDashboard = () => {
                   <>
                     <div className="overflow-x-auto rounded-xl border border-gray-200/50 shadow-inner">
                       <table className="min-w-full divide-y divide-gray-200/50">
-                        <thead className="bg-gradient-to-r from-gray-50 to-purple-50/50">
+                        <thead className="bg-slate-700">
                           <tr>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{t('columns.entityName')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{t('columns.contact')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{t('columns.status')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">{t('columns.actions')}</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.entityName')}</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.contact')}</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.status')}</th>
+                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.actions')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200/50">
                           {procuringEntities
                             .slice((entityPage - 1) * itemsPerPage, entityPage * itemsPerPage)
                             .map((entity) => (
-                          <tr key={entity.id} className="hover:bg-gradient-to-r hover:from-purple-50/50 hover:to-transparent transition-all duration-150">
+                          <tr key={entity.id} className="hover:bg-gradient-to-r hover:from-primary-50/50 hover:to-transparent transition-all duration-150">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center text-white font-bold shadow-md">
+                                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center text-white font-bold shadow-md">
                                   {entity.entityName?.[0]?.toUpperCase()}
                                 </div>
                                 <div className="text-sm font-semibold text-gray-900">{entity.entityName}</div>
@@ -650,7 +650,7 @@ const AdminDashboard = () => {
                               <div className="flex flex-col gap-2">
                                 <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
                                   entity.user?.isActive 
-                                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' 
+                                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white' 
                                     : 'bg-gradient-to-r from-gray-400 to-gray-500 text-white'
                                 }`}>
                                   {entity.user?.isActive ? `✓ ${t('common.active')}` : `✗ ${t('common.inactive')}`}
@@ -678,8 +678,8 @@ const AdminDashboard = () => {
                                   onClick={() => toggleEntityStatus(entity.id, entity.user?.isActive || false)}
                                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow ${
                                     entity.user?.isActive
-                                      ? 'bg-orange-50 hover:bg-orange-100 text-orange-700'
-                                      : 'bg-green-50 hover:bg-green-100 text-green-700'
+                                      ? 'btn-reject'
+                                      : 'btn-approve'
                                   }`}
                                   title={entity.user?.isActive ? 'Deactivate Entity' : 'Activate Entity'}
                                 >
@@ -705,7 +705,7 @@ const AdminDashboard = () => {
                                 </button>
                                 <button
                                   onClick={() => setDeleteEntityConfirm(entity)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                  className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
                                   title="Delete Entity"
                                 >
                                   <Trash2 size={14} />
@@ -776,7 +776,7 @@ const AdminDashboard = () => {
                   </div>
                   <button
                     onClick={() => setShowCreateAnnouncement(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                    className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
                   >
                     <Plus size={20} />
                     {t('dashboard.createAnnouncement')}
@@ -784,7 +784,7 @@ const AdminDashboard = () => {
                 </div>
 
                 {(!announcements || announcements.length === 0) ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-orange-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <div className="w-20 h-20 bg-gradient-to-br from-orange-200 to-orange-300 rounded-full flex items-center justify-center mx-auto mb-4">
                       <Bell className="text-orange-400" size={40} />
                     </div>
@@ -825,7 +825,7 @@ const AdminDashboard = () => {
                                         .catch((err: any) => showToast(err.response?.data?.message || t('msg.failedDeleteAnnouncement'), 'error'));
                                     }
                                   }}
-                                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  className="btn-delete p-2 rounded-lg transition-colors"
                                   title="Delete"
                                 >
                                   <Trash2 size={18} />
@@ -996,12 +996,16 @@ const AdminDashboard = () => {
   );
 };
 
+const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
+
 // Admin Profile Modal Component
 const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const profilePictureRef = useRef<HTMLInputElement>(null);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -1043,6 +1047,40 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
     const isValid = Object.keys(newErrors).length === 0;
     console.log('Form is valid:', isValid);
     return isValid;
+  };
+
+  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image (JPEG, PNG)', 'error');
+      return;
+    }
+    setUploadingPicture(true);
+    try {
+      const formData = new FormData();
+      formData.append('profilePicture', file);
+      await api.put('/auth/profile-picture', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      await refreshUser();
+      showToast('Profile picture updated successfully', 'success');
+      if (profilePictureRef.current) profilePictureRef.current.value = '';
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to upload profile picture', 'error');
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleRemoveProfilePicture = async () => {
+    try {
+      await api.delete('/auth/profile-picture');
+      await refreshUser();
+      showToast('Profile picture removed', 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to remove profile picture', 'error');
+    }
   };
 
   const handlePasswordReset = async (e: React.FormEvent) => {
@@ -1175,8 +1213,54 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
           {activeTab === 'profile' && (
             <div className="space-y-6">
               <div className="flex items-center gap-6 pb-6 border-b border-gray-200">
-                <div className="w-24 h-24 bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl flex items-center justify-center text-white text-3xl font-bold shadow-lg">
-                  {user?.firstName?.[0]}{user?.lastName?.[0]}
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-2xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+                    {user?.profilePicture ? (
+                      <img
+                        src={`${UPLOADS_BASE}/${user.profilePicture}`}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span>{user?.firstName?.[0]}{user?.lastName?.[0]}</span>
+                    )}
+                  </div>
+                  <input
+                    ref={profilePictureRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png"
+                    onChange={handleProfilePictureUpload}
+                    className="hidden"
+                  />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => profilePictureRef.current?.click()}
+                      disabled={uploadingPicture}
+                      className="p-2 bg-white/90 rounded-lg hover:bg-white transition-colors disabled:opacity-50"
+                      title="Upload photo"
+                    >
+                      <Camera size={20} className="text-gray-800" />
+                    </button>
+                    {user?.profilePicture && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveProfilePicture}
+                        className="text-xs text-white hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => profilePictureRef.current?.click()}
+                    disabled={uploadingPicture}
+                    className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                  >
+                    <Upload size={14} />
+                    {uploadingPicture ? 'Uploading...' : (user?.profilePicture ? 'Change photo' : 'Upload photo')}
+                  </button>
                 </div>
                 <div className="flex-1">
                   <h4 className="text-2xl font-bold text-gray-900">{user?.firstName} {user?.lastName}</h4>
@@ -1320,14 +1404,14 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+                  className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+                  className="btn-save px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
                 >
                   {loading ? (
                     <>
@@ -1551,14 +1635,14 @@ const CreateSupplierModal = ({ onClose, onSuccess }: { onClose: () => void; onSu
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+              className="btn-save px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
@@ -1806,14 +1890,14 @@ const CreateEntityModal = ({ onClose, onSuccess }: { onClose: () => void; onSucc
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              className="btn-close px-6 py-2.5 rounded-lg font-medium transition-colors"
             >
               {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              className="btn-save px-6 py-2.5 font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
               {loading ? (
                 <>
@@ -2009,14 +2093,14 @@ const CreateAnnouncementModal = ({ onClose, onSuccess }: { onClose: () => void; 
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              className="btn-close px-6 py-2.5 rounded-lg font-medium transition-colors"
             >
               {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              className="btn-save px-6 py-2.5 font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
               {loading ? (
                 <>
@@ -2160,10 +2244,10 @@ const EditAnnouncementModal = ({ announcement, onClose, onSuccess }: { announcem
             <label htmlFor="edit-announcement-active" className="text-sm font-medium text-gray-700">{t('common.activeVisible')}</label>
           </div>
           <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
-            <button type="button" onClick={onClose} className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <button type="button" onClick={onClose} className="btn-close px-6 py-2.5 rounded-lg font-medium transition-colors">
               {t('common.cancel')}
             </button>
-            <button type="submit" disabled={loading} className="px-6 py-2.5 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+            <button type="submit" disabled={loading} className="btn-update px-6 py-2.5 font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
               {loading ? <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> {t('actions.updating')}</> : <>{t('actions.saveChanges')}</>}
             </button>
           </div>
@@ -2294,7 +2378,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transform">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-gray-900">Edit Supplier</h3>
+            <h3 className="text-2xl font-bold text-gray-900">{t('actions.updateSupplier')}</h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2302,14 +2386,14 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
               <XCircle size={24} />
             </button>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Update supplier information</p>
+          <p className="text-sm text-gray-500 mt-1">{t('forms.updateSupplierInfo')}</p>
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="edit-firstName" className="block text-sm font-semibold text-gray-700 mb-2">
-                First Name <span className="text-red-500">*</span>
+                {t('forms.firstName')} <span className="text-red-500">*</span>
               </label>
               <input
                 id="edit-firstName"
@@ -2331,7 +2415,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
             
             <div>
               <label htmlFor="edit-lastName" className="block text-sm font-semibold text-gray-700 mb-2">
-                Last Name <span className="text-red-500">*</span>
+                {t('forms.lastName')} <span className="text-red-500">*</span>
               </label>
               <input
                 id="edit-lastName"
@@ -2354,7 +2438,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
 
           <div>
             <label htmlFor="edit-email" className="block text-sm font-semibold text-gray-700 mb-2">
-              Email Address <span className="text-red-500">*</span>
+              {t('forms.emailAddress')} <span className="text-red-500">*</span>
             </label>
             <input
               id="edit-email"
@@ -2376,7 +2460,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
 
           <div>
             <label htmlFor="edit-phone" className="block text-sm font-semibold text-gray-700 mb-2">
-              Phone Number <span className="text-gray-400">(Optional)</span>
+              {t('forms.phoneNumber')} <span className="text-gray-400">({t('forms.optional')})</span>
             </label>
             <input
               id="edit-phone"
@@ -2389,7 +2473,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
 
           <div>
             <label htmlFor="edit-companyName" className="block text-sm font-semibold text-gray-700 mb-2">
-              Company Name <span className="text-red-500">*</span>
+              {t('forms.companyName')} <span className="text-red-500">*</span>
             </label>
             <input
               id="edit-companyName"
@@ -2412,7 +2496,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
               <label htmlFor="edit-city" className="block text-sm font-semibold text-gray-700 mb-2">
-                City
+                {t('forms.city')}
               </label>
               <input
                 id="edit-city"
@@ -2424,7 +2508,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
             </div>
             <div>
               <label htmlFor="edit-country" className="block text-sm font-semibold text-gray-700 mb-2">
-                Country
+                {t('forms.country')}
               </label>
               <input
                 id="edit-country"
@@ -2436,7 +2520,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
             </div>
             <div>
               <label htmlFor="edit-turnover" className="block text-sm font-semibold text-gray-700 mb-2">
-                Turnover
+                {t('forms.turnover')}
               </label>
               <input
                 id="edit-turnover"
@@ -2452,7 +2536,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="edit-employeeCount" className="block text-sm font-semibold text-gray-700 mb-2">
-                Employee Count
+                {t('forms.employeeCount')}
               </label>
               <input
                 id="edit-employeeCount"
@@ -2464,7 +2548,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
             </div>
             <div>
               <label htmlFor="edit-yearEstablished" className="block text-sm font-semibold text-gray-700 mb-2">
-                Year Established
+                {t('forms.yearEstablished')}
               </label>
               <input
                 id="edit-yearEstablished"
@@ -2479,7 +2563,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
 
           <div>
             <label htmlFor="edit-address" className="block text-sm font-semibold text-gray-700 mb-2">
-              Address
+              {t('forms.address')}
             </label>
             <textarea
               id="edit-address"
@@ -2494,24 +2578,24 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              className="btn-close px-6 py-2.5 rounded-lg font-medium transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              className="btn-update px-6 py-2.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Updating...
+                  {t('actions.updating')}
                 </>
               ) : (
                 <>
                   <Edit2 size={18} />
-                  Update Supplier
+                  {t('actions.updateSupplier')}
                 </>
               )}
             </button>
@@ -2631,7 +2715,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
       <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto transform">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-gray-900">Edit Procuring Entity</h3>
+            <h3 className="text-2xl font-bold text-gray-900">{t('actions.updateEntity')}</h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2639,13 +2723,13 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
               <XCircle size={24} />
             </button>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Update procuring entity information</p>
+          <p className="text-sm text-gray-500 mt-1">{t('forms.updateEntityInfo')}</p>
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div>
             <label htmlFor="edit-entity-name" className="block text-sm font-semibold text-gray-700 mb-2">
-              Entity Name <span className="text-red-500">*</span>
+              {t('forms.entityName')} <span className="text-red-500">*</span>
             </label>
             <input
               id="edit-entity-name"
@@ -2668,7 +2752,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="edit-entity-firstName" className="block text-sm font-semibold text-gray-700 mb-2">
-                First Name <span className="text-red-500">*</span>
+                {t('forms.firstName')} <span className="text-red-500">*</span>
               </label>
               <input
                 id="edit-entity-firstName"
@@ -2690,7 +2774,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
             
             <div>
               <label htmlFor="edit-entity-lastName" className="block text-sm font-semibold text-gray-700 mb-2">
-                Last Name <span className="text-red-500">*</span>
+                {t('forms.lastName')} <span className="text-red-500">*</span>
               </label>
               <input
                 id="edit-entity-lastName"
@@ -2713,7 +2797,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
 
           <div>
             <label htmlFor="edit-entity-email" className="block text-sm font-semibold text-gray-700 mb-2">
-              Email Address <span className="text-red-500">*</span>
+              {t('forms.emailAddress')} <span className="text-red-500">*</span>
             </label>
             <input
               id="edit-entity-email"
@@ -2735,7 +2819,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
 
           <div>
             <label htmlFor="edit-entity-phone" className="block text-sm font-semibold text-gray-700 mb-2">
-              Phone Number <span className="text-gray-400">(Optional)</span>
+              {t('forms.phoneNumber')} <span className="text-gray-400">({t('forms.optional')})</span>
             </label>
             <input
               id="edit-entity-phone"
@@ -2749,7 +2833,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="edit-entity-city" className="block text-sm font-semibold text-gray-700 mb-2">
-                City
+                {t('forms.city')}
               </label>
               <input
                 id="edit-entity-city"
@@ -2761,7 +2845,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
             </div>
             <div>
               <label htmlFor="edit-entity-country" className="block text-sm font-semibold text-gray-700 mb-2">
-                Country
+                {t('forms.country')}
               </label>
               <input
                 id="edit-entity-country"
@@ -2775,7 +2859,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
 
           <div>
             <label htmlFor="edit-entity-address" className="block text-sm font-semibold text-gray-700 mb-2">
-              Address
+              {t('forms.address')}
             </label>
             <textarea
               id="edit-entity-address"
@@ -2790,24 +2874,24 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              className="btn-close px-6 py-2.5 rounded-lg font-medium transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              className="btn-update px-6 py-2.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Updating...
+                  {t('actions.updating')}
                 </>
               ) : (
                 <>
                   <Edit2 size={18} />
-                  Update Entity
+                  {t('actions.updateEntity')}
                 </>
               )}
             </button>
@@ -2979,14 +3063,14 @@ const ResetPasswordModal = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+              className="btn-save px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
@@ -3078,7 +3162,7 @@ const DeleteConfirmationModal = ({
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t('common.cancel')}
             </button>
@@ -3086,7 +3170,7 @@ const DeleteConfirmationModal = ({
               type="button"
               onClick={handleConfirm}
               disabled={loading}
-              className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white font-semibold rounded-xl hover:from-red-700 hover:to-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+              className="btn-delete px-6 py-2.5 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>

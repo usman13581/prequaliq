@@ -8,7 +8,7 @@ import api from '../../services/api';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { 
   LogOut, FileText, Search, Bell, User, Plus, Edit2, Trash2, Eye, 
-  Upload, X, Calendar, Building2, Save, XCircle,
+  Upload, X, Calendar, Building2, Save, XCircle, Camera,
   CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Users, Power, PowerOff
 } from 'lucide-react';
 
@@ -69,9 +69,11 @@ interface Announcement {
   createdAt: string;
 }
 
+const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
+
 const ProcuringEntityDashboard = () => {
   const { t } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('questionnaires');
   const [loading, setLoading] = useState(false);
@@ -91,6 +93,8 @@ const ProcuringEntityDashboard = () => {
   });
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const profilePictureRef = useRef<HTMLInputElement>(null);
   
   // Questionnaire state
   const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([]);
@@ -268,6 +272,42 @@ const ProcuringEntityDashboard = () => {
       showToast(error.response?.data?.message || t('msg.failedUpdateProfile'), 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image (JPEG, PNG)', 'error');
+      return;
+    }
+    setUploadingPicture(true);
+    try {
+      const formData = new FormData();
+      formData.append('profilePicture', file);
+      await api.put('/auth/profile-picture', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      await refreshUser();
+      fetchProfile();
+      showToast('Profile picture updated successfully', 'success');
+      if (profilePictureRef.current) profilePictureRef.current.value = '';
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to upload profile picture', 'error');
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleRemoveProfilePicture = async () => {
+    try {
+      await api.delete('/auth/profile-picture');
+      await refreshUser();
+      fetchProfile();
+      showToast('Profile picture removed', 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to remove profile picture', 'error');
     }
   };
 
@@ -581,7 +621,7 @@ const ProcuringEntityDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-slate-100">
       {/* Navbar */}
       <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
@@ -695,7 +735,7 @@ const ProcuringEntityDashboard = () => {
                       setShowCreateQuestionnaire(true);
                       fetchCPVCodes();
                     }}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                    className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
                   >
                     <Plus size={20} />
                     {t('dashboard.createQuestionnaire')}
@@ -703,7 +743,7 @@ const ProcuringEntityDashboard = () => {
                 </div>
 
                 {questionnaires.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <FileText className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noQuestionnairesFound')}</p>
                     <p className="text-sm text-gray-500 mt-2">{t('sections.createFirstQuestionnaire')}</p>
@@ -713,7 +753,7 @@ const ProcuringEntityDashboard = () => {
                     {questionnaires.map((questionnaire) => (
                       <div
                         key={questionnaire.id}
-                        className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300"
+                        className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300"
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -833,7 +873,7 @@ const ProcuringEntityDashboard = () => {
                             {(!questionnaire.responses || questionnaire.responses.length === 0 || questionnaire.responses.every((r: any) => r.status === 'draft')) && (
                               <button
                                 onClick={() => handleDeleteQuestionnaire(questionnaire.id)}
-                                className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
+                                className="btn-delete px-4 py-2 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
                               >
                                 <Trash2 size={16} />
                                 Delete
@@ -859,7 +899,7 @@ const ProcuringEntityDashboard = () => {
                   {!editingProfile && (
                     <button
                       onClick={() => setEditingProfile(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                      className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
                     >
                       <Edit2 size={20} />
                       {t('actions.editProfile')}
@@ -878,8 +918,61 @@ const ProcuringEntityDashboard = () => {
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Profile Information */}
                     <div className="lg:col-span-2 space-y-6">
-                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
+                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl p-6 border border-gray-200/50">
                         <h3 className="text-lg font-bold text-gray-900 mb-4">{t('common.profile')} Information</h3>
+                        {/* Profile Picture */}
+                        <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
+                          <div className="relative group">
+                            <div className="w-20 h-20 rounded-xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-2xl font-bold">
+                              {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
+                                <img
+                                  src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
+                                  alt="Profile"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
+                              )}
+                            </div>
+                            <input
+                              ref={profilePictureRef}
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png"
+                              onChange={handleProfilePictureUpload}
+                              className="hidden"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={() => profilePictureRef.current?.click()}
+                                disabled={uploadingPicture}
+                                className="p-2 bg-white/90 rounded-lg hover:bg-white"
+                              >
+                                <Camera size={20} className="text-gray-800" />
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => profilePictureRef.current?.click()}
+                              disabled={uploadingPicture}
+                              className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                            >
+                              <Upload size={14} />
+                              {uploadingPicture ? 'Uploading...' : ((profile?.user?.profilePicture ?? user?.profilePicture) ? 'Change photo' : 'Upload photo')}
+                            </button>
+                            {(profile?.user?.profilePicture ?? user?.profilePicture) && (
+                              <button
+                                type="button"
+                                onClick={handleRemoveProfilePicture}
+                                className="block mt-1 text-sm text-gray-500 hover:text-red-600"
+                              >
+                                Remove photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
@@ -998,7 +1091,7 @@ const ProcuringEntityDashboard = () => {
                             <button
                               onClick={handleUpdateProfile}
                               disabled={loading}
-                              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold"
+                              className="btn-save flex items-center gap-2 px-6 py-2.5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold"
                             >
                               <Save size={18} />
                               {t('actions.saveChanges')}
@@ -1008,7 +1101,7 @@ const ProcuringEntityDashboard = () => {
                                 setEditingProfile(false);
                                 fetchProfile();
                               }}
-                              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-semibold"
+                              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
                             >
                               {t('common.cancel')}
                             </button>
@@ -1019,7 +1112,7 @@ const ProcuringEntityDashboard = () => {
 
                     {/* Documents */}
                     <div className="space-y-6">
-                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
+                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl p-6 border border-gray-200/50">
                         <div className="flex justify-between items-center mb-4">
                           <h3 className="text-lg font-bold text-gray-900">{t('sections.documents')}</h3>
                           <label className="cursor-pointer">
@@ -1094,7 +1187,7 @@ const ProcuringEntityDashboard = () => {
                   <p className="text-sm text-gray-500 mt-1">{t('sections.viewAnnouncementsEntity')}</p>
                 </div>
                 {announcements.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <Bell className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noAnnouncements')}</p>
                     <p className="text-sm text-gray-500 mt-2">{t('sections.checkBackLater')}</p>
@@ -1190,7 +1283,7 @@ const ProcuringEntityDashboard = () => {
                   </div>
                   <button
                     onClick={() => fetchSuppliers(1)}
-                    className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-colors shrink-0"
+                    className="btn-save px-5 py-2.5 font-medium rounded-xl transition-colors shrink-0"
                   >
                     {t('buttons.search')}
                   </button>
@@ -1963,14 +2056,14 @@ const CreateQuestionnaireModal = ({
           <div className="flex gap-3 justify-end pt-6 border-t border-gray-200/50">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
             >
               {t('common.cancel')}
             </button>
             <button
               onClick={onSubmit}
               disabled={loading}
-              className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+              className="btn-save px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
@@ -2325,14 +2418,14 @@ const EditQuestionnaireModal = ({
           <div className="flex gap-3 justify-end pt-6 border-t border-gray-200/50">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
             >
               {t('common.cancel')}
             </button>
             <button
               onClick={onSubmit}
               disabled={loading}
-              className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+              className="btn-update px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
@@ -2387,7 +2480,7 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
             </div>
           ) : (
             responses.map((response) => (
-              <div key={response.id} className="bg-gradient-to-br from-white to-blue-50/30 rounded-xl p-6 border border-gray-200/50">
+              <div key={response.id} className="bg-gradient-to-br from-white to-primary-50/30 rounded-xl p-6 border border-gray-200/50">
                 <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
                   <div>
                     <h4 className="text-lg font-bold text-gray-900">
@@ -2451,8 +2544,6 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
     </div>
   );
 };
-
-const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
 
 // Supplier Detail Modal – profile, submitted responses, answers, documents (download)
 const SupplierDetailModal = ({

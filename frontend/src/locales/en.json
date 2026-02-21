@@ -140,7 +140,9 @@
     "selectCPVCode": "Select CPV Code",
     "selectDeadlineDate": "Select deadline date",
     "selectExpiryDate": "Select expiry date",
-    "optional": "Optional"
+    "optional": "Optional",
+    "updateSupplierInfo": "Update supplier information",
+    "updateEntityInfo": "Update procuring entity information"
   },
   "placeholders": {
     "enterEmail": "Enter your email",

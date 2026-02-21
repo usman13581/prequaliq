@@ -137,6 +137,81 @@ const getProfile = async (req, res) => {
   }
 };
 
+const uploadProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file uploaded' });
+    }
+
+    const user = await db.User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Delete old profile picture if exists
+    if (user.profilePicture) {
+      const fs = require('fs');
+      const pathModule = require('path');
+      const uploadPath = process.env.UPLOAD_PATH || './uploads';
+      const oldPath = pathModule.join(uploadPath, user.profilePicture);
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath);
+      }
+    }
+
+    // Store filename only - served at /uploads/filename
+    const pathModule = require('path');
+    const filename = pathModule.basename(req.file.path);
+    await user.update({ profilePicture: filename });
+
+    const updatedUser = await db.User.findByPk(user.id, {
+      attributes: { exclude: ['password'] }
+    });
+
+    res.json({
+      message: 'Profile picture updated successfully',
+      user: updatedUser,
+      profilePicture: filename
+    });
+  } catch (error) {
+    console.error('Upload profile picture error:', error);
+    res.status(500).json({ message: 'Error uploading profile picture', error: error.message });
+  }
+};
+
+const removeProfilePicture = async (req, res) => {
+  try {
+    const user = await db.User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.profilePicture) {
+      const fs = require('fs');
+      const pathModule = require('path');
+      const uploadPath = process.env.UPLOAD_PATH || './uploads';
+      const oldPath = pathModule.join(uploadPath, user.profilePicture);
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath);
+      }
+    }
+
+    await user.update({ profilePicture: null });
+
+    const updatedUser = await db.User.findByPk(user.id, {
+      attributes: { exclude: ['password'] }
+    });
+
+    res.json({
+      message: 'Profile picture removed successfully',
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Remove profile picture error:', error);
+    res.status(500).json({ message: 'Error removing profile picture', error: error.message });
+  }
+};
+
 const resetPassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -171,4 +246,4 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getProfile, resetPassword };
+module.exports = { register, login, getProfile, resetPassword, uploadProfilePicture, removeProfilePicture };

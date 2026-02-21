@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -8,7 +8,7 @@ import { DateOnlyPicker } from '../../components/DateOnlyPicker';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { 
   LogOut, FileText, History, User, Upload, Plus, Edit2, Trash2, Eye, 
-  Save, XCircle, Calendar, Building2, CheckCircle,
+  Save, XCircle, Calendar, Building2, CheckCircle, Camera,
   Search, ChevronDown, Bell
 } from 'lucide-react';
 
@@ -66,9 +66,11 @@ interface QuestionnaireResponse {
   answers?: any[];
 }
 
+const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
+
 const SupplierDashboard = () => {
   const { t } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('questionnaires');
   const [loading, setLoading] = useState(false);
@@ -94,6 +96,8 @@ const SupplierDashboard = () => {
   });
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const profilePictureRef = useRef<HTMLInputElement>(null);
   const [selectedCPVCodes, setSelectedCPVCodes] = useState<string[]>([]);
   const [cpvCodes, setCpvCodes] = useState<CPVCode[]>([]);
   const [cpvSearchTerm, setCpvSearchTerm] = useState('');
@@ -447,6 +451,42 @@ const SupplierDashboard = () => {
     }
   };
 
+  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image (JPEG, PNG)', 'error');
+      return;
+    }
+    setUploadingPicture(true);
+    try {
+      const formData = new FormData();
+      formData.append('profilePicture', file);
+      await api.put('/auth/profile-picture', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      await refreshUser();
+      fetchProfile();
+      showToast('Profile picture updated successfully', 'success');
+      if (profilePictureRef.current) profilePictureRef.current.value = '';
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to upload profile picture', 'error');
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
+  const handleRemoveProfilePicture = async () => {
+    try {
+      await api.delete('/auth/profile-picture');
+      await refreshUser();
+      fetchProfile();
+      showToast('Profile picture removed', 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to remove profile picture', 'error');
+    }
+  };
+
   // Update CPV codes
   const handleUpdateCPVCodes = async () => {
     try {
@@ -668,7 +708,7 @@ const SupplierDashboard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-slate-100">
       {/* Navbar */}
       <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
@@ -799,7 +839,7 @@ const SupplierDashboard = () => {
                     </div>
                   </div>
                 ) : activeQuestionnaires.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <FileText className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noActiveQuestionnaires')}</p>
                     <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
@@ -871,7 +911,7 @@ const SupplierDashboard = () => {
                                     // Set questionnaire after loading to ensure state is updated
                                     setSelectedQuestionnaire(questionnaire);
                                   }}
-                                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
+                                  className="btn-save px-4 py-2 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
                                 >
                                   {hasResponse ? <Edit2 size={16} /> : <Plus size={16} />}
                                   {hasResponse ? t('buttons.continue') : t('buttons.respond')}
@@ -915,7 +955,7 @@ const SupplierDashboard = () => {
                     </div>
                   </div>
                 ) : questionnaireHistory.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <History className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noHistoryFound')}</p>
                     <p className="text-sm text-gray-500 mt-2">{t('sections.submittedHistoryWillAppear')}</p>
@@ -1034,7 +1074,7 @@ const SupplierDashboard = () => {
                     <p className="mt-6 text-gray-600 font-medium">{t('sections.loadingAnnouncements')}</p>
                   </div>
                 ) : announcements.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <Bell className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noAnnouncements')}</p>
                     <p className="text-sm text-gray-500 mt-2">{t('sections.checkBackLater')}</p>
@@ -1076,7 +1116,7 @@ const SupplierDashboard = () => {
                   {!editingProfile && (
                     <button
                       onClick={() => setEditingProfile(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                      className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
                     >
                       <Edit2 size={20} />
                       {t('actions.editProfile')}
@@ -1097,6 +1137,59 @@ const SupplierDashboard = () => {
                     <div className="lg:col-span-2 space-y-6">
                       <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
                         <h3 className="text-lg font-bold text-gray-900 mb-4">{t('common.profile')} Information</h3>
+                        {/* Profile Picture */}
+                        <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
+                          <div className="relative group">
+                            <div className="w-20 h-20 rounded-xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-2xl font-bold">
+                              {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
+                                <img
+                                  src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
+                                  alt="Profile"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
+                              )}
+                            </div>
+                            <input
+                              ref={profilePictureRef}
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png"
+                              onChange={handleProfilePictureUpload}
+                              className="hidden"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={() => profilePictureRef.current?.click()}
+                                disabled={uploadingPicture}
+                                className="p-2 bg-white/90 rounded-lg hover:bg-white"
+                              >
+                                <Camera size={20} className="text-gray-800" />
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => profilePictureRef.current?.click()}
+                              disabled={uploadingPicture}
+                              className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                            >
+                              <Upload size={14} />
+                              {uploadingPicture ? 'Uploading...' : ((profile?.user?.profilePicture ?? user?.profilePicture) ? 'Change photo' : 'Upload photo')}
+                            </button>
+                            {(profile?.user?.profilePicture ?? user?.profilePicture) && (
+                              <button
+                                type="button"
+                                onClick={handleRemoveProfilePicture}
+                                className="block mt-1 text-sm text-gray-500 hover:text-red-600"
+                              >
+                                Remove photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
@@ -1305,7 +1398,7 @@ const SupplierDashboard = () => {
                             <button
                               onClick={handleUpdateProfile}
                               disabled={loading}
-                              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold"
+                              className="btn-save flex items-center gap-2 px-6 py-2.5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold"
                             >
                               <Save size={18} />
                               {t('actions.saveChanges')}
@@ -1315,7 +1408,7 @@ const SupplierDashboard = () => {
                                 setEditingProfile(false);
                                 fetchProfile();
                               }}
-                              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-semibold"
+                              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
                             >
                               Cancel
                             </button>
@@ -1441,7 +1534,7 @@ const SupplierDashboard = () => {
                       className="hidden"
                       accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
                     />
-                    <div className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all duration-200 font-semibold">
+                    <div className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold">
                       <Upload size={20} />
                       {uploadingDoc ? 'Uploading...' : 'Upload Document'}
                     </div>
@@ -1449,7 +1542,7 @@ const SupplierDashboard = () => {
                 </div>
 
                 {documents.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl border-2 border-dashed border-gray-300">
+                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <Upload className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">No documents uploaded</p>
                     <p className="text-sm text-gray-500 mt-2">Upload your company documents here</p>
@@ -1476,7 +1569,7 @@ const SupplierDashboard = () => {
                           </div>
                           <button
                             onClick={() => handleDeleteDocument(doc.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 flex-shrink-0"
+                            className="btn-delete p-2 rounded-lg transition-all duration-200 flex-shrink-0"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -1629,14 +1722,14 @@ const CPVSelectorModal = ({
           <div className="flex gap-3 justify-end pt-6 border-t border-gray-200/50 mt-6">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
             >
               {t('common.cancel')}
             </button>
             <button
               onClick={onSave}
               disabled={loading}
-              className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+              className="btn-save px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
@@ -1803,14 +1896,14 @@ const NUTSSelectorModal = ({
           <div className="flex gap-3 justify-end pt-6 border-t border-gray-200/50 mt-6">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
             >
               {t('common.cancel')}
             </button>
             <button
               onClick={onSave}
               disabled={loading}
-              className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+              className="btn-save px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
@@ -2299,7 +2392,7 @@ const QuestionnaireResponseModal = ({
               <button
                 onClick={onSaveDraft}
                 disabled={savingDraft || submitting}
-                className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
+                className="btn-cancel px-6 py-2.5 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2"
               >
                 {savingDraft ? (
                   <>
@@ -2316,7 +2409,7 @@ const QuestionnaireResponseModal = ({
               <button
                 onClick={onSubmit}
                 disabled={submitting || savingDraft}
-                className="px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-semibold rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+                className="btn-save px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
               >
                 {submitting ? (
                   <>

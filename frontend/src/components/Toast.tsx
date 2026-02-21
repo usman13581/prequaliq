@@ -30,7 +30,7 @@ const Toast = ({ message, type, onClose, duration = 4000 }: ToastProps) => {
     success: 'from-green-500 to-green-600',
     error: 'from-red-500 to-red-600',
     warning: 'from-orange-500 to-orange-600',
-    info: 'from-blue-500 to-blue-600'
+    info: 'from-primary-500 to-primary-600'
   };
 
   return (

@@ -39,6 +39,23 @@ const upload = multer({
   fileFilter
 });
 
+// Profile picture: images only, 2MB max
+const profilePictureFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+  if (mimetype && extname) {
+    return cb(null, true);
+  }
+  cb(new Error('Invalid file type. Only JPEG, JPG, and PNG images are allowed.'));
+};
+
+const profilePictureUpload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: profilePictureFilter
+}).single('profilePicture');
+
 // Upload document (Supplier)
 const uploadDocument = async (req, res) => {
   try {
@@ -180,6 +197,7 @@ const deleteDocument = async (req, res) => {
 
 module.exports = {
   upload,
+  profilePictureUpload,
   uploadDocument,
   uploadProcuringEntityDocument,
   getDocuments,

@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const authController = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
+const { profilePictureUpload } = require('../controllers/documentController');
 
 // Validation error handler middleware
 const handleValidationErrors = (req, res, next) => {
@@ -42,5 +43,14 @@ router.post('/register', registerValidation, authController.register);
 router.post('/login', loginValidation, authController.login);
 router.get('/profile', authenticate, authController.getProfile);
 router.put('/reset-password', authenticate, resetPasswordValidation, authController.resetPassword);
+router.put('/profile-picture', authenticate, (req, res, next) => {
+  profilePictureUpload(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'File upload failed' });
+    }
+    next();
+  });
+}, authController.uploadProfilePicture);
+router.delete('/profile-picture', authenticate, authController.removeProfilePicture);
 
 module.exports = router;
