@@ -188,8 +188,7 @@ const createQuestionnaire = async (req, res) => {
       include: [
         {
           model: db.Question,
-          as: 'questions',
-          order: [['order', 'ASC']]
+          as: 'questions'
         },
         {
           model: db.CPVCode,
@@ -203,7 +202,9 @@ const createQuestionnaire = async (req, res) => {
             as: 'user'
           }]
         }
-      ]
+      ],
+      // Ensure associated questions are always ordered consistently
+      order: [[{ model: db.Question, as: 'questions' }, 'order', 'ASC']]
     });
 
     console.log(`[Questionnaire Create] Questionnaire created successfully: ${createdQuestionnaire.title}`);
@@ -250,8 +251,7 @@ const getQuestionnaires = async (req, res) => {
       include: [
         {
           model: db.Question,
-          as: 'questions',
-          order: [['order', 'ASC']]
+          as: 'questions'
         },
         {
           model: db.CPVCode,
@@ -277,7 +277,11 @@ const getQuestionnaires = async (req, res) => {
           ]
         }
       ],
-      order: [['createdAt', 'DESC']]
+      // First order questionnaires themselves, then ensure questions within each
+      order: [
+        ['createdAt', 'DESC'],
+        [{ model: db.Question, as: 'questions' }, 'order', 'ASC']
+      ]
     });
 
     res.json({ questionnaires });
@@ -516,8 +520,7 @@ const getResponse = async (req, res) => {
           include: [
             {
               model: db.Question,
-              as: 'questions',
-              order: [['order', 'ASC']]
+              as: 'questions'
             }
           ]
         },
@@ -536,6 +539,15 @@ const getResponse = async (req, res) => {
             }
           ]
         }
+      ],
+      // Ensure nested questionnaire.questions are ordered for the supplier view
+      order: [
+        [
+          { model: db.Questionnaire, as: 'questionnaire' },
+          { model: db.Question, as: 'questions' },
+          'order',
+          'ASC'
+        ]
       ]
     });
 
@@ -640,8 +652,7 @@ const updateQuestionnaire = async (req, res) => {
       include: [
         {
           model: db.Question,
-          as: 'questions',
-          order: [['order', 'ASC']]
+          as: 'questions'
         },
         {
           model: db.CPVCode,
@@ -655,7 +666,8 @@ const updateQuestionnaire = async (req, res) => {
             as: 'user'
           }]
         }
-      ]
+      ],
+      order: [[{ model: db.Question, as: 'questions' }, 'order', 'ASC']]
     });
 
     // Verify CPV code was updated

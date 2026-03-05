@@ -49,7 +49,6 @@ module.exports = (sequelize, DataTypes) => {
     ProcuringEntity.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
     ProcuringEntity.belongsTo(models.Company, { foreignKey: 'companyId', as: 'company' });
     ProcuringEntity.hasMany(models.Questionnaire, { foreignKey: 'procuringEntityId', as: 'questionnaires' });
-    ProcuringEntity.hasMany(models.Announcement, { foreignKey: 'procuringEntityId', as: 'announcements' });
     ProcuringEntity.hasMany(models.Document, { foreignKey: 'procuringEntityId', as: 'documents' });
   };
 

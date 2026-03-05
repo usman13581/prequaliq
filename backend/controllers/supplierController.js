@@ -207,8 +207,7 @@ const getActiveQuestionnaires = async (req, res) => {
         },
         {
           model: db.Question,
-          as: 'questions',
-          order: [['order', 'ASC']]
+          as: 'questions'
         },
         {
           model: db.QuestionnaireResponse,
@@ -217,7 +216,11 @@ const getActiveQuestionnaires = async (req, res) => {
           required: false
         }
       ],
-      order: [['deadline', 'ASC']]
+      // Order questionnaires by deadline, and questions within each by their order field
+      order: [
+        ['deadline', 'ASC'],
+        [{ model: db.Question, as: 'questions' }, 'order', 'ASC']
+      ]
     });
 
     res.json({ questionnaires });
@@ -258,8 +261,7 @@ const getQuestionnaireHistory = async (req, res) => {
             },
             {
               model: db.Question,
-              as: 'questions',
-              order: [['order', 'ASC']]
+              as: 'questions'
             }
           ]
         },
@@ -279,7 +281,16 @@ const getQuestionnaireHistory = async (req, res) => {
           ]
         }
       ],
-      order: [['submittedAt', 'DESC']]
+      // Order responses by submittedAt and ensure their questionnaire.questions are ordered
+      order: [
+        ['submittedAt', 'DESC'],
+        [
+          { model: db.Questionnaire, as: 'questionnaire' },
+          { model: db.Question, as: 'questions' },
+          'order',
+          'ASC'
+        ]
+      ]
     });
 
     res.json({ responses });

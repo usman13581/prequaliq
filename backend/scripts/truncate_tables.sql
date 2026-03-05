@@ -28,16 +28,13 @@ TRUNCATE TABLE documents CASCADE;
 -- 6. Supplier CPV associations (junction table)
 TRUNCATE TABLE supplier_cpv CASCADE;
 
--- 7. Announcements (references procuring_entities, cpv_codes, users)
-TRUNCATE TABLE announcements CASCADE;
-
--- 8. Suppliers (references users)
+-- 7. Suppliers (references users)
 TRUNCATE TABLE suppliers CASCADE;
 
--- 9. Procuring Entities (references users, companies)
+-- 8. Procuring Entities (references users, companies)
 TRUNCATE TABLE procuring_entities CASCADE;
 
--- 10. Companies
+-- 9. Companies
 TRUNCATE TABLE companies CASCADE;
 
 -- 11. CPV Codes (optional - uncomment if you want to delete these too)

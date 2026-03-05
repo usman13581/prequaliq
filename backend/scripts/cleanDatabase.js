@@ -60,12 +60,7 @@ async function cleanDatabase() {
     }
     console.log(`✓ Deleted ${deletedSupplierCPVs} supplier CPV associations`);
 
-    // 7. Delete announcements (references procuring_entities, cpv_codes)
-    console.log('Deleting announcements...');
-    const deletedAnnouncements = await db.Announcement.destroy({ where: {}, force: true });
-    console.log(`✓ Deleted ${deletedAnnouncements} announcements`);
-
-    // 8. Delete suppliers (references users)
+    // 7. Delete suppliers (references users)
     console.log('Deleting suppliers...');
     const deletedSuppliers = await db.Supplier.destroy({ where: {}, force: true });
     console.log(`✓ Deleted ${deletedSuppliers} suppliers`);
@@ -99,7 +94,6 @@ async function cleanDatabase() {
     console.log(`- Questionnaires: ${deletedQuestionnaires}`);
     console.log(`- Documents: ${deletedDocuments}`);
     console.log(`- Supplier CPV Associations: ${deletedSupplierCPVs}`);
-    console.log(`- Announcements: ${deletedAnnouncements}`);
     console.log(`- Suppliers: ${deletedSuppliers}`);
     console.log(`- Procuring Entities: ${deletedProcuringEntities}`);
     console.log(`- Companies: ${deletedCompanies}`);

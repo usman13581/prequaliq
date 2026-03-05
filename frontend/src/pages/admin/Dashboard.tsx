@@ -52,7 +52,6 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('suppliers');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [procuringEntities, setProcuringEntities] = useState<ProcuringEntity[]>([]);
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateSupplier, setShowCreateSupplier] = useState(false);
   const [showCreateEntity, setShowCreateEntity] = useState(false);
@@ -101,23 +100,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Fetch announcements
-  const fetchAnnouncements = async (showLoading = true) => {
-    try {
-      if (showLoading) setLoading(true);
-      const response = await api.get('/announcements/all');
-      const list = response?.data?.announcements;
-      setAnnouncements(Array.isArray(list) ? list : []);
-    } catch (error: any) {
-      console.error('Error fetching announcements:', error);
-      setAnnouncements([]);
-      if (showLoading) {
-        showToast(error.response?.data?.message || t('msg.failedFetchAnnouncements'), 'error');
-      }
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  };
 
   // Approve/Reject supplier
   const reviewSupplier = async (supplierId: string, action: 'approve' | 'reject') => {
@@ -208,7 +190,6 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchSuppliers(false);
     fetchProcuringEntities(false);
-    fetchAnnouncements(false);
   }, []);
 
   // Load data when tab changes (refresh current tab)
@@ -219,8 +200,6 @@ const AdminDashboard = () => {
     } else if (activeTab === 'entities') {
       fetchProcuringEntities();
       setEntityPage(1); // Reset to first page when switching tabs
-    } else if (activeTab === 'announcements') {
-      fetchAnnouncements();
     }
   }, [activeTab]);
 
@@ -263,7 +242,7 @@ const AdminDashboard = () => {
 
       <div className="w-full mx-auto px-5 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-white/50 hover:shadow-2xl transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
@@ -294,18 +273,6 @@ const AdminDashboard = () => {
             </div>
           </div>
           
-          <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-white/50 hover:shadow-2xl transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">{t('nav.announcements')}</p>
-                <p className="text-3xl font-bold text-gray-900">{announcements.length}</p>
-                <p className="text-xs text-gray-500 mt-2">{t('nav.activeNotifications')}</p>
-              </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Bell className="text-white" size={28} />
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Main Content Card */}
@@ -353,27 +320,6 @@ const AdminDashboard = () => {
                     : 'bg-gray-200 text-gray-600'
                 }`}>
                   {procuringEntities.length}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('announcements')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
-                  activeTab === 'announcements'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'announcements' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <Bell className={activeTab === 'announcements' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.announcements')}
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                  activeTab === 'announcements'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {announcements.length}
                 </span>
               </button>
             </nav>
@@ -767,98 +713,6 @@ const AdminDashboard = () => {
               </div>
             )}
 
-            {!loading && activeTab === 'announcements' && (
-              <div className="px-2 py-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{t('sections.announcementManagement')}</h2>
-                    <p className="text-sm text-gray-500 mt-1">{t('sections.manageAnnouncements')}</p>
-                  </div>
-                  <button
-                    onClick={() => setShowCreateAnnouncement(true)}
-                    className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
-                  >
-                    <Plus size={20} />
-                    {t('dashboard.createAnnouncement')}
-                  </button>
-                </div>
-
-                {(!announcements || announcements.length === 0) ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
-                    <div className="w-20 h-20 bg-gradient-to-br from-orange-200 to-orange-300 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Bell className="text-orange-400" size={40} />
-                    </div>
-                    <p className="text-lg font-semibold text-gray-700">No announcements found</p>
-                    <p className="text-sm text-gray-500 mt-2">Create your first announcement to notify users</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {(announcements || []).map((announcement) => {
-                      const expiry = announcement?.expiryDate;
-                      const isExpired = expiry ? new Date(expiry) < new Date() : false;
-                      return (
-                        <div key={announcement.id} className="group bg-gradient-to-br from-white to-orange-50/30 rounded-2xl p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-orange-200/20 to-transparent rounded-full -mr-16 -mt-16"></div>
-                          <div className="relative">
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-                                <Bell className="text-white" size={24} />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingAnnouncement(announcement)}
-                                  className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                                  title="Edit"
-                                >
-                                  <Edit2 size={18} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (window.confirm('Are you sure you want to delete this announcement?')) {
-                                      api.delete(`/announcements/${announcement.id}`)
-                                        .then(() => {
-                                          showToast(t('msg.announcementDeleted'), 'success');
-                                          fetchAnnouncements(false);
-                                        })
-                                        .catch((err: any) => showToast(err.response?.data?.message || t('msg.failedDeleteAnnouncement'), 'error'));
-                                    }
-                                  }}
-                                  className="btn-delete p-2 rounded-lg transition-colors"
-                                  title="Delete"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                                <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-sm ${
-                                  isExpired 
-                                    ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white' 
-                                    : 'bg-gradient-to-r from-green-500 to-green-600 text-white'
-                                }`}>
-                                  {isExpired ? t('common.expired') : t('common.active')}
-                                </span>
-                              </div>
-                            </div>
-                            <h3 className="font-bold text-xl text-gray-900 mb-2">{announcement?.title ?? 'Untitled'}</h3>
-                            <p className="text-gray-600 mb-4 line-clamp-3">{announcement?.content ?? ''}</p>
-                            <div className="flex items-center justify-between pt-4 border-t border-gray-200/50">
-                              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg">
-                                {announcement?.targetAudience === 'all' ? t('common.allUsers') : 
-                                 announcement?.targetAudience === 'suppliers' ? t('common.suppliersOnly') : 
-                                 t('nav.procuringEntities')}
-                              </span>
-                              <span className="text-xs text-gray-500 font-medium">
-                                {t('columns.expires')}: {expiry ? new Date(expiry).toLocaleDateString() : 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -911,29 +765,6 @@ const AdminDashboard = () => {
           onSuccess={() => {
             setEditingEntity(null);
             fetchProcuringEntities(false);
-          }}
-        />
-      )}
-
-      {/* Create Announcement Modal */}
-      {showCreateAnnouncement && (
-        <CreateAnnouncementModal
-          onClose={() => setShowCreateAnnouncement(false)}
-          onSuccess={() => {
-            setShowCreateAnnouncement(false);
-            fetchAnnouncements(false);
-          }}
-        />
-      )}
-
-      {/* Edit Announcement Modal */}
-      {editingAnnouncement && (
-        <EditAnnouncementModal
-          announcement={editingAnnouncement}
-          onClose={() => setEditingAnnouncement(null)}
-          onSuccess={() => {
-            setEditingAnnouncement(null);
-            fetchAnnouncements(false);
           }}
         />
       )}

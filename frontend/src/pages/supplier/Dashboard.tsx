@@ -9,7 +9,7 @@ import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { 
   LogOut, FileText, History, User, Upload, Plus, Edit2, Trash2, Eye, 
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
-  Search, ChevronDown, Bell
+  Search, ChevronDown
 } from 'lucide-react';
 
 interface Document {
@@ -109,9 +109,6 @@ const SupplierDashboard = () => {
   const [nutsSearchTerm, setNutsSearchTerm] = useState('');
   const [showNUTSSelector, setShowNUTSSelector] = useState(false);
   
-  // Announcements state
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-
   // Questionnaires state
   const [activeQuestionnaires, setActiveQuestionnaires] = useState<Questionnaire[]>([]);
   const [questionnaireHistory, setQuestionnaireHistory] = useState<QuestionnaireResponse[]>([]);
@@ -399,25 +396,10 @@ const SupplierDashboard = () => {
       fetchActiveQuestionnaires();
     } else if (activeTab === 'history') {
       fetchQuestionnaireHistory();
-    } else if (activeTab === 'announcements') {
-      fetchAnnouncements();
     } else if (activeTab === 'documents') {
       fetchProfile();
     }
   }, [activeTab]);
-
-  const fetchAnnouncements = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get('/announcements');
-      setAnnouncements(response.data.announcements || []);
-    } catch (error: any) {
-      showToast(error.response?.data?.message || t('msg.failedFetchAnnouncements'), 'error');
-      setAnnouncements([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Update profile
   const handleUpdateProfile = async () => {
@@ -778,20 +760,6 @@ const SupplierDashboard = () => {
                 {t('nav.history')}
               </button>
               <button
-                onClick={() => setActiveTab('announcements')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'announcements'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'announcements' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <Bell className={activeTab === 'announcements' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.announcementsTab')}
-              </button>
-              <button
                 onClick={() => setActiveTab('profile')}
                 className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
                   activeTab === 'profile'
@@ -1056,50 +1024,6 @@ const SupplierDashboard = () => {
                       </div>
                       );
                     })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Announcements Tab */}
-            {activeTab === 'announcements' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{t('sections.announcements')}</h2>
-                  <p className="text-sm text-gray-500 mt-1">{t('sections.viewAnnouncementsSupplier')}</p>
-                </div>
-                {loading && announcements.length === 0 ? (
-                  <div className="text-center py-16">
-                    <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto" />
-                    <p className="mt-6 text-gray-600 font-medium">{t('sections.loadingAnnouncements')}</p>
-                  </div>
-                ) : announcements.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
-                    <Bell className="text-gray-400 mx-auto mb-4" size={48} />
-                    <p className="text-lg font-semibold text-gray-700">{t('sections.noAnnouncements')}</p>
-                    <p className="text-sm text-gray-500 mt-2">{t('sections.checkBackLater')}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {announcements.map((announcement) => (
-                      <div
-                        key={announcement.id}
-                        className="bg-gradient-to-br from-white to-orange-50/30 rounded-2xl p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300"
-                      >
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">{announcement.title}</h3>
-                        <p className="text-gray-700 mb-4 whitespace-pre-wrap">{announcement.content}</p>
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-gray-200/50">
-                          {announcement.cpvCode && (
-                            <span className="px-3 py-1 bg-primary-100 text-primary-700 text-xs font-semibold rounded-lg">
-                              {announcement.cpvCode.code} – {announcement.cpvCode.description}
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-500 font-medium">
-                            {t('columns.expires')}: {new Date(announcement.expiryDate).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 )}
               </div>

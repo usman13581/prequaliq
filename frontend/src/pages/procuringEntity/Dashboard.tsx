@@ -478,12 +478,16 @@ const ProcuringEntityDashboard = () => {
 
     try {
       setLoading(true);
+      // Sort questions by explicit sort number if provided, otherwise by current index
+      const sortedQuestions = [...newQuestionnaire.questions].sort(
+        (a, b) => ((a.order ?? 0) - (b.order ?? 0))
+      );
       const payload = {
         title: newQuestionnaire.title.trim(),
         description: newQuestionnaire.description?.trim() || '',
         deadline: newQuestionnaire.deadline,
         cpvCodeId: newQuestionnaire.cpvCodeId,
-        questions: newQuestionnaire.questions.map((q, index) => {
+        questions: sortedQuestions.map((q, index) => {
           const questionType = q.questionType || 'text';
           const needsOptions = ['radio', 'checkbox', 'dropdown', 'multiple_choice'].includes(questionType);
           const options = Array.isArray(q.options) ? q.options : (needsOptions ? [] : null);
@@ -494,7 +498,8 @@ const ProcuringEntityDashboard = () => {
             isRequired: q.isRequired !== undefined ? q.isRequired : true,
             requiresDocument: q.requiresDocument || false,
             documentType: q.documentType || null,
-            order: q.order !== undefined ? q.order : index
+            // Use the explicit sort number if set, otherwise fallback to position
+            order: q.order !== undefined ? Number(q.order) : index
           };
         })
       };
@@ -534,7 +539,10 @@ const ProcuringEntityDashboard = () => {
       setLoading(true);
       
       // Prepare questions data - remove IDs and ensure proper structure for all question types
-      const questionsData = editingQuestionnaire.questions.map((q, index) => {
+      const sortedQuestions = [...editingQuestionnaire.questions].sort(
+        (a, b) => ((a.order ?? 0) - (b.order ?? 0))
+      );
+      const questionsData = sortedQuestions.map((q, index) => {
         const questionType = q.questionType || 'text';
         const needsOptions = ['radio', 'checkbox', 'dropdown', 'multiple_choice'].includes(questionType);
         let options: string[] | null = null;
@@ -550,7 +558,8 @@ const ProcuringEntityDashboard = () => {
           isRequired: q.isRequired !== undefined ? q.isRequired : true,
           requiresDocument: q.requiresDocument || false,
           documentType: q.documentType || null,
-          order: q.order !== undefined ? q.order : index
+          // Use explicit sort number if provided, otherwise fallback to array order
+          order: q.order !== undefined ? Number(q.order) : index
         };
       });
 
@@ -1952,7 +1961,23 @@ const CreateQuestionnaireModal = ({
                 {questionnaire.questions.map((question: Question, index: number) => (
                   <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                     <div className="flex justify-between items-start mb-4">
-                      <span className="text-sm font-semibold text-gray-700">{t('sections.questionNumber', { n: index + 1 })}</span>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-semibold text-gray-700">
+                          {t('sections.questionNumber', { n: index + 1 })}
+                        </span>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span>Sort no.</span>
+                          <input
+                            type="number"
+                            min={1}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded"
+                            value={question.order ?? index + 1}
+                            onChange={(e) =>
+                              updateQuestion(index, 'order', Number(e.target.value) || index + 1)
+                            }
+                          />
+                        </div>
+                      </div>
                       <button
                         onClick={() => removeQuestion(index)}
                         className="p-1 text-red-600 hover:bg-red-50 rounded transition-all duration-200"
@@ -2314,7 +2339,23 @@ const EditQuestionnaireModal = ({
                 {safeQuestionnaire.questions.map((question: Question, index: number) => (
                   <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                     <div className="flex justify-between items-start mb-4">
-                      <span className="text-sm font-semibold text-gray-700">{t('sections.questionNumber', { n: index + 1 })}</span>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-semibold text-gray-700">
+                          {t('sections.questionNumber', { n: index + 1 })}
+                        </span>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span>Sort no.</span>
+                          <input
+                            type="number"
+                            min={1}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded"
+                            value={question.order ?? index + 1}
+                            onChange={(e) =>
+                              safeUpdateQuestion(index, 'order', Number(e.target.value) || index + 1)
+                            }
+                          />
+                        </div>
+                      </div>
                       <button
                         onClick={() => safeRemoveQuestion(index)}
                         className="p-1 text-red-600 hover:bg-red-50 rounded transition-all duration-200"
@@ -2496,45 +2537,65 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
                   </span>
                 </div>
                 <div className="space-y-4">
-                  {response.answers?.map((answer: any, _index: number) => {
-                    const raw = answer.answerText ?? answer.answerValue ?? '';
-                    const isDate = answer.question?.questionType === 'date';
-                    const displayText = isDate && raw
-                      ? (typeof raw === 'string' && raw.length >= 10
-                          ? (() => {
-                              const s = raw.slice(0, 10);
-                              const [y, m, d] = s.split('-').map(Number);
-                              return new Date(y, m - 1, d).toLocaleDateString();
-                            })()
-                          : String(raw))
-                      : (raw ? String(raw) : '');
-                    return (
-                      <div key={answer.id} className="bg-gray-50 rounded-lg p-4">
-                        <p className="font-semibold text-gray-900 mb-2">{answer.question?.questionText}</p>
-                        <div className="mt-2">
-                          {displayText && (
-                            <p className="text-gray-700">{displayText}</p>
-                          )}
-                          {!displayText && !answer.document && (
-                            <p className="text-gray-500 italic">No answer provided</p>
-                          )}
-                          {answer.document && (
-                            <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
-                              <FileText size={16} />
-                              <a
-                                href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${answer.document.filePath.replace(/^.*[\\\/]/, '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:underline"
-                              >
-                                {answer.document.fileName}
-                              </a>
-                            </div>
-                          )}
+                  {(() => {
+                    // Map answers by questionId so we can render them in the same order as questionnaire.questions
+                    const answerMap = new Map<string, any>();
+                    (response.answers || []).forEach((a: any) => {
+                      if (a && a.questionId) {
+                        answerMap.set(String(a.questionId), a);
+                      }
+                    });
+
+                    if (!questionnaire.questions || questionnaire.questions.length === 0) {
+                      return (
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <p className="text-sm text-gray-500 italic">{t('sections.noQuestionsYet')}</p>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    }
+
+                    return questionnaire.questions.map((question: Question, index: number) => {
+                      const answer = answerMap.get(String(question.id));
+                      const raw = answer?.answerText ?? answer?.answerValue ?? '';
+                      const isDate = question.questionType === 'date';
+                      const displayText = isDate && raw
+                        ? (typeof raw === 'string' && raw.length >= 10
+                            ? (() => {
+                                const s = raw.slice(0, 10);
+                                const [y, m, d] = s.split('-').map(Number);
+                                return new Date(y, m - 1, d).toLocaleDateString();
+                              })()
+                            : String(raw))
+                        : (raw ? String(raw) : '');
+
+                      return (
+                        <div key={question.id || index} className="bg-gray-50 rounded-lg p-4">
+                          <p className="font-semibold text-gray-900 mb-2">{question.questionText}</p>
+                          <div className="mt-2">
+                            {displayText && (
+                              <p className="text-gray-700">{displayText}</p>
+                            )}
+                            {!displayText && !answer?.document && (
+                              <p className="text-gray-500 italic">No answer provided</p>
+                            )}
+                            {answer?.document && (
+                              <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
+                                <FileText size={16} />
+                                <a
+                                  href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${answer.document.filePath.replace(/^.*[\\\/]/, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:underline"
+                                >
+                                  {answer.document.fileName}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             ))

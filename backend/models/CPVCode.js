@@ -32,7 +32,6 @@ module.exports = (sequelize, DataTypes) => {
 
   CPVCode.associate = (models) => {
     CPVCode.hasMany(models.Questionnaire, { foreignKey: 'cpvCodeId', as: 'questionnaires' });
-    CPVCode.hasMany(models.Announcement, { foreignKey: 'cpvCodeId', as: 'announcements' });
     CPVCode.belongsToMany(models.Supplier, {
       through: 'SupplierCPV',
       foreignKey: 'cpvCodeId',
