@@ -153,15 +153,36 @@ const getSuppliers = async (req, res) => {
     };
     if (city) where[Op.and].push({ city });
     if (country) where[Op.and].push({ country });
-    if (minTurnover) where[Op.and].push({ turnover: { [Op.gte]: minTurnover } });
-    if (maxTurnover) where[Op.and].push({ turnover: { [Op.lte]: maxTurnover } });
-    if (search) {
-      where[Op.and].push({
-        [Op.or]: [
-          { companyName: { [Op.iLike]: `%${search}%` } },
-          { registrationNumber: { [Op.iLike]: `%${search}%` } }
-        ]
-      });
+    const minT = minTurnover ? parseFloat(minTurnover) : null;
+    const maxT = maxTurnover ? parseFloat(maxTurnover) : null;
+    if (minT != null && !isNaN(minT)) where[Op.and].push({ turnover: { [Op.gte]: minT } });
+    if (maxT != null && !isNaN(maxT)) where[Op.and].push({ turnover: { [Op.lte]: maxT } });
+
+    if (search && search.trim()) {
+      const term = String(search).trim().replace(/[%_\\]/g, '\\$&');
+      const pattern = `%${term}%`;
+      const searchOr = [
+        { companyName: { [Op.iLike]: pattern } },
+        { registrationNumber: { [Op.iLike]: pattern } },
+        { taxId: { [Op.iLike]: pattern } },
+        { address: { [Op.iLike]: pattern } },
+        { city: { [Op.iLike]: pattern } },
+        { country: { [Op.iLike]: pattern } },
+        { website: { [Op.iLike]: pattern } },
+        { phone: { [Op.iLike]: pattern } },
+        { financialStability: { [Op.iLike]: pattern } },
+        { qualityManagementSystem: { [Op.iLike]: pattern } },
+        { environmentalManagementSystem: { [Op.iLike]: pattern } },
+        { socialResponsibilityManagementSystem: { [Op.iLike]: pattern } },
+        { ohsManagementSystem: { [Op.iLike]: pattern } },
+        { groundsForExclusion: { [Op.iLike]: pattern } },
+        { laborLawRegulations: { [Op.iLike]: pattern } },
+        { sanctionsRussiaBelarus: { [Op.iLike]: pattern } },
+        { '$user.firstName$': { [Op.iLike]: pattern } },
+        { '$user.lastName$': { [Op.iLike]: pattern } },
+        { '$user.email$': { [Op.iLike]: pattern } }
+      ];
+      where[Op.and].push({ [Op.or]: searchOr });
     }
 
     const include = [
@@ -169,16 +190,7 @@ const getSuppliers = async (req, res) => {
         model: db.User,
         as: 'user',
         attributes: ['id', 'email', 'firstName', 'lastName', 'phone'],
-        ...(search && {
-          required: true,
-          where: {
-            [Op.or]: [
-              { firstName: { [Op.iLike]: `%${search}%` } },
-              { lastName: { [Op.iLike]: `%${search}%` } },
-              { email: { [Op.iLike]: `%${search}%` } }
-            ]
-          }
-        })
+        required: !!(search && search.trim())
       },
       {
         model: db.CPVCode,

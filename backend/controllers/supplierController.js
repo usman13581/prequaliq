@@ -1,5 +1,6 @@
 const db = require('../models');
 const { Op } = require('sequelize');
+const { sendSupplierProfileSubmittedToAdminEmail, sendSupplierProfileSubmittedConfirmationEmail } = require('../services/emailService');
 
 // Get supplier profile
 const getProfile = async (req, res) => {
@@ -45,12 +46,17 @@ const getProfile = async (req, res) => {
 // Update supplier profile
 const updateProfile = async (req, res) => {
   try {
-    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+    const supplier = await db.Supplier.findOne({
+      where: { userId: req.user.id },
+      include: [{ model: db.User, as: 'user', attributes: ['email', 'firstName', 'lastName'] }]
+    });
     if (!supplier) {
       return res.status(404).json({ message: 'Supplier profile not found' });
     }
 
-    await supplier.update(req.body);
+    const { status, ...updateData } = req.body;
+    await supplier.update(updateData);
+    await supplier.update({ status: 'pending' });
 
     // Update user info if provided
     if (req.body.firstName || req.body.lastName || req.body.phone) {
@@ -90,36 +96,77 @@ const updateProfile = async (req, res) => {
       include: updateIncludes
     });
 
-    res.json({ message: 'Profile updated successfully', supplier: updatedSupplier });
+    const user = updatedSupplier.user || supplier.user;
+    const companyName = updatedSupplier.companyName || 'Supplier';
+
+    if (user?.email) {
+      sendSupplierProfileSubmittedConfirmationEmail(user.email, user.firstName, user.lastName, companyName)
+        .catch((err) => console.error('Failed to send profile submitted confirmation to supplier:', err));
+    }
+
+    const admins = await db.User.findAll({
+      where: { role: 'admin', isActive: true },
+      attributes: ['email', 'firstName', 'lastName']
+    });
+    for (const admin of admins) {
+      if (admin.email) {
+        const adminName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || 'Administrator';
+        sendSupplierProfileSubmittedToAdminEmail(admin.email, adminName, companyName, user?.email || '')
+          .catch((err) => console.error('Failed to send profile submitted to admin:', err));
+      }
+    }
+
+    res.json({ message: 'Profile updated and submitted for approval', supplier: updatedSupplier });
   } catch (error) {
     console.error('Update supplier profile error:', error);
     res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 };
 
-// Update CPV codes
+// Update CPV codes - sets status to pending until admin approves
 const updateCPVCodes = async (req, res) => {
   try {
     const { cpvCodeIds } = req.body;
 
-    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+    const supplier = await db.Supplier.findOne({
+      where: { userId: req.user.id },
+      include: [{ model: db.User, as: 'user', attributes: ['email', 'firstName', 'lastName'] }]
+    });
     if (!supplier) {
       return res.status(404).json({ message: 'Supplier profile not found' });
     }
 
     await supplier.setCpvCodes(cpvCodeIds);
+    await supplier.update({ status: 'pending' });
 
     const updatedSupplier = await db.Supplier.findByPk(supplier.id, {
       include: [
-        {
-          model: db.CPVCode,
-          as: 'cpvCodes',
-          through: { attributes: [] }
-        }
+        { model: db.User, as: 'user', attributes: { exclude: ['password'] } },
+        { model: db.CPVCode, as: 'cpvCodes', through: { attributes: [] } }
       ]
     });
 
-    res.json({ message: 'CPV codes updated successfully', supplier: updatedSupplier });
+    const user = updatedSupplier.user || supplier.user;
+    const companyName = updatedSupplier.companyName || 'Supplier';
+
+    if (user?.email) {
+      sendSupplierProfileSubmittedConfirmationEmail(user.email, user.firstName, user.lastName, companyName)
+        .catch((err) => console.error('Failed to send profile submitted confirmation to supplier:', err));
+    }
+
+    const admins = await db.User.findAll({
+      where: { role: 'admin', isActive: true },
+      attributes: ['email', 'firstName', 'lastName']
+    });
+    for (const admin of admins) {
+      if (admin.email) {
+        const adminName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || 'Administrator';
+        sendSupplierProfileSubmittedToAdminEmail(admin.email, adminName, companyName, user?.email || '')
+          .catch((err) => console.error('Failed to send profile submitted to admin:', err));
+      }
+    }
+
+    res.json({ message: 'CPV codes updated and submitted for approval', supplier: updatedSupplier });
   } catch (error) {
     console.error('Update CPV codes error:', error);
     res.status(500).json({ message: 'Error updating CPV codes', error: error.message });
@@ -135,24 +182,45 @@ const updateNUTSCodes = async (req, res) => {
 
     const { nutsCodeIds } = req.body;
 
-    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+    const supplier = await db.Supplier.findOne({
+      where: { userId: req.user.id },
+      include: [{ model: db.User, as: 'user', attributes: ['email', 'firstName', 'lastName'] }]
+    });
     if (!supplier) {
       return res.status(404).json({ message: 'Supplier profile not found' });
     }
 
     await supplier.setNutsCodes(nutsCodeIds || []);
+    await supplier.update({ status: 'pending' });
 
     const updatedSupplier = await db.Supplier.findByPk(supplier.id, {
       include: [
-        {
-          model: db.NUTSCode,
-          as: 'nutsCodes',
-          through: { attributes: [] }
-        }
+        { model: db.User, as: 'user', attributes: { exclude: ['password'] } },
+        { model: db.NUTSCode, as: 'nutsCodes', through: { attributes: [] } }
       ]
     });
 
-    res.json({ message: 'NUTS codes updated successfully', supplier: updatedSupplier });
+    const user = updatedSupplier.user || supplier.user;
+    const companyName = updatedSupplier.companyName || 'Supplier';
+
+    if (user?.email) {
+      sendSupplierProfileSubmittedConfirmationEmail(user.email, user.firstName, user.lastName, companyName)
+        .catch((err) => console.error('Failed to send profile submitted confirmation to supplier:', err));
+    }
+
+    const admins = await db.User.findAll({
+      where: { role: 'admin', isActive: true },
+      attributes: ['email', 'firstName', 'lastName']
+    });
+    for (const admin of admins) {
+      if (admin.email) {
+        const adminName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || 'Administrator';
+        sendSupplierProfileSubmittedToAdminEmail(admin.email, adminName, companyName, user?.email || '')
+          .catch((err) => console.error('Failed to send profile submitted to admin:', err));
+      }
+    }
+
+    res.json({ message: 'NUTS codes updated and submitted for approval', supplier: updatedSupplier });
   } catch (error) {
     console.error('Update NUTS codes error:', error);
     res.status(500).json({ message: 'Error updating NUTS codes', error: error.message });
@@ -207,7 +275,8 @@ const getActiveQuestionnaires = async (req, res) => {
         },
         {
           model: db.Question,
-          as: 'questions'
+          as: 'questions',
+          include: [{ model: db.Document, as: 'attachedDocument', required: false }]
         },
         {
           model: db.QuestionnaireResponse,

@@ -44,6 +44,7 @@ interface Question {
   isRequired: boolean;
   requiresDocument: boolean;
   documentType?: string;
+  attachedDocument?: { id: string; fileName: string; filePath: string } | null;
 }
 
 interface Questionnaire {
@@ -67,6 +68,33 @@ interface QuestionnaireResponse {
 }
 
 const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
+
+// Turnover range options: value = upper bound (stored in DB)
+const TURNOVER_OPTIONS = [
+  { value: 1000000, labelKey: 'commonQuestions.turnover0_1M' },
+  { value: 10000000, labelKey: 'commonQuestions.turnover1M_10M' },
+  { value: 25000000, labelKey: 'commonQuestions.turnover10M_25M' },
+  { value: 50000000, labelKey: 'commonQuestions.turnover25M_50M' },
+  { value: 75000000, labelKey: 'commonQuestions.turnover50M_75M' },
+  { value: 100000000, labelKey: 'commonQuestions.turnover75M_100M' },
+  { value: 999999999999, labelKey: 'commonQuestions.turnover100MPlus' }
+];
+
+const getTurnoverLabel = (val: string | number | undefined, t: (k: string) => string): string => {
+  const n = val === '' || val == null ? NaN : Number(val);
+  if (isNaN(n)) return 'N/A';
+  const opt = TURNOVER_OPTIONS.find((o) => o.value === n) ?? TURNOVER_OPTIONS.find((o) => n <= o.value);
+  return opt ? t(opt.labelKey) : 'N/A';
+};
+
+const getTurnoverValueForSelect = (val: string | number | undefined): string => {
+  const n = val === '' || val == null ? NaN : Number(val);
+  if (isNaN(n)) return '';
+  const exact = TURNOVER_OPTIONS.find((o) => o.value === n);
+  if (exact) return String(exact.value);
+  const range = TURNOVER_OPTIONS.find((o) => n <= o.value);
+  return range ? String(range.value) : '';
+};
 
 const SupplierDashboard = () => {
   const { t } = useTranslation();
@@ -92,10 +120,18 @@ const SupplierDashboard = () => {
     website: '',
     turnover: '',
     employeeCount: '',
-    yearEstablished: ''
+    yearEstablished: '',
+    financialStability: '',
+    qualityManagementSystem: '',
+    environmentalManagementSystem: '',
+    socialResponsibilityManagementSystem: '',
+    ohsManagementSystem: '',
+    groundsForExclusion: '',
+    laborLawRegulations: '',
+    sanctionsRussiaBelarus: ''
   });
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadingQuestionDoc, setUploadingQuestionDoc] = useState<string | null>(null);
   const [uploadingPicture, setUploadingPicture] = useState(false);
   const profilePictureRef = useRef<HTMLInputElement>(null);
   const [selectedCPVCodes, setSelectedCPVCodes] = useState<string[]>([]);
@@ -139,7 +175,15 @@ const SupplierDashboard = () => {
         website: supplier.website || '',
         turnover: supplier.turnover?.toString() || '',
         employeeCount: supplier.employeeCount?.toString() || '',
-        yearEstablished: supplier.yearEstablished?.toString() || ''
+        yearEstablished: supplier.yearEstablished?.toString() || '',
+        financialStability: supplier.financialStability || '',
+        qualityManagementSystem: supplier.qualityManagementSystem || '',
+        environmentalManagementSystem: supplier.environmentalManagementSystem || '',
+        socialResponsibilityManagementSystem: supplier.socialResponsibilityManagementSystem || '',
+        ohsManagementSystem: supplier.ohsManagementSystem || '',
+        groundsForExclusion: supplier.groundsForExclusion || '',
+        laborLawRegulations: supplier.laborLawRegulations || '',
+        sanctionsRussiaBelarus: supplier.sanctionsRussiaBelarus || ''
       });
       setDocuments(supplier.documents || []);
       setSelectedCPVCodes(supplier.cpvCodes?.map((cpv: CPVCode) => cpv.id) || []);
@@ -396,8 +440,6 @@ const SupplierDashboard = () => {
       fetchActiveQuestionnaires();
     } else if (activeTab === 'history') {
       fetchQuestionnaireHistory();
-    } else if (activeTab === 'documents') {
-      fetchProfile();
     }
   }, [activeTab]);
 
@@ -418,12 +460,23 @@ const SupplierDashboard = () => {
       if (profileData.city.trim()) updateData.city = profileData.city.trim();
       if (profileData.country.trim()) updateData.country = profileData.country.trim();
       if (profileData.website.trim()) updateData.website = profileData.website.trim();
-      if (profileData.turnover) updateData.turnover = parseFloat(profileData.turnover);
+      if (profileData.turnover && profileData.turnover !== '') {
+        const v = parseFloat(profileData.turnover);
+        if (!isNaN(v)) updateData.turnover = v;
+      }
       if (profileData.employeeCount) updateData.employeeCount = parseInt(profileData.employeeCount);
       if (profileData.yearEstablished) updateData.yearEstablished = parseInt(profileData.yearEstablished);
+      if (profileData.financialStability != null) updateData.financialStability = String(profileData.financialStability).trim();
+      if (profileData.qualityManagementSystem != null) updateData.qualityManagementSystem = String(profileData.qualityManagementSystem).trim();
+      if (profileData.environmentalManagementSystem != null) updateData.environmentalManagementSystem = String(profileData.environmentalManagementSystem).trim();
+      if (profileData.socialResponsibilityManagementSystem != null) updateData.socialResponsibilityManagementSystem = String(profileData.socialResponsibilityManagementSystem).trim();
+      if (profileData.ohsManagementSystem != null) updateData.ohsManagementSystem = String(profileData.ohsManagementSystem).trim();
+      if (profileData.groundsForExclusion != null) updateData.groundsForExclusion = String(profileData.groundsForExclusion).trim();
+      if (profileData.laborLawRegulations != null) updateData.laborLawRegulations = String(profileData.laborLawRegulations).trim();
+      if (profileData.sanctionsRussiaBelarus != null) updateData.sanctionsRussiaBelarus = String(profileData.sanctionsRussiaBelarus).trim();
 
-      await api.put('/supplier/profile', updateData);
-      showToast(t('msg.profileUpdated'), 'success');
+      const res = await api.put('/supplier/profile', updateData);
+      showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
       setEditingProfile(false);
       fetchProfile();
     } catch (error: any) {
@@ -473,8 +526,8 @@ const SupplierDashboard = () => {
   const handleUpdateCPVCodes = async () => {
     try {
       setLoading(true);
-      await api.put('/supplier/cpv-codes', { cpvCodeIds: selectedCPVCodes });
-      showToast(t('msg.cpvUpdated'), 'success');
+      const res = await api.put('/supplier/cpv-codes', { cpvCodeIds: selectedCPVCodes });
+      showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
       setShowCPVSelector(false);
       fetchProfile();
     } catch (error: any) {
@@ -488,8 +541,8 @@ const SupplierDashboard = () => {
   const handleUpdateNUTSCodes = async () => {
     try {
       setLoading(true);
-      await api.put('/supplier/nuts-codes', { nutsCodeIds: selectedNUTSCodes });
-      showToast(t('nutsCodes.updatedSuccessfully'), 'success');
+      const res = await api.put('/supplier/nuts-codes', { nutsCodeIds: selectedNUTSCodes });
+      showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
       setShowNUTSSelector(false);
       fetchProfile();
     } catch (error: any) {
@@ -499,33 +552,9 @@ const SupplierDashboard = () => {
     }
   };
 
-  // Upload document
-  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('documentType', 'general');
-
-    try {
-      setUploadingDoc(true);
-      await api.post('/documents/supplier', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      showToast(t('msg.documentUploaded'), 'success');
-      fetchProfile();
-    } catch (error: any) {
-      showToast(error.response?.data?.message || t('msg.failedUploadDocument'), 'error');
-    } finally {
-      setUploadingDoc(false);
-      e.target.value = '';
-    }
-  };
-
   // Delete document
   const handleDeleteDocument = async (documentId: string) => {
-    if (!confirm('Are you sure you want to delete this document?')) return;
+    if (!confirm(t('sections.confirmDeleteDocument'))) return;
     
     try {
       await api.delete(`/documents/${documentId}`);
@@ -533,6 +562,45 @@ const SupplierDashboard = () => {
       fetchProfile();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedDeleteDocument'), 'error');
+    }
+  };
+
+  // Document types for Q5–Q8
+  const DOCUMENT_TYPES = {
+    q5: 'q5-quality',
+    q6: 'q6-environment',
+    q7: 'q7-social',
+    q8: 'q8-ohs'
+  } as const;
+
+  const getDocumentsForQuestion = (documentType: string) =>
+    (documents || []).filter((d) => d.documentType === documentType);
+
+  const getDocumentUrl = (doc: Document) => {
+    const filename = doc.filePath.replace(/^.*[\\\/]/, '');
+    return `${UPLOADS_BASE}/${filename}`;
+  };
+
+  const handleProfileQuestionDocumentUpload = async (documentType: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentType', documentType);
+
+    try {
+      setUploadingQuestionDoc(documentType);
+      const res = await api.post('/documents/supplier', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
+      fetchProfile();
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('msg.failedUploadDocument'), 'error');
+    } finally {
+      setUploadingQuestionDoc(null);
+      e.target.value = '';
     }
   };
 
@@ -772,20 +840,6 @@ const SupplierDashboard = () => {
                 )}
                 <User className={activeTab === 'profile' ? 'text-primary-600' : 'text-gray-400'} size={20} />
                 {t('nav.profile')}
-              </button>
-              <button
-                onClick={() => setActiveTab('documents')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'documents'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'documents' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <Upload className={activeTab === 'documents' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.documents')}
               </button>
             </nav>
           </div>
@@ -1272,21 +1326,6 @@ const SupplierDashboard = () => {
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.turnover')}</label>
-                            {editingProfile ? (
-                              <input
-                                type="number"
-                                value={profileData.turnover}
-                                onChange={(e) => setProfileData({ ...profileData, turnover: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                              />
-                            ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.turnover ? `$${parseFloat(profileData.turnover).toLocaleString()}` : 'N/A'}
-                              </div>
-                            )}
-                          </div>
-                          <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.employeeCount')}</label>
                             {editingProfile ? (
                               <input
@@ -1317,6 +1356,378 @@ const SupplierDashboard = () => {
                             )}
                           </div>
                         </div>
+
+                        {/* Common Questions */}
+                        <div className="mt-8 border-t border-gray-200 pt-8">
+                          <h3 className="text-lg font-bold text-gray-900 mb-6">{t('commonQuestions.sectionTitle')}</h3>
+                          <div className="space-y-6">
+                            {/* Q1 – Information about the Supplier (Turnover) */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q1Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q1Help')}</p>
+                              {editingProfile ? (
+                                <div className="relative">
+                                  <select
+                                    value={getTurnoverValueForSelect(profileData.turnover)}
+                                    onChange={(e) => setProfileData({ ...profileData, turnover: e.target.value })}
+                                    className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white appearance-none cursor-pointer text-gray-900 hover:border-primary-400"
+                                    style={{ minHeight: '48px' }}
+                                  >
+                                    <option value="">{t('commonQuestions.turnoverSelectPlaceholder')}</option>
+                                    {TURNOVER_OPTIONS.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {t(opt.labelKey)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" aria-hidden />
+                                </div>
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {getTurnoverLabel(profileData.turnover, t)}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Q2 – Financial Stability */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q2Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q2Help')}</p>
+                              {editingProfile ? (
+                                <input
+                                  type="text"
+                                  value={profileData.financialStability}
+                                  onChange={(e) => setProfileData({ ...profileData, financialStability: e.target.value })}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {profileData.financialStability || 'N/A'}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Q3 – Locations of Operations (NUTS Codes) - card */}
+                            <div className="bg-gradient-to-br from-white to-green-50/30 rounded-2xl p-6 border border-gray-200/50">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-base font-bold text-gray-900">{t('commonQuestions.q3Label')}</h4>
+                                </div>
+                                {!editingProfile && (
+                                  <button
+                                    onClick={() => {
+                                      if (profile?.nutsCodes) setSelectedNUTSCodes(profile.nutsCodes.map((nuts: NUTSCode) => nuts.id));
+                                      setShowNUTSSelector(true);
+                                      fetchNUTSCodes();
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-all duration-200 font-medium text-sm"
+                                  >
+                                    <Edit2 size={16} />
+                                    {t('nutsCodes.editButton')}
+                                  </button>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mb-4">{t('commonQuestions.q3Help')}</p>
+                              {profile?.nutsCodes && profile.nutsCodes.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {profile.nutsCodes.map((nuts: NUTSCode) => (
+                                    <span key={nuts.id} className="px-3 py-1 bg-green-100 text-green-700 text-sm font-semibold rounded-lg">
+                                      {nuts.code} - {nuts.nameSwedish} ({nuts.name})
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500 text-sm">{t('nutsCodes.noCodesSelected')}</p>
+                              )}
+                            </div>
+
+                            {/* Q4 – Goods and Services (CPV Codes) - card */}
+                            <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-base font-bold text-gray-900">{t('commonQuestions.q4Label')}</h4>
+                                </div>
+                                {!editingProfile && (
+                                  <button
+                                    onClick={() => { setShowCPVSelector(true); fetchCPVCodes(); }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm"
+                                  >
+                                    <Edit2 size={16} />
+                                    {t('cpvCodes.editButton')}
+                                  </button>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mb-4">{t('commonQuestions.q4Help')}</p>
+                              {profile?.cpvCodes && profile.cpvCodes.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {profile.cpvCodes.map((cpv: CPVCode) => (
+                                    <span key={cpv.id} className="px-3 py-1 bg-primary-100 text-primary-700 text-sm font-semibold rounded-lg">
+                                      {cpv.code} - {cpv.description}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500 text-sm">{t('cpvCodes.noCodesSelected')}</p>
+                              )}
+                            </div>
+
+                            {/* Q5 – Management System – Quality */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q5Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q5Help')}</p>
+                              {editingProfile ? (
+                                <input
+                                  type="text"
+                                  value={profileData.qualityManagementSystem}
+                                  onChange={(e) => setProfileData({ ...profileData, qualityManagementSystem: e.target.value })}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {profileData.qualityManagementSystem || 'N/A'}
+                                </div>
+                              )}
+                              <div className="mt-3">
+                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q5, e)}
+                                    disabled={!!uploadingQuestionDoc}
+                                  />
+                                  <Upload size={16} />
+                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q5 ? t('sections.uploading') : t('sections.upload')}
+                                </label>
+                                {getDocumentsForQuestion(DOCUMENT_TYPES.q5).length > 0 && (
+                                  <ul className="mt-2 space-y-1">
+                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q5).map((doc) => (
+                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
+                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
+                                          <FileText size={14} />
+                                          {doc.fileName}
+                                        </a>
+                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Q6 – Management System – Environment */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q6Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q6Help')}</p>
+                              {editingProfile ? (
+                                <input
+                                  type="text"
+                                  value={profileData.environmentalManagementSystem}
+                                  onChange={(e) => setProfileData({ ...profileData, environmentalManagementSystem: e.target.value })}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {profileData.environmentalManagementSystem || 'N/A'}
+                                </div>
+                              )}
+                              <div className="mt-3">
+                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q6, e)}
+                                    disabled={!!uploadingQuestionDoc}
+                                  />
+                                  <Upload size={16} />
+                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q6 ? t('sections.uploading') : t('sections.upload')}
+                                </label>
+                                {getDocumentsForQuestion(DOCUMENT_TYPES.q6).length > 0 && (
+                                  <ul className="mt-2 space-y-1">
+                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q6).map((doc) => (
+                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
+                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
+                                          <FileText size={14} />
+                                          {doc.fileName}
+                                        </a>
+                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Q7 – Management System – Social Responsibility */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q7Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q7Help')}</p>
+                              {editingProfile ? (
+                                <input
+                                  type="text"
+                                  value={profileData.socialResponsibilityManagementSystem}
+                                  onChange={(e) => setProfileData({ ...profileData, socialResponsibilityManagementSystem: e.target.value })}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {profileData.socialResponsibilityManagementSystem || 'N/A'}
+                                </div>
+                              )}
+                              <div className="mt-3">
+                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q7, e)}
+                                    disabled={!!uploadingQuestionDoc}
+                                  />
+                                  <Upload size={16} />
+                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q7 ? t('sections.uploading') : t('sections.upload')}
+                                </label>
+                                {getDocumentsForQuestion(DOCUMENT_TYPES.q7).length > 0 && (
+                                  <ul className="mt-2 space-y-1">
+                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q7).map((doc) => (
+                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
+                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
+                                          <FileText size={14} />
+                                          {doc.fileName}
+                                        </a>
+                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Q8 – Management System – Occupational Health and Safety */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q8Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q8Help')}</p>
+                              {editingProfile ? (
+                                <input
+                                  type="text"
+                                  value={profileData.ohsManagementSystem}
+                                  onChange={(e) => setProfileData({ ...profileData, ohsManagementSystem: e.target.value })}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {profileData.ohsManagementSystem || 'N/A'}
+                                </div>
+                              )}
+                              <div className="mt-3">
+                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q8, e)}
+                                    disabled={!!uploadingQuestionDoc}
+                                  />
+                                  <Upload size={16} />
+                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q8 ? t('sections.uploading') : t('sections.upload')}
+                                </label>
+                                {getDocumentsForQuestion(DOCUMENT_TYPES.q8).length > 0 && (
+                                  <ul className="mt-2 space-y-1">
+                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q8).map((doc) => (
+                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
+                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
+                                          <FileText size={14} />
+                                          {doc.fileName}
+                                        </a>
+                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Q9 – Grounds for Exclusion */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q9Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q9Help')}</p>
+                              {editingProfile ? (
+                                <input
+                                  type="text"
+                                  value={profileData.groundsForExclusion}
+                                  onChange={(e) => setProfileData({ ...profileData, groundsForExclusion: e.target.value })}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {profileData.groundsForExclusion || 'N/A'}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Q10 – Labor Law Regulations */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q10Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q10Help')}</p>
+                              {editingProfile ? (
+                                <input
+                                  type="text"
+                                  value={profileData.laborLawRegulations}
+                                  onChange={(e) => setProfileData({ ...profileData, laborLawRegulations: e.target.value })}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {profileData.laborLawRegulations || 'N/A'}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Q11 – Sanctions Regarding Russia and Belarus */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q11Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q11Help')}</p>
+                              {editingProfile ? (
+                                <input
+                                  type="text"
+                                  value={profileData.sanctionsRussiaBelarus}
+                                  onChange={(e) => setProfileData({ ...profileData, sanctionsRussiaBelarus: e.target.value })}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                  {profileData.sanctionsRussiaBelarus || 'N/A'}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                         {editingProfile && (
                           <div className="flex gap-3 mt-6">
                             <button
@@ -1337,76 +1748,6 @@ const SupplierDashboard = () => {
                               Cancel
                             </button>
                           </div>
-                        )}
-                      </div>
-
-                      {/* CPV Codes */}
-                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
-                        <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-lg font-bold text-gray-900">{t('cpvCodes.title')}</h3>
-                          {!editingProfile && (
-                            <button
-                              onClick={() => {
-                                setShowCPVSelector(true);
-                                fetchCPVCodes();
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm"
-                            >
-                              <Edit2 size={16} />
-                              {t('cpvCodes.editButton')}
-                            </button>
-                          )}
-                        </div>
-                        {profile?.cpvCodes && profile.cpvCodes.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {profile.cpvCodes.map((cpv: CPVCode) => (
-                              <span
-                                key={cpv.id}
-                                className="px-3 py-1 bg-primary-100 text-primary-700 text-sm font-semibold rounded-lg"
-                              >
-                                {cpv.code} - {cpv.description}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-gray-500 text-sm">{t('cpvCodes.noCodesSelected')}</p>
-                        )}
-                      </div>
-
-                      {/* NUTS Codes */}
-                      <div className="bg-gradient-to-br from-white to-green-50/30 rounded-2xl p-6 border border-gray-200/50">
-                        <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-lg font-bold text-gray-900">{t('nutsCodes.title')}</h3>
-                          {!editingProfile && (
-                            <button
-                              onClick={() => {
-                                // Refresh selected NUTS codes from profile
-                                if (profile?.nutsCodes) {
-                                  setSelectedNUTSCodes(profile.nutsCodes.map((nuts: NUTSCode) => nuts.id));
-                                }
-                                setShowNUTSSelector(true);
-                                fetchNUTSCodes();
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-all duration-200 font-medium text-sm"
-                            >
-                              <Edit2 size={16} />
-                              {t('nutsCodes.editButton')}
-                            </button>
-                          )}
-                        </div>
-                        {profile?.nutsCodes && profile.nutsCodes.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {profile.nutsCodes.map((nuts: NUTSCode) => (
-                              <span
-                                key={nuts.id}
-                                className="px-3 py-1 bg-green-100 text-green-700 text-sm font-semibold rounded-lg"
-                              >
-                                {nuts.code} - {nuts.nameSwedish} ({nuts.name})
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-gray-500 text-sm">{t('nutsCodes.noCodesSelected')}</p>
                         )}
                       </div>
                     </div>
@@ -1442,68 +1783,6 @@ const SupplierDashboard = () => {
               </div>
             )}
 
-            {/* Documents Tab */}
-            {activeTab === 'documents' && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Document Management</h2>
-                    <p className="text-sm text-gray-500 mt-1">Upload and manage your documents</p>
-                  </div>
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      onChange={handleDocumentUpload}
-                      disabled={uploadingDoc}
-                      className="hidden"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                    />
-                    <div className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold">
-                      <Upload size={20} />
-                      {uploadingDoc ? 'Uploading...' : 'Upload Document'}
-                    </div>
-                  </label>
-                </div>
-
-                {documents.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
-                    <Upload className="text-gray-400 mx-auto mb-4" size={48} />
-                    <p className="text-lg font-semibold text-gray-700">No documents uploaded</p>
-                    <p className="text-sm text-gray-500 mt-2">Upload your company documents here</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {documents.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="bg-gradient-to-br from-white to-blue-50/30 rounded-xl p-4 border border-gray-200/50 hover:shadow-lg transition-all duration-200"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start gap-3 flex-1 min-w-0">
-                            <FileText className="text-primary-600 flex-shrink-0 mt-1" size={24} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">{doc.fileName}</p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {(doc.fileSize / 1024).toFixed(2)} KB
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {doc.documentType}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleDeleteDocument(doc.id)}
-                            className="btn-delete p-2 rounded-lg transition-all duration-200 flex-shrink-0"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -2249,6 +2528,20 @@ const QuestionnaireResponseModal = ({
                     {question.questionText}
                     {question.isRequired && <span className="text-red-500 ml-1">*</span>}
                   </p>
+                  {question.attachedDocument && (
+                    <div className="mt-2 mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg">
+                      <FileText size={18} className="text-blue-600 flex-shrink-0" />
+                      <a
+                        href={`${UPLOADS_BASE}/${question.attachedDocument.filePath.replace(/^.*[\\/]/, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline font-medium text-sm truncate"
+                      >
+                        {question.attachedDocument.fileName}
+                      </a>
+                      <span className="text-blue-600 text-sm">({t('questionnaire.view')} / {t('questionnaire.download')})</span>
+                    </div>
+                  )}
                   <div className="mt-3">
                     {renderQuestionInput(question)}
                   </div>

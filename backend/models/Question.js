@@ -35,6 +35,15 @@ module.exports = (sequelize, DataTypes) => {
     documentType: {
       type: DataTypes.STRING
     },
+    attachedDocumentId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'documents',
+        key: 'id'
+      },
+      onDelete: 'SET NULL'
+    },
     order: {
       type: DataTypes.INTEGER,
       defaultValue: 0
@@ -46,6 +55,7 @@ module.exports = (sequelize, DataTypes) => {
 
   Question.associate = (models) => {
     Question.belongsTo(models.Questionnaire, { foreignKey: 'questionnaireId', as: 'questionnaire' });
+    Question.belongsTo(models.Document, { foreignKey: 'attachedDocumentId', as: 'attachedDocument' });
     Question.hasMany(models.Answer, { foreignKey: 'questionId', as: 'answers' });
   };
 

@@ -2,6 +2,7 @@ const db = require('../models');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { sendSupplierProfileSubmittedToAdminEmail, sendSupplierProfileSubmittedConfirmationEmail } = require('../services/emailService');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -56,10 +57,13 @@ const profilePictureUpload = multer({
   fileFilter: profilePictureFilter
 }).single('profilePicture');
 
-// Upload document (Supplier)
+// Upload document (Supplier) - profile document uploads set status to pending
 const uploadDocument = async (req, res) => {
   try {
-    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+    const supplier = await db.Supplier.findOne({
+      where: { userId: req.user.id },
+      include: [{ model: db.User, as: 'user', attributes: ['email', 'firstName', 'lastName'] }]
+    });
     if (!supplier) {
       return res.status(404).json({ message: 'Supplier not found' });
     }
@@ -68,9 +72,10 @@ const uploadDocument = async (req, res) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
+    const documentType = req.body.documentType || 'general';
     const document = await db.Document.create({
       supplierId: supplier.id,
-      documentType: req.body.documentType || 'general',
+      documentType,
       fileName: req.file.originalname,
       filePath: req.file.path,
       fileSize: req.file.size,
@@ -78,8 +83,30 @@ const uploadDocument = async (req, res) => {
       uploadedBy: req.user.id
     });
 
+    const isProfileDoc = ['q5-quality', 'q6-environment', 'q7-social', 'q8-ohs'].includes(documentType);
+    if (isProfileDoc) {
+      await supplier.update({ status: 'pending' });
+      const user = supplier.user;
+      const companyName = supplier.companyName || 'Supplier';
+      if (user?.email) {
+        sendSupplierProfileSubmittedConfirmationEmail(user.email, user.firstName, user.lastName, companyName)
+          .catch((err) => console.error('Failed to send profile submitted confirmation:', err));
+      }
+      const admins = await db.User.findAll({
+        where: { role: 'admin', isActive: true },
+        attributes: ['email', 'firstName', 'lastName']
+      });
+      for (const admin of admins) {
+        if (admin.email) {
+          const adminName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || 'Administrator';
+          sendSupplierProfileSubmittedToAdminEmail(admin.email, adminName, companyName, user?.email || '')
+            .catch((err) => console.error('Failed to send profile submitted to admin:', err));
+        }
+      }
+    }
+
     res.status(201).json({
-      message: 'Document uploaded successfully',
+      message: isProfileDoc ? 'Document uploaded and profile submitted for approval' : 'Document uploaded successfully',
       document
     });
   } catch (error) {

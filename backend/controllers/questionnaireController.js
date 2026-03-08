@@ -177,6 +177,7 @@ const createQuestionnaire = async (req, res) => {
           isRequired: q.isRequired !== undefined ? q.isRequired : true,
           requiresDocument: q.requiresDocument || false,
           documentType: q.documentType || null,
+          attachedDocumentId: q.attachedDocumentId || null,
           order: q.order !== undefined ? q.order : index
         });
       });
@@ -246,43 +247,66 @@ const getQuestionnaires = async (req, res) => {
       return res.status(404).json({ message: 'Procuring entity not found' });
     }
 
-    const questionnaires = await db.Questionnaire.findAll({
-      where: { procuringEntityId: procuringEntity.id },
-      include: [
-        {
-          model: db.Question,
-          as: 'questions'
-        },
-        {
-          model: db.CPVCode,
-          as: 'cpvCode'
-        },
-        {
-          model: db.QuestionnaireResponse,
-          as: 'responses',
-          where: { status: 'submitted' }, // Only show submitted responses to procuring entity
-          required: false,
-          include: [
-            {
-              model: db.Supplier,
-              as: 'supplier',
-              include: [
-                {
-                  model: db.User,
-                  as: 'user',
-                  attributes: ['firstName', 'lastName', 'email']
-                }
-              ]
-            }
-          ]
-        }
-      ],
-      // First order questionnaires themselves, then ensure questions within each
-      order: [
-        ['createdAt', 'DESC'],
-        [{ model: db.Question, as: 'questions' }, 'order', 'ASC']
-      ]
-    });
+    let questionnaires;
+    try {
+      questionnaires = await db.Questionnaire.findAll({
+        where: { procuringEntityId: procuringEntity.id },
+        include: [
+          {
+            model: db.Question,
+            as: 'questions',
+            include: [{ model: db.Document, as: 'attachedDocument', required: false, attributes: ['id', 'fileName', 'filePath'] }]
+          },
+          {
+            model: db.CPVCode,
+            as: 'cpvCode'
+          },
+          {
+            model: db.QuestionnaireResponse,
+            as: 'responses',
+            where: { status: 'submitted' },
+            required: false,
+            include: [
+              {
+                model: db.Supplier,
+                as: 'supplier',
+                include: [
+                  {
+                    model: db.User,
+                    as: 'user',
+                    attributes: ['firstName', 'lastName', 'email']
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        order: [
+          ['createdAt', 'DESC'],
+          [{ model: db.Question, as: 'questions' }, 'order', 'ASC']
+        ]
+      });
+    } catch (includeErr) {
+      console.warn('Get questionnaires with attachedDocument failed, retrying without:', includeErr.message);
+      questionnaires = await db.Questionnaire.findAll({
+        where: { procuringEntityId: procuringEntity.id },
+        include: [
+          { model: db.Question, as: 'questions' },
+          { model: db.CPVCode, as: 'cpvCode' },
+          {
+            model: db.QuestionnaireResponse,
+            as: 'responses',
+            where: { status: 'submitted' },
+            required: false,
+            include: [{ model: db.Supplier, as: 'supplier', include: [{ model: db.User, as: 'user', attributes: ['firstName', 'lastName', 'email'] }] }]
+          }
+        ],
+        order: [
+          ['createdAt', 'DESC'],
+          [{ model: db.Question, as: 'questions' }, 'order', 'ASC']
+        ]
+      });
+    }
 
     res.json({ questionnaires });
   } catch (error) {
@@ -520,7 +544,8 @@ const getResponse = async (req, res) => {
           include: [
             {
               model: db.Question,
-              as: 'questions'
+              as: 'questions',
+              include: [{ model: db.Document, as: 'attachedDocument', required: false }]
             }
           ]
         },
@@ -641,6 +666,7 @@ const updateQuestionnaire = async (req, res) => {
           isRequired: q.isRequired !== undefined ? q.isRequired : true,
           requiresDocument: q.requiresDocument || false,
           documentType: q.documentType || null,
+          attachedDocumentId: q.attachedDocumentId || null,
           order: q.order !== undefined ? q.order : index
         });
       });

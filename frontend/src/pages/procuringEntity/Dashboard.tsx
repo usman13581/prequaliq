@@ -45,6 +45,8 @@ interface Question {
   requiresDocument: boolean;
   documentType?: string;
   order: number;
+  attachedDocumentId?: string | null;
+  attachedDocument?: { id: string; fileName: string; filePath: string } | null;
 }
 
 interface Questionnaire {
@@ -62,9 +64,22 @@ interface Questionnaire {
 
 const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
 
+// Turnover range options for supplier search: { value, minTurnover, maxTurnover }
+// Use inclusive ranges to match both legacy values (e.g. 100000) and new dropdown values (e.g. 1000000)
+const TURNOVER_SEARCH_OPTIONS = [
+  { value: '', labelKey: 'commonQuestions.turnoverFilterPlaceholder', min: 0, max: 0 },
+  { value: '0_1M', labelKey: 'commonQuestions.turnover0_1M', min: 0, max: 1000000 },
+  { value: '1M_10M', labelKey: 'commonQuestions.turnover1M_10M', min: 1000000, max: 10000000 },
+  { value: '10M_25M', labelKey: 'commonQuestions.turnover10M_25M', min: 10000000, max: 25000000 },
+  { value: '25M_50M', labelKey: 'commonQuestions.turnover25M_50M', min: 25000000, max: 50000000 },
+  { value: '50M_75M', labelKey: 'commonQuestions.turnover50M_75M', min: 50000000, max: 75000000 },
+  { value: '75M_100M', labelKey: 'commonQuestions.turnover75M_100M', min: 75000000, max: 100000000 },
+  { value: '100MPlus', labelKey: 'commonQuestions.turnover100MPlus', min: 100000000, max: 999999999999 }
+];
+
 const ProcuringEntityDashboard = () => {
   const { t } = useTranslation();
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, refreshUser, loading: authLoading } = useAuth();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('questionnaires');
   const [loading, setLoading] = useState(false);
@@ -106,6 +121,7 @@ const ProcuringEntityDashboard = () => {
   // Search Suppliers state
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierTurnoverFilter, setSupplierTurnoverFilter] = useState('');
   const [supplierCpvFilter, setSupplierCpvFilter] = useState('');
   const [supplierNutsFilter, setSupplierNutsFilter] = useState('');
   const [nutsCodesForSearch, setNutsCodesForSearch] = useState<NUTSCode[]>([]);
@@ -146,6 +162,7 @@ const ProcuringEntityDashboard = () => {
       const response = await api.get('/questionnaires');
       setQuestionnaires(response.data.questionnaires || []);
     } catch (error: any) {
+      if (error.response?.status === 401) return;
       showToast(error.response?.data?.message || t('msg.failedFetchQuestionnaires'), 'error');
     } finally {
       setLoading(false);
@@ -185,6 +202,11 @@ const ProcuringEntityDashboard = () => {
       setLoading(true);
       const params: any = { page, limit: 12 };
       if (supplierSearch.trim()) params.search = supplierSearch.trim();
+      const turnoverOpt = TURNOVER_SEARCH_OPTIONS.find((o) => o.value === supplierTurnoverFilter);
+      if (turnoverOpt && turnoverOpt.value && turnoverOpt.min !== undefined && turnoverOpt.max !== undefined && turnoverOpt.max > 0) {
+        params.minTurnover = turnoverOpt.min;
+        params.maxTurnover = turnoverOpt.max;
+      }
       if (supplierCpvFilter) params.cpvCodeId = supplierCpvFilter;
       if (supplierNutsFilter) params.nutsCodeId = supplierNutsFilter;
       const response = await api.get('/procuring-entity/suppliers', { params });
@@ -221,6 +243,7 @@ const ProcuringEntityDashboard = () => {
   }, [selectedSupplierId]);
 
   useEffect(() => {
+    if (authLoading || !user) return;
     if (activeTab === 'profile') {
       fetchProfile();
     } else if (activeTab === 'questionnaires') {
@@ -231,7 +254,7 @@ const ProcuringEntityDashboard = () => {
       fetchCPVCodes();
       fetchNUTSCodesForSearch();
     }
-  }, [activeTab]);
+  }, [activeTab, authLoading, user]);
 
   // Update profile
   const handleUpdateProfile = async () => {
@@ -353,6 +376,27 @@ const ProcuringEntityDashboard = () => {
     setEditingQuestionnaire({ ...editingQuestionnaire, questions: updatedQuestions });
   };
 
+  // Update question attachment (sets both attachedDocumentId and attachedDocument)
+  const updateQuestionAttachment = (index: number, doc: { id: string; fileName: string; filePath: string } | null) => {
+    const updatedQuestions = [...newQuestionnaire.questions];
+    updatedQuestions[index] = {
+      ...updatedQuestions[index],
+      attachedDocumentId: doc?.id ?? null,
+      attachedDocument: doc ?? null
+    };
+    setNewQuestionnaire({ ...newQuestionnaire, questions: updatedQuestions });
+  };
+  const updateQuestionAttachmentInEdit = (index: number, doc: { id: string; fileName: string; filePath: string } | null) => {
+    if (!editingQuestionnaire) return;
+    const updatedQuestions = [...editingQuestionnaire.questions];
+    updatedQuestions[index] = {
+      ...updatedQuestions[index],
+      attachedDocumentId: doc?.id ?? null,
+      attachedDocument: doc ?? null
+    };
+    setEditingQuestionnaire({ ...editingQuestionnaire, questions: updatedQuestions });
+  };
+
   // Remove question (for new questionnaire)
   const removeQuestion = (index: number) => {
     const updatedQuestions = newQuestionnaire.questions.filter((_, i) => i !== index);
@@ -471,7 +515,7 @@ const ProcuringEntityDashboard = () => {
             isRequired: q.isRequired !== undefined ? q.isRequired : true,
             requiresDocument: q.requiresDocument || false,
             documentType: q.documentType || null,
-            // Use the explicit sort number if set, otherwise fallback to position
+            attachedDocumentId: q.attachedDocumentId || null,
             order: q.order !== undefined ? Number(q.order) : index
           };
         })
@@ -531,7 +575,7 @@ const ProcuringEntityDashboard = () => {
           isRequired: q.isRequired !== undefined ? q.isRequired : true,
           requiresDocument: q.requiresDocument || false,
           documentType: q.documentType || null,
-          // Use explicit sort number if provided, otherwise fallback to array order
+          attachedDocumentId: q.attachedDocumentId || null,
           order: q.order !== undefined ? Number(q.order) : index
         };
       });
@@ -1167,6 +1211,35 @@ const ProcuringEntityDashboard = () => {
                     />
                   </div>
                   <div className="w-full sm:w-72 min-w-0">
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('sections.filterByTurnover')}</label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1 min-w-0">
+                        <select
+                          value={supplierTurnoverFilter}
+                          onChange={(e) => { setSupplierTurnoverFilter(e.target.value); fetchSuppliers(1); }}
+                          className="w-full pl-4 pr-10 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white appearance-none cursor-pointer text-gray-900 hover:border-primary-400"
+                          style={{ minHeight: '42px' }}
+                        >
+                          {TURNOVER_SEARCH_OPTIONS.map((opt) => (
+                            <option key={opt.value || 'all'} value={opt.value}>
+                              {t(opt.labelKey)}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" aria-hidden />
+                      </div>
+                      {supplierTurnoverFilter && (
+                        <button
+                          type="button"
+                          onClick={() => { setSupplierTurnoverFilter(''); fetchSuppliers(1); }}
+                          className="text-sm text-gray-500 hover:text-primary-600 whitespace-nowrap"
+                        >
+                          {t('buttons.clear')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="w-full sm:w-72 min-w-0">
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('sections.filterByCPV')}</label>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
@@ -1307,6 +1380,7 @@ const ProcuringEntityDashboard = () => {
           questionnaire={newQuestionnaire}
           setQuestionnaire={setNewQuestionnaire}
           cpvCodes={cpvCodes}
+          updateQuestionAttachment={updateQuestionAttachment}
           onClose={() => {
             setShowCreateQuestionnaire(false);
             setNewQuestionnaire({
@@ -1342,6 +1416,7 @@ const ProcuringEntityDashboard = () => {
           questionnaire={editingQuestionnaire}
           setQuestionnaire={setEditingQuestionnaire}
           cpvCodes={cpvCodes}
+          updateQuestionAttachment={updateQuestionAttachmentInEdit}
           onClose={() => {
             setEditingQuestionnaire(null);
             fetchQuestionnaires();
@@ -1773,6 +1848,7 @@ const CreateQuestionnaireModal = ({
   questionnaire,
   setQuestionnaire,
   cpvCodes,
+  updateQuestionAttachment,
   onClose,
   onSubmit,
   addQuestion,
@@ -1784,6 +1860,7 @@ const CreateQuestionnaireModal = ({
   loading
 }: any) => {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -1957,6 +2034,58 @@ const CreateQuestionnaireModal = ({
                           />
                         </div>
                       )}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('questionnaire.attachDocumentToQuestion')}</label>
+                        {question.attachedDocument ? (
+                          <div className="flex items-center justify-between gap-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                            <div className="flex items-center gap-2 text-gray-700">
+                              <FileText size={18} />
+                              <span className="text-sm font-medium truncate">{question.attachedDocument.fileName}</span>
+                              <a
+                                href={`${UPLOADS_BASE}/${question.attachedDocument.filePath.replace(/^.*[\\/]/, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary-600 hover:underline text-sm"
+                              >
+                                {t('questionnaire.view')}
+                              </a>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => updateQuestionAttachment(index, null)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title={t('questionnaire.deleteAttachment')}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                formData.append('documentType', 'question_attachment');
+                                const res = await api.post('/documents/procuring-entity', formData, {
+                                  headers: { 'Content-Type': 'multipart/form-data' }
+                                });
+                                const doc = res.data.document;
+                                updateQuestionAttachment(index, { id: doc.id, fileName: doc.fileName, filePath: doc.filePath });
+                                showToast(t('questionnaire.documentAttached'), 'success');
+                              } catch (err: any) {
+                                showToast(err.response?.data?.message || t('msg.failedUploadDocument'), 'error');
+                              }
+                              e.target.value = '';
+                            }}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                          />
+                        )}
+                        <p className="mt-1 text-xs text-gray-500">{t('questionnaire.attachDocumentHint')}</p>
+                      </div>
                       {(question.questionType === 'radio' || question.questionType === 'checkbox' || question.questionType === 'dropdown' || question.questionType === 'multiple_choice') && (
                         <div>
                           <div className="flex justify-between items-center mb-2">
@@ -2094,11 +2223,11 @@ const ViewQuestionnaireModal = ({ questionnaire, onClose }: { questionnaire: Que
 };
 
 // Edit Questionnaire Modal Component
-// EXACT copy of CreateQuestionnaireModal - just with different title and deadline formatting
 const EditQuestionnaireModal = ({
   questionnaire,
   setQuestionnaire,
   cpvCodes,
+  updateQuestionAttachment,
   onClose,
   onSubmit,
   addQuestion,
@@ -2110,15 +2239,8 @@ const EditQuestionnaireModal = ({
   loading
 }: any) => {
   const { t } = useTranslation();
-  console.log('EditQuestionnaireModal rendering with:', { 
-    questionnaire, 
-    hasAddQuestion: !!addQuestion, 
-    hasUpdateQuestion: !!updateQuestion,
-    hasAddOption: !!addOption,
-    hasUpdateOption: !!updateOption,
-    hasRemoveOption: !!removeOption
-  });
-  
+  const { showToast } = useToast();
+
   if (!questionnaire) {
     console.error('EditQuestionnaireModal: No questionnaire provided');
     return null;
@@ -2335,6 +2457,72 @@ const EditQuestionnaireModal = ({
                           />
                         </div>
                       )}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('questionnaire.attachDocumentToQuestion')}</label>
+                        {(question.attachedDocument || question.attachedDocumentId) ? (
+                          <div className="flex items-center justify-between gap-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                            <div className="flex items-center gap-2 text-gray-700">
+                              <FileText size={18} />
+                              <span className="text-sm font-medium truncate">
+                                {question.attachedDocument?.fileName || t('questionnaire.attachedFile')}
+                              </span>
+                              {question.attachedDocument?.filePath && (
+                                <a
+                                  href={`${UPLOADS_BASE}/${question.attachedDocument.filePath.replace(/^.*[\\/]/, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary-600 hover:underline text-sm"
+                                >
+                                  {t('questionnaire.view')}
+                                </a>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const docId = question.attachedDocument?.id || question.attachedDocumentId;
+                                if (!docId) return;
+                                try {
+                                  await api.delete(`/documents/${docId}`);
+                                  updateQuestionAttachment(index, null);
+                                  showToast(t('questionnaire.documentDeleted'), 'success');
+                                } catch (err: any) {
+                                  showToast(err.response?.data?.message || t('msg.failedDeleteDocument'), 'error');
+                                }
+                              }}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title={t('questionnaire.deleteAttachment')}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file || !updateQuestionAttachment) return;
+                              try {
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                formData.append('documentType', 'question_attachment');
+                                const res = await api.post('/documents/procuring-entity', formData, {
+                                  headers: { 'Content-Type': 'multipart/form-data' }
+                                });
+                                const doc = res.data.document;
+                                updateQuestionAttachment(index, { id: doc.id, fileName: doc.fileName, filePath: doc.filePath });
+                                showToast(t('questionnaire.documentAttached'), 'success');
+                              } catch (err: any) {
+                                showToast(err.response?.data?.message || t('msg.failedUploadDocument'), 'error');
+                              }
+                              e.target.value = '';
+                            }}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                          />
+                        )}
+                        <p className="mt-1 text-xs text-gray-500">{t('questionnaire.attachDocumentHint')}</p>
+                      </div>
                       {(question.questionType === 'radio' || question.questionType === 'checkbox' || question.questionType === 'dropdown' || question.questionType === 'multiple_choice') && (
                         <div>
                           <div className="flex justify-between items-center mb-2">
@@ -2621,25 +2809,6 @@ const SupplierDetailModal = ({
                     </div>
                   )}
                 </div>
-                {supplier.documents?.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <p className="text-gray-500 text-sm font-medium mb-2">Profile documents</p>
-                    <div className="flex flex-wrap gap-2">
-                      {supplier.documents.map((doc: any) => (
-                        <a
-                          key={doc.id}
-                          href={`${UPLOADS_BASE}/${doc.filePath.replace(/^.*[\\\/]/, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-blue-600 hover:bg-blue-50"
-                        >
-                          <FileText size={16} />
-                          {doc.fileName}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Submitted responses */}

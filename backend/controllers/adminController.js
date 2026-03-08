@@ -342,9 +342,14 @@ const getCompanies = async (req, res) => {
 const updateSupplier = async (req, res) => {
   try {
     const { supplierId } = req.params;
-    const { firstName, lastName, phone, email, companyName, address, city, country, turnover, employeeCount, yearEstablished } = req.body;
-
-    console.log('Update supplier request:', { supplierId, body: req.body });
+    const {
+      firstName, lastName, phone, email, companyName,
+      registrationNumber, taxId, address, city, country, website,
+      turnover, employeeCount, yearEstablished,
+      financialStability, qualityManagementSystem, environmentalManagementSystem,
+      socialResponsibilityManagementSystem, ohsManagementSystem,
+      groundsForExclusion, laborLawRegulations, sanctionsRussiaBelarus
+    } = req.body;
 
     const supplier = await db.Supplier.findByPk(supplierId, {
       include: [{ model: db.User, as: 'user' }]
@@ -359,15 +364,12 @@ const updateSupplier = async (req, res) => {
     if (companyName !== undefined && companyName !== null && companyName.trim() !== '') {
       supplierUpdates.companyName = companyName.trim();
     }
-    if (address !== undefined && address !== null) {
-      supplierUpdates.address = address.trim() || null;
-    }
-    if (city !== undefined && city !== null) {
-      supplierUpdates.city = city.trim() || null;
-    }
-    if (country !== undefined && country !== null) {
-      supplierUpdates.country = country.trim() || null;
-    }
+    if (registrationNumber !== undefined) supplierUpdates.registrationNumber = registrationNumber?.trim() || null;
+    if (taxId !== undefined) supplierUpdates.taxId = taxId?.trim() || null;
+    if (address !== undefined) supplierUpdates.address = address?.trim() || null;
+    if (city !== undefined) supplierUpdates.city = city?.trim() || null;
+    if (country !== undefined) supplierUpdates.country = country?.trim() || null;
+    if (website !== undefined) supplierUpdates.website = website?.trim() || null;
     if (turnover !== undefined && turnover !== null && turnover !== '') {
       const turnoverValue = parseFloat(turnover);
       if (!isNaN(turnoverValue)) supplierUpdates.turnover = turnoverValue;
@@ -380,6 +382,14 @@ const updateSupplier = async (req, res) => {
       const year = parseInt(yearEstablished);
       if (!isNaN(year)) supplierUpdates.yearEstablished = year;
     }
+    if (financialStability !== undefined) supplierUpdates.financialStability = financialStability?.trim() || null;
+    if (qualityManagementSystem !== undefined) supplierUpdates.qualityManagementSystem = qualityManagementSystem?.trim() || null;
+    if (environmentalManagementSystem !== undefined) supplierUpdates.environmentalManagementSystem = environmentalManagementSystem?.trim() || null;
+    if (socialResponsibilityManagementSystem !== undefined) supplierUpdates.socialResponsibilityManagementSystem = socialResponsibilityManagementSystem?.trim() || null;
+    if (ohsManagementSystem !== undefined) supplierUpdates.ohsManagementSystem = ohsManagementSystem?.trim() || null;
+    if (groundsForExclusion !== undefined) supplierUpdates.groundsForExclusion = groundsForExclusion?.trim() || null;
+    if (laborLawRegulations !== undefined) supplierUpdates.laborLawRegulations = laborLawRegulations?.trim() || null;
+    if (sanctionsRussiaBelarus !== undefined) supplierUpdates.sanctionsRussiaBelarus = sanctionsRussiaBelarus?.trim() || null;
 
     console.log('Supplier updates:', supplierUpdates);
     if (Object.keys(supplierUpdates).length > 0) {

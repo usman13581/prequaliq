@@ -211,6 +211,26 @@ const templates = {
     `, { showLoginButton: false })
   }),
 
+  supplierProfileSubmittedForApproval: ({ recipientName, companyName, supplierEmail }) => ({
+    subject: `Supplier profile update pending approval: ${companyName}`,
+    html: emailLayout(`
+      <h2 style="margin: 0 0 20px 0; font-size: 20px; color: #d97706;">Supplier profile update pending approval</h2>
+      <p style="margin: 0 0 16px 0;">Dear ${recipientName},</p>
+      <p style="margin: 0 0 20px 0;">Supplier <strong>${companyName}</strong> (${supplierEmail}) has updated their profile. The supplier account is now pending approval. Please review and approve the supplier to restore their access.</p>
+    `, { showLoginButton: true, buttonText: 'Review suppliers', buttonHref: `${FRONTEND_URL}/admin`, titleColor: '#d97706' })
+  }),
+
+  supplierProfileSubmittedConfirmation: ({ recipientName, companyName }) => ({
+    subject: `Your profile has been submitted for approval`,
+    html: emailLayout(`
+      <h2 style="margin: 0 0 20px 0; font-size: 20px; color: #1e3a8a;">Profile submitted for approval</h2>
+      <p style="margin: 0 0 16px 0;">Dear ${recipientName},</p>
+      <p style="margin: 0 0 20px 0;">Your profile changes for <strong>${companyName}</strong> have been saved and submitted for approval.</p>
+      <p style="margin: 0 0 20px 0;">Your account is now in pending status. You will not be able to respond to questionnaires or access other supplier activities until an administrator approves your updated profile.</p>
+      <p style="margin: 0; color: #6b7280;">You will receive an email once your profile has been approved.</p>
+    `, { showLoginButton: true, titleColor: '#1e3a8a' })
+  }),
+
   newQuestionnaire: ({ recipientName, questionnaireTitle, questionnaireDescription, deadline, cpvCode, entityName, questionnaireUrl }) => ({
     subject: `New questionnaire available: ${questionnaireTitle}`,
     html: emailLayout(`
@@ -383,6 +403,31 @@ const sendSupplierRejectedEmail = async (email, firstName, lastName, reason) => 
 };
 
 /**
+ * Send supplier profile submitted for approval email (to admin)
+ */
+const sendSupplierProfileSubmittedToAdminEmail = async (adminEmail, adminName, companyName, supplierEmail) => {
+  const recipientName = adminName || 'Administrator';
+  const { subject, html } = templates.supplierProfileSubmittedForApproval({
+    recipientName,
+    companyName,
+    supplierEmail
+  });
+  return sendEmail(adminEmail, subject, html);
+};
+
+/**
+ * Send supplier profile submitted confirmation email (to supplier)
+ */
+const sendSupplierProfileSubmittedConfirmationEmail = async (email, firstName, lastName, companyName) => {
+  const recipientName = `${firstName || ''} ${lastName || ''}`.trim() || 'User';
+  const { subject, html } = templates.supplierProfileSubmittedConfirmation({
+    recipientName,
+    companyName
+  });
+  return sendEmail(email, subject, html);
+};
+
+/**
  * Send new questionnaire notification email to suppliers
  */
 const sendNewQuestionnaireEmail = async (email, firstName, lastName, questionnaireTitle, questionnaireDescription, deadline, cpvCode, entityName, questionnaireId) => {
@@ -416,5 +461,7 @@ module.exports = {
   sendAccountDeletedEmail,
   sendSupplierApprovedEmail,
   sendSupplierRejectedEmail,
+  sendSupplierProfileSubmittedToAdminEmail,
+  sendSupplierProfileSubmittedConfirmationEmail,
   sendNewQuestionnaireEmail
 };

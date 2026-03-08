@@ -34,6 +34,26 @@ interface ProcuringEntity {
   };
 }
 
+// Turnover range options (value = upper bound stored in DB)
+const TURNOVER_OPTIONS = [
+  { value: 1000000, labelKey: 'commonQuestions.turnover0_1M' },
+  { value: 10000000, labelKey: 'commonQuestions.turnover1M_10M' },
+  { value: 25000000, labelKey: 'commonQuestions.turnover10M_25M' },
+  { value: 50000000, labelKey: 'commonQuestions.turnover25M_50M' },
+  { value: 75000000, labelKey: 'commonQuestions.turnover50M_75M' },
+  { value: 100000000, labelKey: 'commonQuestions.turnover75M_100M' },
+  { value: 999999999999, labelKey: 'commonQuestions.turnover100MPlus' }
+];
+
+const getTurnoverValueForSelect = (val: string | number | undefined): string => {
+  const n = val === '' || val == null ? NaN : Number(val);
+  if (isNaN(n)) return '';
+  const exact = TURNOVER_OPTIONS.find((o) => o.value === n);
+  if (exact) return String(exact.value);
+  const range = TURNOVER_OPTIONS.find((o) => n <= o.value);
+  return range ? String(range.value) : '';
+};
+
 const AdminDashboard = () => {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
@@ -1737,21 +1757,26 @@ const CreateEntityModal = ({ onClose, onSuccess }: { onClose: () => void; onSucc
 };
 
 // Edit Supplier Modal Component
-const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplier & { address?: string; city?: string; country?: string; turnover?: number; employeeCount?: number; yearEstablished?: number }; onClose: () => void; onSuccess: () => void }) => {
+type SupplierWithProfile = Supplier & {
+  address?: string; city?: string; country?: string;
+  registrationNumber?: string; taxId?: string; website?: string;
+  turnover?: number; employeeCount?: number; yearEstablished?: number;
+  financialStability?: string; qualityManagementSystem?: string;
+  environmentalManagementSystem?: string; socialResponsibilityManagementSystem?: string;
+  ohsManagementSystem?: string; groundsForExclusion?: string;
+  laborLawRegulations?: string; sanctionsRussiaBelarus?: string;
+};
+
+const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: SupplierWithProfile; onClose: () => void; onSuccess: () => void }) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    companyName: '',
-    address: '',
-    city: '',
-    country: '',
-    turnover: '',
-    employeeCount: '',
-    yearEstablished: ''
+    firstName: '', lastName: '', email: '', phone: '', companyName: '',
+    registrationNumber: '', taxId: '', address: '', city: '', country: '', website: '',
+    turnover: '', employeeCount: '', yearEstablished: '',
+    financialStability: '', qualityManagementSystem: '', environmentalManagementSystem: '',
+    socialResponsibilityManagementSystem: '', ohsManagementSystem: '',
+    groundsForExclusion: '', laborLawRegulations: '', sanctionsRussiaBelarus: ''
   });
   const [loading, setLoading] = useState(false);
 
@@ -1762,7 +1787,6 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
   }, [onClose]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Update form data when supplier prop changes
   useEffect(() => {
     if (supplier) {
       setFormData({
@@ -1771,37 +1795,34 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
         email: supplier?.user?.email || '',
         phone: supplier?.user?.phone || '',
         companyName: supplier?.companyName || '',
+        registrationNumber: supplier?.registrationNumber || '',
+        taxId: supplier?.taxId || '',
         address: supplier?.address || '',
         city: supplier?.city || '',
         country: supplier?.country || '',
-        turnover: supplier?.turnover?.toString() || '',
+        website: supplier?.website || '',
+        turnover: supplier?.turnover != null ? getTurnoverValueForSelect(supplier.turnover) : '',
         employeeCount: supplier?.employeeCount?.toString() || '',
-        yearEstablished: supplier?.yearEstablished?.toString() || ''
+        yearEstablished: supplier?.yearEstablished?.toString() || '',
+        financialStability: supplier?.financialStability || '',
+        qualityManagementSystem: supplier?.qualityManagementSystem || '',
+        environmentalManagementSystem: supplier?.environmentalManagementSystem || '',
+        socialResponsibilityManagementSystem: supplier?.socialResponsibilityManagementSystem || '',
+        ohsManagementSystem: supplier?.ohsManagementSystem || '',
+        groundsForExclusion: supplier?.groundsForExclusion || '',
+        laborLawRegulations: supplier?.laborLawRegulations || '',
+        sanctionsRussiaBelarus: supplier?.sanctionsRussiaBelarus || ''
       });
     }
   }, [supplier]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
-    }
-    
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required';
-    }
-    
-    if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
-    }
-    
-    if (!formData.companyName.trim()) {
-      newErrors.companyName = 'Company name is required';
-    }
-    
+    if (!formData.email) newErrors.email = t('validation.emailRequired');
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = t('validation.invalidEmail');
+    if (!formData.firstName.trim()) newErrors.firstName = t('validation.firstNameRequired');
+    if (!formData.lastName.trim()) newErrors.lastName = t('validation.lastNameRequired');
+    if (!formData.companyName.trim()) newErrors.companyName = t('validation.companyNameRequired');
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -1815,32 +1836,32 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
     
     setLoading(true);
     try {
-      // Prepare data for API - convert empty strings to null for optional fields
       const updateData: any = {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim(),
         companyName: formData.companyName.trim()
       };
-
-      // Add optional fields only if they have values
       if (formData.phone.trim()) updateData.phone = formData.phone.trim();
-      if (formData.address.trim()) updateData.address = formData.address.trim();
-      if (formData.city.trim()) updateData.city = formData.city.trim();
-      if (formData.country.trim()) updateData.country = formData.country.trim();
-      if (formData.turnover && !isNaN(parseFloat(formData.turnover))) {
-        updateData.turnover = parseFloat(formData.turnover);
-      }
-      if (formData.employeeCount && !isNaN(parseInt(formData.employeeCount))) {
-        updateData.employeeCount = parseInt(formData.employeeCount);
-      }
-      if (formData.yearEstablished && !isNaN(parseInt(formData.yearEstablished))) {
-        updateData.yearEstablished = parseInt(formData.yearEstablished);
-      }
+      updateData.registrationNumber = formData.registrationNumber.trim() || null;
+      updateData.taxId = formData.taxId.trim() || null;
+      updateData.address = formData.address.trim() || null;
+      updateData.city = formData.city.trim() || null;
+      updateData.country = formData.country.trim() || null;
+      updateData.website = formData.website.trim() || null;
+      if (formData.turnover && !isNaN(parseFloat(formData.turnover))) updateData.turnover = parseFloat(formData.turnover);
+      if (formData.employeeCount && !isNaN(parseInt(formData.employeeCount))) updateData.employeeCount = parseInt(formData.employeeCount);
+      if (formData.yearEstablished && !isNaN(parseInt(formData.yearEstablished))) updateData.yearEstablished = parseInt(formData.yearEstablished);
+      updateData.financialStability = formData.financialStability.trim() || null;
+      updateData.qualityManagementSystem = formData.qualityManagementSystem.trim() || null;
+      updateData.environmentalManagementSystem = formData.environmentalManagementSystem.trim() || null;
+      updateData.socialResponsibilityManagementSystem = formData.socialResponsibilityManagementSystem.trim() || null;
+      updateData.ohsManagementSystem = formData.ohsManagementSystem.trim() || null;
+      updateData.groundsForExclusion = formData.groundsForExclusion.trim() || null;
+      updateData.laborLawRegulations = formData.laborLawRegulations.trim() || null;
+      updateData.sanctionsRussiaBelarus = formData.sanctionsRussiaBelarus.trim() || null;
 
-      console.log('Updating supplier with data:', updateData);
-      const response = await api.put(`/admin/suppliers/${supplier.id}`, updateData);
-      console.log('Update response:', response.data);
+      await api.put(`/admin/suppliers/${supplier.id}`, updateData);
       showToast(t('msg.supplierUpdated'), 'success');
       onSuccess();
     } catch (error: any) {
@@ -1972,6 +1993,46 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
             )}
           </div>
 
+          <div>
+            <label htmlFor="edit-address" className="block text-sm font-semibold text-gray-700 mb-2">
+              {t('forms.address')} <span className="text-gray-400">({t('forms.optional')})</span>
+            </label>
+            <input
+              id="edit-address"
+              type="text"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label htmlFor="edit-registrationNumber" className="block text-sm font-semibold text-gray-700 mb-2">
+                {t('forms.registrationNumber')} <span className="text-gray-400">({t('forms.optional')})</span>
+              </label>
+              <input
+                id="edit-registrationNumber"
+                type="text"
+                value={formData.registrationNumber}
+                onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-taxId" className="block text-sm font-semibold text-gray-700 mb-2">
+                {t('forms.taxId')} <span className="text-gray-400">({t('forms.optional')})</span>
+              </label>
+              <input
+                id="edit-taxId"
+                type="text"
+                value={formData.taxId}
+                onChange={(e) => setFormData({ ...formData, taxId: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
               <label htmlFor="edit-city" className="block text-sm font-semibold text-gray-700 mb-2">
@@ -2001,15 +2062,32 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
               <label htmlFor="edit-turnover" className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('forms.turnover')}
               </label>
-              <input
+              <select
                 id="edit-turnover"
-                type="number"
                 value={formData.turnover}
                 onChange={(e) => setFormData({ ...formData, turnover: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
-                placeholder="0.00"
-              />
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400 appearance-none bg-white"
+              >
+                <option value="">{t('commonQuestions.turnoverSelectPlaceholder')}</option>
+                {TURNOVER_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+                ))}
+              </select>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="edit-website" className="block text-sm font-semibold text-gray-700 mb-2">
+              {t('forms.website')} <span className="text-gray-400">({t('forms.optional')})</span>
+            </label>
+            <input
+              id="edit-website"
+              type="url"
+              value={formData.website}
+              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+              placeholder="https://"
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -2040,17 +2118,34 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
             </div>
           </div>
 
-          <div>
-            <label htmlFor="edit-address" className="block text-sm font-semibold text-gray-700 mb-2">
-              {t('forms.address')}
-            </label>
-            <textarea
-              id="edit-address"
-              rows={2}
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition resize-none"
-            />
+          <div className="border-t border-gray-200 pt-5 mt-5">
+            <h4 className="text-base font-semibold text-gray-800 mb-4">{t('commonQuestions.sectionTitle')}</h4>
+            <div className="space-y-4">
+              {[
+                { key: 'financialStability', labelKey: 'commonQuestions.q2Label', helpKey: 'commonQuestions.q2Help' },
+                { key: 'qualityManagementSystem', labelKey: 'commonQuestions.q5Label', helpKey: 'commonQuestions.q5Help' },
+                { key: 'environmentalManagementSystem', labelKey: 'commonQuestions.q6Label', helpKey: 'commonQuestions.q6Help' },
+                { key: 'socialResponsibilityManagementSystem', labelKey: 'commonQuestions.q7Label', helpKey: 'commonQuestions.q7Help' },
+                { key: 'ohsManagementSystem', labelKey: 'commonQuestions.q8Label', helpKey: 'commonQuestions.q8Help' },
+                { key: 'groundsForExclusion', labelKey: 'commonQuestions.q9Label', helpKey: 'commonQuestions.q9Help' },
+                { key: 'laborLawRegulations', labelKey: 'commonQuestions.q10Label', helpKey: 'commonQuestions.q10Help' },
+                { key: 'sanctionsRussiaBelarus', labelKey: 'commonQuestions.q11Label', helpKey: 'commonQuestions.q11Help' }
+              ].map(({ key, labelKey, helpKey }) => (
+                <div key={key}>
+                  <label htmlFor={`edit-${key}`} className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t(labelKey)} <span className="text-gray-400">({t('forms.optional')})</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mb-1">{t(helpKey)}</p>
+                  <textarea
+                    id={`edit-${key}`}
+                    rows={2}
+                    value={formData[key as keyof typeof formData]}
+                    onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400 resize-none"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">

@@ -48,6 +48,30 @@ module.exports = (sequelize, DataTypes) => {
     yearEstablished: {
       type: DataTypes.INTEGER
     },
+    financialStability: {
+      type: DataTypes.TEXT
+    },
+    qualityManagementSystem: {
+      type: DataTypes.TEXT
+    },
+    environmentalManagementSystem: {
+      type: DataTypes.TEXT
+    },
+    socialResponsibilityManagementSystem: {
+      type: DataTypes.TEXT
+    },
+    ohsManagementSystem: {
+      type: DataTypes.TEXT
+    },
+    groundsForExclusion: {
+      type: DataTypes.TEXT
+    },
+    laborLawRegulations: {
+      type: DataTypes.TEXT
+    },
+    sanctionsRussiaBelarus: {
+      type: DataTypes.TEXT
+    },
     status: {
       type: DataTypes.ENUM('pending', 'approved', 'rejected'),
       defaultValue: 'pending'
