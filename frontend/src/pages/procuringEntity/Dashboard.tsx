@@ -805,18 +805,18 @@ const ProcuringEntityDashboard = () => {
                             <button
                               onClick={() => {
                                 try {
-                                  console.log('Edit clicked for questionnaire:', questionnaire);
-                                  
-                                  // Prepare questionnaire for editing - ensure questions have proper structure
+                                  // Prepare questionnaire for editing - ensure questions have proper structure (include attachedDocument)
                                   const questionsForEdit = (questionnaire.questions || []).map((q: Question, index: number) => ({
-                                    id: q.id, // Keep ID for reference but backend will ignore it
+                                    id: q.id,
                                     questionText: q.questionText || '',
                                     questionType: q.questionType || 'text',
                                     options: Array.isArray(q.options) ? q.options : [],
                                     isRequired: q.isRequired !== undefined ? q.isRequired : true,
                                     requiresDocument: q.requiresDocument || false,
                                     documentType: q.documentType || '',
-                                    order: q.order !== undefined ? q.order : index
+                                    order: q.order !== undefined ? q.order : index,
+                                    attachedDocumentId: q.attachedDocumentId ?? q.attachedDocument?.id ?? null,
+                                    attachedDocument: q.attachedDocument ?? null
                                   }));
 
                                   // Convert deadline to datetime-local format
@@ -848,8 +848,6 @@ const ProcuringEntityDashboard = () => {
                                     createdAt: questionnaire.createdAt || new Date().toISOString(),
                                     isActive: questionnaire.isActive !== undefined ? questionnaire.isActive : true
                                   };
-                                  
-                                  console.log('Setting questionnaire for edit:', qToEdit);
                                   setEditingQuestionnaire(qToEdit);
                                   fetchCPVCodes();
                                 } catch (error: any) {

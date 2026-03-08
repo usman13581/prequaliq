@@ -18,7 +18,9 @@ const getProfile = async (req, res) => {
         },
         {
           model: db.Document,
-          as: 'documents'
+          as: 'documents',
+          where: { documentType: { [Op.ne]: 'question_attachment' } },
+          required: false
         }
       ]
     });
@@ -79,7 +81,9 @@ const updateProfile = async (req, res) => {
         },
         {
           model: db.Document,
-          as: 'documents'
+          as: 'documents',
+          where: { documentType: { [Op.ne]: 'question_attachment' } },
+          required: false
         }
       ]
     });
