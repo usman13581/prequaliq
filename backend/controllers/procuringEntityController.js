@@ -182,6 +182,7 @@ const getSuppliers = async (req, res) => {
         { groundsForExclusion: { [Op.iLike]: pattern } },
         { laborLawRegulations: { [Op.iLike]: pattern } },
         { sanctionsRussiaBelarus: { [Op.iLike]: pattern } },
+        { technicalCapacityProfessionalExperience: { [Op.iLike]: pattern } },
         { '$user.firstName$': { [Op.iLike]: pattern } },
         { '$user.lastName$': { [Op.iLike]: pattern } },
         { '$user.email$': { [Op.iLike]: pattern } }

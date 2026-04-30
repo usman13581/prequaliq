@@ -72,6 +72,9 @@ module.exports = (sequelize, DataTypes) => {
     sanctionsRussiaBelarus: {
       type: DataTypes.TEXT
     },
+    technicalCapacityProfessionalExperience: {
+      type: DataTypes.TEXT
+    },
     status: {
       type: DataTypes.ENUM('pending', 'approved', 'rejected'),
       defaultValue: 'pending'

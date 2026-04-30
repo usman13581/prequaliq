@@ -2726,6 +2726,40 @@ const SupplierDetailModal = ({
   loading: boolean;
   onClose: () => void;
 }) => {
+  const PROFILE_DOC_TYPES_BY_QUESTION: Record<string, string> = {
+    q2: 'q2-financial',
+    q5: 'q5-quality',
+    q6: 'q6-environment',
+    q7: 'q7-social',
+    q8: 'q8-ohs'
+  };
+
+  const getQuestionDocuments = (questionKey: string) => {
+    const docType = PROFILE_DOC_TYPES_BY_QUESTION[questionKey];
+    if (!docType) return [];
+    return (supplier?.documents || []).filter((d: any) => d.documentType === docType);
+  };
+
+  const getCommonQuestionRows = () => {
+    const rows = [
+      { key: 'q1', label: 'Question 1 – Information about the Supplier', value: supplier?.turnover ? String(supplier.turnover) : '' },
+      { key: 'q2', label: 'Question 2 – Financial Stability and Financial Position', value: supplier?.financialStability || '' },
+      { key: 'q5', label: 'Question 5 – Management System – Quality', value: supplier?.qualityManagementSystem || '' },
+      { key: 'q6', label: 'Question 6 – Management System – Environment', value: supplier?.environmentalManagementSystem || '' },
+      { key: 'q7', label: 'Question 7 – Management System – Social Responsibility', value: supplier?.socialResponsibilityManagementSystem || '' },
+      { key: 'q8', label: 'Question 8 – Management System – Occupational Health and Safety', value: supplier?.ohsManagementSystem || '' },
+      { key: 'q9', label: 'Question 9 – Grounds for Exclusion', value: supplier?.groundsForExclusion || '' },
+      { key: 'q10', label: 'Question 10 – Labor Law Regulations', value: supplier?.laborLawRegulations || '' },
+      { key: 'q11', label: 'Question 11 – Sanctions Regarding Russia and Belarus', value: supplier?.sanctionsRussiaBelarus || '' },
+      { key: 'q12', label: 'Question 12 – Technical and professional capacity', value: supplier?.technicalCapacityProfessionalExperience || '' }
+    ];
+    return rows.filter((r) => {
+      const hasText = String(r.value || '').trim().length > 0;
+      const hasDocs = getQuestionDocuments(r.key).length > 0;
+      return hasText || hasDocs;
+    });
+  };
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -2803,6 +2837,40 @@ const SupplierDetailModal = ({
                             <span className="text-xs text-purple-700/90 truncate max-w-[200px]">{nuts.nameSwedish || nuts.name}</span>
                           </span>
                         ))}
+                      </div>
+                    </div>
+                  )}
+                  {getCommonQuestionRows().length > 0 && (
+                    <div className="sm:col-span-2">
+                      <span className="text-gray-500 block mb-2">Common questions</span>
+                      <div className="space-y-3">
+                        {getCommonQuestionRows().map((q) => {
+                          const qDocs = getQuestionDocuments(q.key);
+                          return (
+                            <div key={q.key} className="bg-white border border-gray-200 rounded-lg p-3">
+                              <p className="text-sm font-medium text-gray-700 mb-1">{q.label}</p>
+                              {String(q.value || '').trim().length > 0 && (
+                                <p className="text-sm text-gray-900 whitespace-pre-wrap">{q.value}</p>
+                              )}
+                              {qDocs.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {qDocs.map((doc: any) => (
+                                    <a
+                                      key={doc.id}
+                                      href={`${UPLOADS_BASE}/${doc.filePath.replace(/^.*[\\\/]/, '')}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 mr-2 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 text-xs hover:underline"
+                                    >
+                                      <FileText size={13} />
+                                      {doc.fileName}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

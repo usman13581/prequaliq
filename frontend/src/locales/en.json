@@ -451,6 +451,8 @@
     "q10Help": "If the supplier does not have a collective agreement, specify the company's labor law conditions.",
     "q11Label": "Question 11 – Sanctions Regarding Russia and Belarus",
     "q11Help": "From April 9, 2022, it is prohibited to award and execute public contracts with companies and persons with connections to Russia and Belarus: Russian citizens or natural or legal persons, entities, or bodies established in Russia; legal persons, entities, or bodies that are more than 50 percent directly or indirectly owned by such entities; natural or legal persons, entities, or bodies acting for, or on behalf of, such entities.",
+    "q12Label": "Question 12 – Technical and professional capacity",
+    "q12Help": "To demonstrate that the tenderer has adequate technical capability and capacity for the requested delivery of 8000 laptops, tenderers must provide information about two (2) previous assignments. The reference assignments must have included deliveries of at least 8000 laptops to two different customers. Previous assignment must not be older than three (3) years, counted from final date for tender submission. The assignment must be concluded. The orders for the computers must be made through the supplier's webshop. A description of the assignments must be made in the attached Reference Appendix.",
     "turnoverSelectPlaceholder": "Select turnover range",
     "turnover0_1M": "0 – 1,000,000",
     "turnover1M_10M": "1,000,000 – 10,000,000",

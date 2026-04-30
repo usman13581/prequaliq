@@ -83,7 +83,7 @@ const uploadDocument = async (req, res) => {
       uploadedBy: req.user.id
     });
 
-    const isProfileDoc = ['q5-quality', 'q6-environment', 'q7-social', 'q8-ohs'].includes(documentType);
+    const isProfileDoc = ['q2-financial', 'q5-quality', 'q6-environment', 'q7-social', 'q8-ohs'].includes(documentType);
     if (isProfileDoc) {
       await supplier.update({ status: 'pending' });
       const user = supplier.user;

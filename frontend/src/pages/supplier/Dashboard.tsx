@@ -128,7 +128,8 @@ const SupplierDashboard = () => {
     ohsManagementSystem: '',
     groundsForExclusion: '',
     laborLawRegulations: '',
-    sanctionsRussiaBelarus: ''
+    sanctionsRussiaBelarus: '',
+    technicalCapacityProfessionalExperience: ''
   });
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploadingQuestionDoc, setUploadingQuestionDoc] = useState<string | null>(null);
@@ -183,7 +184,8 @@ const SupplierDashboard = () => {
         ohsManagementSystem: supplier.ohsManagementSystem || '',
         groundsForExclusion: supplier.groundsForExclusion || '',
         laborLawRegulations: supplier.laborLawRegulations || '',
-        sanctionsRussiaBelarus: supplier.sanctionsRussiaBelarus || ''
+        sanctionsRussiaBelarus: supplier.sanctionsRussiaBelarus || '',
+        technicalCapacityProfessionalExperience: supplier.technicalCapacityProfessionalExperience || ''
       });
       setDocuments(supplier.documents || []);
       setSelectedCPVCodes(supplier.cpvCodes?.map((cpv: CPVCode) => cpv.id) || []);
@@ -474,6 +476,7 @@ const SupplierDashboard = () => {
       if (profileData.groundsForExclusion != null) updateData.groundsForExclusion = String(profileData.groundsForExclusion).trim();
       if (profileData.laborLawRegulations != null) updateData.laborLawRegulations = String(profileData.laborLawRegulations).trim();
       if (profileData.sanctionsRussiaBelarus != null) updateData.sanctionsRussiaBelarus = String(profileData.sanctionsRussiaBelarus).trim();
+      if (profileData.technicalCapacityProfessionalExperience != null) updateData.technicalCapacityProfessionalExperience = String(profileData.technicalCapacityProfessionalExperience).trim();
 
       const res = await api.put('/supplier/profile', updateData);
       showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
@@ -567,10 +570,11 @@ const SupplierDashboard = () => {
 
   // Document types for Q5–Q8
   const DOCUMENT_TYPES = {
+  q2: 'q2-financial',
     q5: 'q5-quality',
     q6: 'q6-environment',
     q7: 'q7-social',
-    q8: 'q8-ohs'
+  q8: 'q8-ohs'
   } as const;
 
   const getDocumentsForQuestion = (documentType: string) =>
@@ -1409,6 +1413,34 @@ const SupplierDashboard = () => {
                                   {profileData.financialStability || 'N/A'}
                                 </div>
                               )}
+                              <div className="mt-3">
+                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q2, e)}
+                                    disabled={!!uploadingQuestionDoc}
+                                  />
+                                  <Upload size={16} />
+                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q2 ? t('sections.uploading') : t('sections.upload')}
+                                </label>
+                                {getDocumentsForQuestion(DOCUMENT_TYPES.q2).length > 0 && (
+                                  <ul className="mt-2 space-y-1">
+                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q2).map((doc) => (
+                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
+                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
+                                          <FileText size={14} />
+                                          {doc.fileName}
+                                        </a>
+                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
                             </div>
 
                             {/* Q3 – Locations of Operations (NUTS Codes) - card */}
@@ -1723,6 +1755,26 @@ const SupplierDashboard = () => {
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
                                   {profileData.sanctionsRussiaBelarus || 'N/A'}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Q12 – Technical and professional capacity */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q12Label')}</label>
+                              </div>
+                              <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q12Help')}</p>
+                              {editingProfile ? (
+                                <textarea
+                                  value={profileData.technicalCapacityProfessionalExperience}
+                                  onChange={(e) => setProfileData({ ...profileData, technicalCapacityProfessionalExperience: e.target.value })}
+                                  rows={4}
+                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 resize-y"
+                                />
+                              ) : (
+                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 whitespace-pre-wrap">
+                                  {profileData.technicalCapacityProfessionalExperience || 'N/A'}
                                 </div>
                               )}
                             </div>

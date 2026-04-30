@@ -348,7 +348,8 @@ const updateSupplier = async (req, res) => {
       turnover, employeeCount, yearEstablished,
       financialStability, qualityManagementSystem, environmentalManagementSystem,
       socialResponsibilityManagementSystem, ohsManagementSystem,
-      groundsForExclusion, laborLawRegulations, sanctionsRussiaBelarus
+      groundsForExclusion, laborLawRegulations, sanctionsRussiaBelarus,
+      technicalCapacityProfessionalExperience
     } = req.body;
 
     const supplier = await db.Supplier.findByPk(supplierId, {
@@ -390,6 +391,7 @@ const updateSupplier = async (req, res) => {
     if (groundsForExclusion !== undefined) supplierUpdates.groundsForExclusion = groundsForExclusion?.trim() || null;
     if (laborLawRegulations !== undefined) supplierUpdates.laborLawRegulations = laborLawRegulations?.trim() || null;
     if (sanctionsRussiaBelarus !== undefined) supplierUpdates.sanctionsRussiaBelarus = sanctionsRussiaBelarus?.trim() || null;
+    if (technicalCapacityProfessionalExperience !== undefined) supplierUpdates.technicalCapacityProfessionalExperience = technicalCapacityProfessionalExperience?.trim() || null;
 
     console.log('Supplier updates:', supplierUpdates);
     if (Object.keys(supplierUpdates).length > 0) {
