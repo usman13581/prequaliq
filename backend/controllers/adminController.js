@@ -2,6 +2,7 @@ const db = require('../models');
 const { Sequelize } = require('sequelize');
 const { hashPassword } = require('../utils/password');
 const { sendAccountCreatedEmail, sendAccountActivatedEmail, sendAccountDeactivatedEmail, sendPasswordResetByAdminEmail, sendSupplierApprovedEmail, sendSupplierRejectedEmail } = require('../services/emailService');
+const { notifyProfileApproved, notifyProfileRejected } = require('../services/supplierNotificationService');
 
 // Create supplier account
 const createSupplier = async (req, res) => {
@@ -257,12 +258,31 @@ const reviewSupplier = async (req, res) => {
     }
 
     if (action === 'approve') {
+      const now = new Date();
+      const expires = new Date(now);
+      expires.setFullYear(expires.getFullYear() + 1);
       await supplier.update({
         status: 'approved',
-        approvedAt: new Date(),
+        approvedAt: now,
         approvedBy: req.user.id,
-        rejectionReason: null
+        rejectionReason: null,
+        qualifiedAt: supplier.qualifiedAt || now,
+        lastRequalificationAt: now,
+        qualificationExpiresAt: expires
       });
+
+      if (db.SupplierProfileSubmission) {
+        const pendingSubmission = await db.SupplierProfileSubmission.findOne({
+          where: { supplierId: supplier.id, status: 'pending' },
+          order: [['submittedAt', 'DESC']]
+        });
+        if (pendingSubmission) {
+          await pendingSubmission.update({ status: 'approved', reviewedAt: now });
+        }
+      }
+
+      await notifyProfileApproved(supplier);
+
       if (supplier.user && supplier.user.email) {
         sendSupplierApprovedEmail(
           supplier.user.email,
@@ -277,6 +297,23 @@ const reviewSupplier = async (req, res) => {
         approvedBy: req.user.id,
         rejectionReason
       });
+
+      if (db.SupplierProfileSubmission) {
+        const pendingSubmission = await db.SupplierProfileSubmission.findOne({
+          where: { supplierId: supplier.id, status: 'pending' },
+          order: [['submittedAt', 'DESC']]
+        });
+        if (pendingSubmission) {
+          await pendingSubmission.update({
+            status: 'rejected',
+            rejectionReason,
+            reviewedAt: new Date()
+          });
+        }
+      }
+
+      await notifyProfileRejected(supplier, rejectionReason);
+
       if (supplier.user && supplier.user.email) {
         sendSupplierRejectedEmail(
           supplier.user.email,

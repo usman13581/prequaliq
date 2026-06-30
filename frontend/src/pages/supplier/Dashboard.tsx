@@ -1,15 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { DateOnlyPicker } from '../../components/DateOnlyPicker';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
+import { Logo } from '../../components/ui/Logo';
+import { SupplierOverviewTab } from '../../components/supplier/SupplierOverviewTab';
+import { SupplierNotificationsBell } from '../../components/supplier/SupplierNotificationsBell';
+import { SupplierProfileCompleteness, SupplierSubmitModal } from '../../components/supplier/SupplierProfileCompleteness';
+import { SupplierReferencesSection } from '../../components/supplier/SupplierReferencesSection';
+import { SupplierDocumentList } from '../../components/supplier/SupplierDocumentList';
 import { 
-  LogOut, FileText, History, User, Upload, Plus, Edit2, Trash2, Eye, 
+  LogOut, FileText, History, User, Upload, Plus, Edit2, Eye, 
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
-  Search, ChevronDown
+  Search, ChevronDown, LayoutDashboard, Download
 } from 'lucide-react';
 
 interface Document {
@@ -20,6 +25,11 @@ interface Document {
   fileSize: number;
   mimeType: string;
   createdAt: string;
+  validFrom?: string | null;
+  validTo?: string | null;
+  issuer?: string | null;
+  documentNumber?: string | null;
+  isActive?: boolean;
 }
 
 interface CPVCode {
@@ -100,8 +110,16 @@ const SupplierDashboard = () => {
   const { t } = useTranslation();
   const { user, logout, refreshUser } = useAuth();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState('questionnaires');
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [completeness, setCompleteness] = useState<any>(null);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submittingProfile, setSubmittingProfile] = useState(false);
+  const [documentExpiryDates, setDocumentExpiryDates] = useState<Record<string, string>>({});
+  const [questionnaireFilter, setQuestionnaireFilter] = useState<'all' | 'open' | 'draft' | 'submitted' | 'overdue'>('all');
+  const [questionnaireSort, setQuestionnaireSort] = useState<'deadline' | 'newest'>('deadline');
   
   // Profile state
   const [profile, setProfile] = useState<any>(null);
@@ -129,7 +147,11 @@ const SupplierDashboard = () => {
     groundsForExclusion: '',
     laborLawRegulations: '',
     sanctionsRussiaBelarus: '',
-    technicalCapacityProfessionalExperience: ''
+    technicalCapacityProfessionalExperience: '',
+    insurerName: '',
+    insurancePolicyNumber: '',
+    insuranceCoverageAmount: '',
+    insuranceValidTo: ''
   });
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploadingQuestionDoc, setUploadingQuestionDoc] = useState<string | null>(null);
@@ -185,9 +207,13 @@ const SupplierDashboard = () => {
         groundsForExclusion: supplier.groundsForExclusion || '',
         laborLawRegulations: supplier.laborLawRegulations || '',
         sanctionsRussiaBelarus: supplier.sanctionsRussiaBelarus || '',
-        technicalCapacityProfessionalExperience: supplier.technicalCapacityProfessionalExperience || ''
+        technicalCapacityProfessionalExperience: supplier.technicalCapacityProfessionalExperience || '',
+        insurerName: supplier.insurerName || '',
+        insurancePolicyNumber: supplier.insurancePolicyNumber || '',
+        insuranceCoverageAmount: supplier.insuranceCoverageAmount?.toString() || '',
+        insuranceValidTo: supplier.insuranceValidTo ? String(supplier.insuranceValidTo).split('T')[0] : ''
       });
-      setDocuments(supplier.documents || []);
+      setDocuments((supplier.documents || []).filter((d: Document) => d.isActive !== false));
       setSelectedCPVCodes(supplier.cpvCodes?.map((cpv: CPVCode) => cpv.id) || []);
       setSelectedNUTSCodes(supplier.nutsCodes?.map((nuts: NUTSCode) => nuts.id) || []);
     } catch (error: any) {
@@ -195,6 +221,76 @@ const SupplierDashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchDashboard = async () => {
+    try {
+      setDashboardLoading(true);
+      const response = await api.get('/supplier/dashboard');
+      setDashboardData(response.data);
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('common.error'), 'error');
+      setDashboardData(null);
+    } finally {
+      setDashboardLoading(false);
+    }
+  };
+
+  const fetchCompleteness = async () => {
+    try {
+      const response = await api.get('/supplier/profile/completeness');
+      setCompleteness(response.data);
+    } catch {
+      setCompleteness(null);
+    }
+  };
+
+  const handleSubmitProfile = async () => {
+    try {
+      setSubmittingProfile(true);
+      const res = await api.post('/supplier/profile/submit');
+      showToast(res.data?.message || t('supplierPortal.profileSubmitted'), 'success');
+      setShowSubmitModal(false);
+      await fetchProfile();
+      await fetchCompleteness();
+      await fetchDashboard();
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('common.error'), 'error');
+    } finally {
+      setSubmittingProfile(false);
+    }
+  };
+
+  const handleExportProfile = async () => {
+    try {
+      const res = await api.get('/supplier/profile/export');
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `supplier-profile-${profile?.companyName || 'export'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(t('supplierPortal.profileExported'), 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('common.error'), 'error');
+    }
+  };
+
+  const handleUpdateDocumentMetadata = async (id: string, metadata: { validFrom?: string; validTo?: string; issuer?: string; documentNumber?: string }) => {
+    try {
+      await api.put(`/documents/supplier/${id}/metadata`, metadata);
+      await fetchProfile();
+      await fetchCompleteness();
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('common.error'), 'error');
+    }
+  };
+
+  const handleNavigateTab = (tab: string) => {
+    setActiveTab(tab);
   };
 
   // Fetch CPV codes (limit so large lists don't timeout)
@@ -261,14 +357,8 @@ const SupplierDashboard = () => {
   // Load existing response for questionnaire
   const loadQuestionnaireResponse = async (questionnaireId: string): Promise<void> => {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:167',message:'loadQuestionnaireResponse called',data:{questionnaireId},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       console.log('=== LOADING RESPONSE FOR QUESTIONNAIRE:', questionnaireId, '===');
       const response = await api.get(`/questionnaires/${questionnaireId}/responses`);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:171',message:'API response received',data:{hasResponse:!!response.data.response,answersCount:response.data.response?.answers?.length||0,answers:response.data.response?.answers?.map((a:any)=>({questionId:a.questionId,answerText:a.answerText,answerValue:a.answerValue}))||[]},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       console.log('API Response received:', response.data);
       
       if (response.data.response) {
@@ -404,14 +494,8 @@ const SupplierDashboard = () => {
         });
       }
     } catch (error: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:273',message:'loadQuestionnaireResponse error caught',data:{questionnaireId,errorStatus:error.response?.status,errorMessage:error.message,errorData:error.response?.data},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       // 404 is normal if no response exists yet - start fresh
       if (error.response?.status === 404) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:276',message:'404 error - no response found',data:{questionnaireId},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         console.log('No existing response found (404) for questionnaire:', questionnaireId);
         setQuestionnaireResponse({});
         // Clear response status if no response exists
@@ -425,9 +509,6 @@ const SupplierDashboard = () => {
           return prev;
         });
       } else {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:290',message:'Non-404 error loading response',data:{questionnaireId,errorStatus:error.response?.status,errorMessage:error.message},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         // Other errors - log but don't clear state
         console.error('Error loading response:', error);
       }
@@ -435,9 +516,12 @@ const SupplierDashboard = () => {
   };
 
   useEffect(() => {
-    if (activeTab === 'profile') {
+    if (activeTab === 'overview') {
+      fetchDashboard();
+    } else if (activeTab === 'profile') {
       fetchProfile();
       fetchCPVCodes();
+      fetchCompleteness();
     } else if (activeTab === 'questionnaires') {
       fetchActiveQuestionnaires();
     } else if (activeTab === 'history') {
@@ -477,11 +561,19 @@ const SupplierDashboard = () => {
       if (profileData.laborLawRegulations != null) updateData.laborLawRegulations = String(profileData.laborLawRegulations).trim();
       if (profileData.sanctionsRussiaBelarus != null) updateData.sanctionsRussiaBelarus = String(profileData.sanctionsRussiaBelarus).trim();
       if (profileData.technicalCapacityProfessionalExperience != null) updateData.technicalCapacityProfessionalExperience = String(profileData.technicalCapacityProfessionalExperience).trim();
+      if (profileData.insurerName != null) updateData.insurerName = String(profileData.insurerName).trim();
+      if (profileData.insurancePolicyNumber != null) updateData.insurancePolicyNumber = String(profileData.insurancePolicyNumber).trim();
+      if (profileData.insuranceCoverageAmount?.trim()) {
+        const v = parseFloat(profileData.insuranceCoverageAmount);
+        if (!isNaN(v)) updateData.insuranceCoverageAmount = v;
+      }
+      if (profileData.insuranceValidTo) updateData.insuranceValidTo = profileData.insuranceValidTo;
 
       const res = await api.put('/supplier/profile', updateData);
-      showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
+      showToast(res.data?.message || t('msg.profileSaved'), 'success');
       setEditingProfile(false);
       fetchProfile();
+      fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedUpdateProfile'), 'error');
     } finally {
@@ -530,9 +622,10 @@ const SupplierDashboard = () => {
     try {
       setLoading(true);
       const res = await api.put('/supplier/cpv-codes', { cpvCodeIds: selectedCPVCodes });
-      showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
+      showToast(res.data?.message || t('msg.cpvSaved'), 'success');
       setShowCPVSelector(false);
       fetchProfile();
+      fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedUpdateCPV'), 'error');
     } finally {
@@ -545,9 +638,10 @@ const SupplierDashboard = () => {
     try {
       setLoading(true);
       const res = await api.put('/supplier/nuts-codes', { nutsCodeIds: selectedNUTSCodes });
-      showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
+      showToast(res.data?.message || t('msg.nutsSaved'), 'success');
       setShowNUTSSelector(false);
       fetchProfile();
+      fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('nutsCodes.failedToUpdate'), 'error');
     } finally {
@@ -563,6 +657,7 @@ const SupplierDashboard = () => {
       await api.delete(`/documents/${documentId}`);
       showToast(t('msg.documentDeleted'), 'success');
       fetchProfile();
+      fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedDeleteDocument'), 'error');
     }
@@ -578,9 +673,65 @@ const SupplierDashboard = () => {
   } as const;
 
   const getDocumentsForQuestion = (documentType: string) =>
-    (documents || []).filter((d) => d.documentType === documentType);
+    (documents || []).filter((d) => d.documentType === documentType && d.isActive !== false);
 
-  const getDocumentUrl = (doc: Document) => {
+  const getQuestionnaireTaskStatus = (questionnaire: Questionnaire): 'open' | 'draft' | 'submitted' | 'overdue' => {
+    const hasResponse = questionnaire.responses && questionnaire.responses.length > 0;
+    const isSubmitted = hasResponse && questionnaire.responses?.[0]?.status === 'submitted';
+    const isExpired = new Date(questionnaire.deadline) < new Date();
+    if (isSubmitted) return 'submitted';
+    if (isExpired) return 'overdue';
+    if (hasResponse) return 'draft';
+    return 'open';
+  };
+
+  const filteredQuestionnaires = [...activeQuestionnaires]
+    .filter((q) => questionnaireFilter === 'all' || getQuestionnaireTaskStatus(q) === questionnaireFilter)
+    .sort((a, b) => {
+      if (questionnaireSort === 'deadline') {
+        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+  const showSubmitButton = profile && (
+    profile.status === 'pending' ||
+    profile.status === 'rejected' ||
+    profile.status === 'requalification_required'
+  );
+
+  const renderProfileDocuments = (docType: string) => (
+    <div className="mt-3">
+      <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
+        <input
+          type="file"
+          className="hidden"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+          onChange={(e) => handleProfileQuestionDocumentUpload(docType, e)}
+          disabled={!!uploadingQuestionDoc}
+        />
+        <Upload size={16} />
+        {uploadingQuestionDoc === docType ? t('sections.uploading') : t('sections.upload')}
+      </label>
+      <div className="mt-2 max-w-xs">
+        <label className="block text-xs text-muted mb-1">{t('supplierPortal.documentExpiry')}</label>
+        <DateOnlyPicker
+          value={documentExpiryDates[docType] || ''}
+          onChange={(dateStr) => setDocumentExpiryDates({ ...documentExpiryDates, [docType]: dateStr })}
+          placeholder={t('supplierPortal.documentExpiry')}
+          className="text-sm px-3 py-2"
+        />
+      </div>
+      <SupplierDocumentList
+        documents={getDocumentsForQuestion(docType)}
+        getDocumentUrl={getDocumentUrl}
+        onDelete={handleDeleteDocument}
+        onUpdateValidTo={(id, validTo) => handleUpdateDocumentMetadata(id, { validTo })}
+      />
+    </div>
+  );
+
+  const getDocumentUrl = (doc: { filePath: string }) => {
     const filename = doc.filePath.replace(/^.*[\\\/]/, '');
     return `${UPLOADS_BASE}/${filename}`;
   };
@@ -592,14 +743,19 @@ const SupplierDashboard = () => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('documentType', documentType);
+    if (documentExpiryDates[documentType]) {
+      formData.append('validTo', documentExpiryDates[documentType]);
+    }
 
     try {
       setUploadingQuestionDoc(documentType);
       const res = await api.post('/documents/supplier', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      showToast(res.data?.message || t('msg.profileSubmittedForApproval'), 'success');
+      showToast(res.data?.message || t('msg.documentSaved'), 'success');
+      setDocumentExpiryDates({ ...documentExpiryDates, [documentType]: '' });
       fetchProfile();
+      fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedUploadDocument'), 'error');
     } finally {
@@ -643,9 +799,6 @@ const SupplierDashboard = () => {
           documentId: documentIds[questionId] || data.documentId || null
         }));
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:434',message:'Saving draft - answers prepared',data:{answersCount:answers.length,answers:answers.map((a:any)=>({questionId:a.questionId,answerText:a.answerText,answerValue:a.answerValue})),questionnaireResponseKeys:Object.keys(questionnaireResponse),questionnaireResponseCount:Object.keys(questionnaireResponse).length},timestamp:Date.now(),runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
       console.log('Saving answers:', answers);
       console.log('Questionnaire response state:', questionnaireResponse);
       console.log('Selected questionnaire:', selectedQuestionnaire?.id);
@@ -655,9 +808,6 @@ const SupplierDashboard = () => {
         status: 'draft'
       });
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:450',message:'Save draft response received',data:{responseId:saveResponse.data?.response?.id,responseStatus:saveResponse.data?.response?.status,answersCount:saveResponse.data?.response?.answers?.length||0},timestamp:Date.now(),runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
       console.log('Save response from backend:', saveResponse.data);
 
       showToast(t('msg.savedAsDraft'), 'success');
@@ -762,17 +912,16 @@ const SupplierDashboard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-slate-100">
+    <div className="min-h-screen app-page-bg">
       {/* Navbar */}
       <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
-              <Link to="/supplier" className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent hover:opacity-90 transition-opacity cursor-pointer">
-                PrequaliQ
-              </Link>
+              <Logo to="/supplier" subtitle={t('nav.supplierPortal')} size="md" />
             </div>
             <div className="flex items-center gap-4">
+              <SupplierNotificationsBell onNavigate={handleNavigateTab} />
               <LanguageSwitcher />
               <button
                 onClick={() => setActiveTab('profile')}
@@ -804,6 +953,34 @@ const SupplierDashboard = () => {
           <div className="border-b border-gray-200/50">
             <nav className="flex overflow-x-auto">
               <button
+                onClick={() => setActiveTab('overview')}
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
+                  activeTab === 'overview'
+                    ? 'text-primary-700'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {activeTab === 'overview' && (
+                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
+                )}
+                <LayoutDashboard className={activeTab === 'overview' ? 'text-primary-600' : 'text-gray-400'} size={20} />
+                {t('supplierPortal.overviewTitle')}
+              </button>
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
+                  activeTab === 'profile'
+                    ? 'text-primary-700'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {activeTab === 'profile' && (
+                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
+                )}
+                <User className={activeTab === 'profile' ? 'text-primary-600' : 'text-gray-400'} size={20} />
+                {t('supplierPortal.qualificationProfile')}
+              </button>
+              <button
                 onClick={() => setActiveTab('questionnaires')}
                 className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
                   activeTab === 'questionnaires'
@@ -815,7 +992,7 @@ const SupplierDashboard = () => {
                   <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
                 )}
                 <FileText className={activeTab === 'questionnaires' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.activeQuestionnaires')}
+                {t('supplierPortal.buyerQuestionnaires')}
               </button>
               <button
                 onClick={() => setActiveTab('history')}
@@ -831,30 +1008,51 @@ const SupplierDashboard = () => {
                 <History className={activeTab === 'history' ? 'text-primary-600' : 'text-gray-400'} size={20} />
                 {t('nav.history')}
               </button>
-              <button
-                onClick={() => setActiveTab('profile')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'profile'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'profile' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <User className={activeTab === 'profile' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.profile')}
-              </button>
             </nav>
           </div>
 
           <div className="px-2 py-6">
+            {/* Overview Tab */}
+            {activeTab === 'overview' && (
+              <SupplierOverviewTab
+                data={dashboardData}
+                loading={dashboardLoading}
+                onNavigate={handleNavigateTab}
+              />
+            )}
+
             {/* Active Questionnaires Tab */}
             {activeTab === 'questionnaires' && (
               <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{t('sections.activeQuestionnaires')}</h2>
-                  <p className="text-sm text-gray-500 mt-1">{t('sections.respondToQuestionnaires')}</p>
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">{t('supplierPortal.buyerQuestionnaires')}</h2>
+                    <p className="text-sm text-gray-500 mt-1">{t('sections.respondToQuestionnaires')}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(['all', 'open', 'draft', 'submitted', 'overdue'] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        type="button"
+                        onClick={() => setQuestionnaireFilter(filter)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          questionnaireFilter === filter
+                            ? 'bg-primary-600 text-white'
+                            : 'bg-surface text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {t(`supplierPortal.filter${filter.charAt(0).toUpperCase()}${filter.slice(1)}`)}
+                      </button>
+                    ))}
+                    <select
+                      value={questionnaireSort}
+                      onChange={(e) => setQuestionnaireSort(e.target.value as 'deadline' | 'newest')}
+                      className="text-sm border border-border rounded-lg px-3 py-1.5 bg-white"
+                    >
+                      <option value="deadline">{t('supplierPortal.sortByDeadline')}</option>
+                      <option value="newest">{t('supplierPortal.sortByNewest')}</option>
+                    </select>
+                  </div>
                 </div>
 
                 {loading && activeQuestionnaires.length === 0 ? (
@@ -864,7 +1062,7 @@ const SupplierDashboard = () => {
                       <p className="mt-6 text-gray-600 font-medium">{t('sections.loadingQuestionnaires')}</p>
                     </div>
                   </div>
-                ) : activeQuestionnaires.length === 0 ? (
+                ) : filteredQuestionnaires.length === 0 ? (
                   <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <FileText className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noActiveQuestionnaires')}</p>
@@ -874,7 +1072,7 @@ const SupplierDashboard = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {activeQuestionnaires.map((questionnaire) => {
+                    {filteredQuestionnaires.map((questionnaire) => {
                       const hasResponse = questionnaire.responses && questionnaire.responses.length > 0;
                       const isSubmitted = hasResponse && questionnaire.responses?.[0]?.status === 'submitted';
                       const isExpired = new Date(questionnaire.deadline) < new Date();
@@ -926,15 +1124,7 @@ const SupplierDashboard = () => {
                               {!isExpired && !isSubmitted && (
                                 <button
                                   onClick={async () => {
-                                    // #region agent log
-                                    fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:724',message:'Continue button clicked',data:{questionnaireId:questionnaire.id,hasResponse},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-                                    // #endregion
-                                    // Load response first, then open modal
                                     await loadQuestionnaireResponse(questionnaire.id);
-                                    // #region agent log
-                                    fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:728',message:'After loadQuestionnaireResponse, before setSelectedQuestionnaire',data:{questionnaireId:questionnaire.id},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-                                    // #endregion
-                                    // Set questionnaire after loading to ensure state is updated
                                     setSelectedQuestionnaire(questionnaire);
                                   }}
                                   className="btn-save px-4 py-2 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
@@ -1090,21 +1280,63 @@ const SupplierDashboard = () => {
             {/* Profile Tab */}
             {activeTab === 'profile' && (
               <div className="space-y-6">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{t('common.profile')} Management</h2>
+                    <h2 className="text-2xl font-bold text-gray-900">{t('supplierPortal.qualificationProfile')}</h2>
                     <p className="text-sm text-gray-500 mt-1">{t('dashboard.manageProfile')}</p>
                   </div>
-                  {!editingProfile && (
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => setEditingProfile(true)}
-                      className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                      type="button"
+                      onClick={handleExportProfile}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-white hover:bg-surface font-semibold text-sm transition-colors"
                     >
-                      <Edit2 size={20} />
-                      {t('actions.editProfile')}
+                      <Download size={18} />
+                      {t('supplierPortal.exportProfile')}
                     </button>
-                  )}
+                    {!editingProfile && (
+                      <button
+                        onClick={() => setEditingProfile(true)}
+                        className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                      >
+                        <Edit2 size={20} />
+                        {t('actions.editProfile')}
+                      </button>
+                    )}
+                    {showSubmitButton && !editingProfile && (
+                      <button
+                        type="button"
+                        onClick={() => setShowSubmitModal(true)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-white font-semibold hover:opacity-90 transition-opacity"
+                      >
+                        <CheckCircle size={20} />
+                        {t('supplierPortal.submitForQualification')}
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {profile?.status === 'rejected' && profile?.rejectionReason && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                    <p className="font-semibold text-red-800">{t('supplierPortal.rejectionTitle')}</p>
+                    <p className="text-sm text-red-700 mt-1">{profile.rejectionReason}</p>
+                  </div>
+                )}
+
+                {profile?.status === 'requalification_required' && (
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+                    <p className="font-semibold text-orange-800">{t('supplierPortal.requalificationTitle')}</p>
+                    <p className="text-sm text-orange-700 mt-1">
+                      {t('supplierPortal.requalificationHint', {
+                        date: profile.qualificationExpiresAt
+                          ? new Date(profile.qualificationExpiresAt).toLocaleDateString()
+                          : '—'
+                      })}
+                    </p>
+                  </div>
+                )}
+
+                <SupplierProfileCompleteness completeness={completeness} />
 
                 {loading && !profile ? (
                   <div className="text-center py-16">
@@ -1413,34 +1645,7 @@ const SupplierDashboard = () => {
                                   {profileData.financialStability || 'N/A'}
                                 </div>
                               )}
-                              <div className="mt-3">
-                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q2, e)}
-                                    disabled={!!uploadingQuestionDoc}
-                                  />
-                                  <Upload size={16} />
-                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q2 ? t('sections.uploading') : t('sections.upload')}
-                                </label>
-                                {getDocumentsForQuestion(DOCUMENT_TYPES.q2).length > 0 && (
-                                  <ul className="mt-2 space-y-1">
-                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q2).map((doc) => (
-                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
-                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
-                                          <FileText size={14} />
-                                          {doc.fileName}
-                                        </a>
-                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
+                              {renderProfileDocuments(DOCUMENT_TYPES.q2)}
                             </div>
 
                             {/* Q3 – Locations of Operations (NUTS Codes) - card */}
@@ -1525,34 +1730,7 @@ const SupplierDashboard = () => {
                                   {profileData.qualityManagementSystem || 'N/A'}
                                 </div>
                               )}
-                              <div className="mt-3">
-                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q5, e)}
-                                    disabled={!!uploadingQuestionDoc}
-                                  />
-                                  <Upload size={16} />
-                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q5 ? t('sections.uploading') : t('sections.upload')}
-                                </label>
-                                {getDocumentsForQuestion(DOCUMENT_TYPES.q5).length > 0 && (
-                                  <ul className="mt-2 space-y-1">
-                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q5).map((doc) => (
-                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
-                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
-                                          <FileText size={14} />
-                                          {doc.fileName}
-                                        </a>
-                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
+                              {renderProfileDocuments(DOCUMENT_TYPES.q5)}
                             </div>
 
                             {/* Q6 – Management System – Environment */}
@@ -1573,34 +1751,7 @@ const SupplierDashboard = () => {
                                   {profileData.environmentalManagementSystem || 'N/A'}
                                 </div>
                               )}
-                              <div className="mt-3">
-                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q6, e)}
-                                    disabled={!!uploadingQuestionDoc}
-                                  />
-                                  <Upload size={16} />
-                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q6 ? t('sections.uploading') : t('sections.upload')}
-                                </label>
-                                {getDocumentsForQuestion(DOCUMENT_TYPES.q6).length > 0 && (
-                                  <ul className="mt-2 space-y-1">
-                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q6).map((doc) => (
-                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
-                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
-                                          <FileText size={14} />
-                                          {doc.fileName}
-                                        </a>
-                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
+                              {renderProfileDocuments(DOCUMENT_TYPES.q6)}
                             </div>
 
                             {/* Q7 – Management System – Social Responsibility */}
@@ -1621,34 +1772,7 @@ const SupplierDashboard = () => {
                                   {profileData.socialResponsibilityManagementSystem || 'N/A'}
                                 </div>
                               )}
-                              <div className="mt-3">
-                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q7, e)}
-                                    disabled={!!uploadingQuestionDoc}
-                                  />
-                                  <Upload size={16} />
-                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q7 ? t('sections.uploading') : t('sections.upload')}
-                                </label>
-                                {getDocumentsForQuestion(DOCUMENT_TYPES.q7).length > 0 && (
-                                  <ul className="mt-2 space-y-1">
-                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q7).map((doc) => (
-                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
-                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
-                                          <FileText size={14} />
-                                          {doc.fileName}
-                                        </a>
-                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
+                              {renderProfileDocuments(DOCUMENT_TYPES.q7)}
                             </div>
 
                             {/* Q8 – Management System – Occupational Health and Safety */}
@@ -1669,34 +1793,7 @@ const SupplierDashboard = () => {
                                   {profileData.ohsManagementSystem || 'N/A'}
                                 </div>
                               )}
-                              <div className="mt-3">
-                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                                    onChange={(e) => handleProfileQuestionDocumentUpload(DOCUMENT_TYPES.q8, e)}
-                                    disabled={!!uploadingQuestionDoc}
-                                  />
-                                  <Upload size={16} />
-                                  {uploadingQuestionDoc === DOCUMENT_TYPES.q8 ? t('sections.uploading') : t('sections.upload')}
-                                </label>
-                                {getDocumentsForQuestion(DOCUMENT_TYPES.q8).length > 0 && (
-                                  <ul className="mt-2 space-y-1">
-                                    {getDocumentsForQuestion(DOCUMENT_TYPES.q8).map((doc) => (
-                                      <li key={doc.id} className="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 rounded-lg">
-                                        <a href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline truncate flex-1 min-w-0">
-                                          <FileText size={14} />
-                                          {doc.fileName}
-                                        </a>
-                                        <button onClick={() => handleDeleteDocument(doc.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title={t('common.delete')}>
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
+                              {renderProfileDocuments(DOCUMENT_TYPES.q8)}
                             </div>
 
                             {/* Q9 – Grounds for Exclusion */}
@@ -1778,8 +1875,78 @@ const SupplierDashboard = () => {
                                 </div>
                               )}
                             </div>
+
+                            <SupplierReferencesSection editing={editingProfile} />
+
+                            {/* Insurance */}
+                            <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
+                              <h4 className="text-base font-bold text-gray-900 mb-1">{t('supplierPortal.insuranceTitle')}</h4>
+                              <p className="text-xs text-muted mb-4">{t('supplierPortal.insuranceSubtitle')}</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insurerName')}</label>
+                                  {editingProfile ? (
+                                    <input
+                                      type="text"
+                                      value={profileData.insurerName}
+                                      onChange={(e) => setProfileData({ ...profileData, insurerName: e.target.value })}
+                                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    />
+                                  ) : (
+                                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                      {profileData.insurerName || 'N/A'}
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insurancePolicyNumber')}</label>
+                                  {editingProfile ? (
+                                    <input
+                                      type="text"
+                                      value={profileData.insurancePolicyNumber}
+                                      onChange={(e) => setProfileData({ ...profileData, insurancePolicyNumber: e.target.value })}
+                                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    />
+                                  ) : (
+                                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                      {profileData.insurancePolicyNumber || 'N/A'}
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insuranceCoverageAmount')}</label>
+                                  {editingProfile ? (
+                                    <input
+                                      type="number"
+                                      value={profileData.insuranceCoverageAmount}
+                                      onChange={(e) => setProfileData({ ...profileData, insuranceCoverageAmount: e.target.value })}
+                                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    />
+                                  ) : (
+                                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                      {profileData.insuranceCoverageAmount || 'N/A'}
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insuranceValidTo')}</label>
+                                  {editingProfile ? (
+                                    <DateOnlyPicker
+                                      value={profileData.insuranceValidTo}
+                                      onChange={(dateStr) => setProfileData({ ...profileData, insuranceValidTo: dateStr })}
+                                      placeholder={t('supplierPortal.insuranceValidTo')}
+                                    />
+                                  ) : (
+                                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                      {profileData.insuranceValidTo ? new Date(profileData.insuranceValidTo).toLocaleDateString() : 'N/A'}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
+
                         {editingProfile && (
                           <div className="flex gap-3 mt-6">
                             <button
@@ -1807,24 +1974,43 @@ const SupplierDashboard = () => {
                     {/* Status Card */}
                     <div className="space-y-6">
                       <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Status</h3>
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">{t('supplierPortal.qualificationStatus')}</h3>
                         <div className="space-y-3">
                           <div>
-                            <span className="text-sm text-gray-600">Account Status</span>
+                            <span className="text-sm text-gray-600">{t('supplierPortal.qualificationStatus')}</span>
                             <div className="mt-1">
                               <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full ${
                                 profile?.status === 'approved' ? 'bg-green-100 text-green-700' :
                                 profile?.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                profile?.status === 'requalification_required' ? 'bg-orange-100 text-orange-800' :
                                 'bg-yellow-100 text-yellow-700'
                               }`}>
-                                {profile?.status?.charAt(0).toUpperCase() + profile?.status?.slice(1) || 'Pending'}
+                                {profile?.status === 'requalification_required'
+                                  ? t('supplierPortal.requalificationTitle')
+                                  : (profile?.status?.charAt(0).toUpperCase() + profile?.status?.slice(1) || t('common.pending'))}
                               </span>
                             </div>
                           </div>
                           {profile?.status === 'rejected' && profile?.rejectionReason && (
                             <div>
-                              <span className="text-sm text-gray-600">Rejection Reason</span>
+                              <span className="text-sm text-gray-600">{t('supplierPortal.rejectionTitle')}</span>
                               <p className="mt-1 text-sm text-red-600">{profile.rejectionReason}</p>
+                            </div>
+                          )}
+                          {profile?.status === 'requalification_required' && profile?.qualificationExpiresAt && (
+                            <div>
+                              <span className="text-sm text-gray-600">{t('supplierPortal.validUntil')}</span>
+                              <p className="mt-1 text-sm text-orange-700">
+                                {new Date(profile.qualificationExpiresAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          )}
+                          {profile?.profileSubmittedAt && (
+                            <div>
+                              <span className="text-sm text-gray-600">{t('columns.submittedAt')}</span>
+                              <p className="mt-1 text-sm text-gray-700">
+                                {new Date(profile.profileSubmittedAt).toLocaleDateString()}
+                              </p>
                             </div>
                           )}
                         </div>
@@ -1838,6 +2024,14 @@ const SupplierDashboard = () => {
           </div>
         </div>
       </div>
+
+      <SupplierSubmitModal
+        open={showSubmitModal}
+        completeness={completeness}
+        loading={submittingProfile}
+        onClose={() => setShowSubmitModal(false)}
+        onConfirm={handleSubmitProfile}
+      />
 
       {/* CPV Code Selector Modal */}
       {showCPVSelector && (
@@ -2205,9 +2399,6 @@ const QuestionnaireResponseModal = ({
 
   useEffect(() => {
     if (questionnaire?.id && loadResponse) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:1369',message:'Modal useEffect triggered',data:{questionnaireId:questionnaire.id,responseKeys:Object.keys(response),responseCount:Object.keys(response).length,hasQuestions:!!questionnaire.questions,questionsCount:questionnaire.questions?.length||0},timestamp:Date.now(),runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       console.log('Modal opened, loading response for questionnaire:', questionnaire.id);
       console.log('Current response state:', response);
       console.log('Response keys:', Object.keys(response));
@@ -2250,9 +2441,6 @@ const QuestionnaireResponseModal = ({
 
   // Debug: Log current response state
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:1398',message:'Response prop changed in modal',data:{questionnaireId:questionnaire?.id,responseKeys:Object.keys(response),responseCount:Object.keys(response).length,hasQuestions:!!questionnaire?.questions,questionsCount:questionnaire?.questions?.length||0,responseEntries:Object.entries(response).map(([k,v]:[string,any])=>({key:k,hasAnswerText:!!v?.answerText,hasAnswerValue:!!v?.answerValue}))},timestamp:Date.now(),runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     console.log('QuestionnaireResponseModal - Current response state:', response);
     console.log('Questionnaire ID:', questionnaire?.id);
     console.log('Questionnaire has questions:', !!questionnaire?.questions, 'Count:', questionnaire?.questions?.length || 0);
@@ -2319,9 +2507,6 @@ const QuestionnaireResponseModal = ({
     switch (question.questionType) {
       case 'text':
         const textAnswer = getAnswer(question.id);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/ca10ee68-017d-4d11-84f2-160a915405c6',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:1428',message:'Rendering text input',data:{questionId:question.id,hasAnswer:!!textAnswer,answerText:textAnswer?.answerText,answerValue:textAnswer?.answerValue,responseKeys:Object.keys(response)},timestamp:Date.now(),runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         console.log(`Text input for question ${question.id}:`, textAnswer);
         return (
           <input

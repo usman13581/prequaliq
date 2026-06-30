@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { UserPlus } from 'lucide-react';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { Logo } from '../components/ui/Logo';
 
 const Register = () => {
   const { t } = useTranslation();
@@ -47,17 +48,13 @@ const Register = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 py-12 relative">
+      <div className="login-page-bg" aria-hidden="true" />
       <div className="absolute top-4 right-4 z-10">
         <LanguageSwitcher />
       </div>
-      <div className="max-w-md w-full bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/50">
-        <div className="text-center mb-4">
-          <Link to="/" className="block">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent mb-2 hover:opacity-90 transition-opacity cursor-pointer">
-              PrequaliQ
-            </h1>
-          </Link>
-          <p className="text-gray-600 font-medium">{t('register.tagline')}</p>
+      <div className="auth-card">
+        <div className="flex justify-center mb-6">
+          <Logo to="/register" subtitle={t('register.tagline')} size="lg" />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -146,9 +143,9 @@ const Register = () => {
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted">
             {t('register.haveAccount')}{' '}
-            <a href="/login" className="text-primary-600 hover:text-primary-700 font-medium">
+            <a href="/login" className="text-accent hover:text-accent-hover font-semibold">
               {t('register.loginHere')}
             </a>
           </p>

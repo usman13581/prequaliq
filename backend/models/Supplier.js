@@ -76,7 +76,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT
     },
     status: {
-      type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+      type: DataTypes.ENUM('pending', 'approved', 'rejected', 'requalification_required'),
       defaultValue: 'pending'
     },
     approvedAt: {
@@ -91,6 +91,34 @@ module.exports = (sequelize, DataTypes) => {
     },
     rejectionReason: {
       type: DataTypes.TEXT
+    },
+    profileSubmittedAt: {
+      type: DataTypes.DATE
+    },
+    profileVersion: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    },
+    qualifiedAt: {
+      type: DataTypes.DATE
+    },
+    qualificationExpiresAt: {
+      type: DataTypes.DATE
+    },
+    lastRequalificationAt: {
+      type: DataTypes.DATE
+    },
+    insurerName: {
+      type: DataTypes.STRING
+    },
+    insurancePolicyNumber: {
+      type: DataTypes.STRING
+    },
+    insuranceCoverageAmount: {
+      type: DataTypes.STRING
+    },
+    insuranceValidTo: {
+      type: DataTypes.DATEONLY
     }
   }, {
     tableName: 'suppliers',
@@ -102,6 +130,15 @@ module.exports = (sequelize, DataTypes) => {
     Supplier.belongsTo(models.User, { foreignKey: 'approvedBy', as: 'approver' });
     Supplier.hasMany(models.Document, { foreignKey: 'supplierId', as: 'documents' });
     Supplier.hasMany(models.QuestionnaireResponse, { foreignKey: 'supplierId', as: 'questionnaireResponses' });
+    if (models.SupplierReference) {
+      Supplier.hasMany(models.SupplierReference, { foreignKey: 'supplierId', as: 'references' });
+    }
+    if (models.SupplierProfileSubmission) {
+      Supplier.hasMany(models.SupplierProfileSubmission, { foreignKey: 'supplierId', as: 'profileSubmissions' });
+    }
+    if (models.SupplierNotification) {
+      Supplier.hasMany(models.SupplierNotification, { foreignKey: 'supplierId', as: 'notifications' });
+    }
     Supplier.belongsToMany(models.CPVCode, {
       through: 'SupplierCPV',
       foreignKey: 'supplierId',

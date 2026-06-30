@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
+import { Logo } from '../../components/ui/Logo';
 import { 
   LogOut, FileText, Search, User, Plus, Edit2, Trash2, Eye, 
   Upload, X, Calendar, Building2, Save, XCircle, Camera,
@@ -647,15 +647,13 @@ const ProcuringEntityDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-slate-100">
+    <div className="min-h-screen app-page-bg">
       {/* Navbar */}
-      <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
+      <nav className="bg-card/90 backdrop-blur-lg shadow-lg border-b border-border sticky top-0 z-40">
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
-              <Link to="/procuring-entity" className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent hover:opacity-90 transition-opacity cursor-pointer">
-                PrequaliQ
-              </Link>
+              <Logo to="/procuring-entity" subtitle={t('nav.procuringEntity')} size="md" />
             </div>
             <div className="flex items-center gap-4">
               <LanguageSwitcher />

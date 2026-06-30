@@ -3,6 +3,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { sendSupplierProfileSubmittedToAdminEmail, sendSupplierProfileSubmittedConfirmationEmail } = require('../services/emailService');
+const { getDocumentStatus } = require('../services/supplierCompleteness');
+const { notifyDocumentExpiring } = require('../services/supplierNotificationService');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -73,6 +75,18 @@ const uploadDocument = async (req, res) => {
     }
 
     const documentType = req.body.documentType || 'general';
+    const validFrom = req.body.validFrom || null;
+    const validTo = req.body.validTo || null;
+    const issuer = req.body.issuer || null;
+    const documentNumber = req.body.documentNumber || null;
+
+    const existing = await db.Document.findOne({
+      where: { supplierId: supplier.id, documentType, isActive: true }
+    });
+    if (existing) {
+      await existing.update({ isActive: false });
+    }
+
     const document = await db.Document.create({
       supplierId: supplier.id,
       documentType,
@@ -80,33 +94,26 @@ const uploadDocument = async (req, res) => {
       filePath: req.file.path,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
-      uploadedBy: req.user.id
+      uploadedBy: req.user.id,
+      validFrom,
+      validTo,
+      issuer,
+      documentNumber,
+      isActive: true,
+      replacedByDocumentId: null
     });
 
-    const isProfileDoc = ['q2-financial', 'q5-quality', 'q6-environment', 'q7-social', 'q8-ohs'].includes(documentType);
-    if (isProfileDoc) {
-      await supplier.update({ status: 'pending' });
-      const user = supplier.user;
-      const companyName = supplier.companyName || 'Supplier';
-      if (user?.email) {
-        sendSupplierProfileSubmittedConfirmationEmail(user.email, user.firstName, user.lastName, companyName)
-          .catch((err) => console.error('Failed to send profile submitted confirmation:', err));
-      }
-      const admins = await db.User.findAll({
-        where: { role: 'admin', isActive: true },
-        attributes: ['email', 'firstName', 'lastName']
-      });
-      for (const admin of admins) {
-        if (admin.email) {
-          const adminName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || 'Administrator';
-          sendSupplierProfileSubmittedToAdminEmail(admin.email, adminName, companyName, user?.email || '')
-            .catch((err) => console.error('Failed to send profile submitted to admin:', err));
-        }
-      }
+    if (existing) {
+      await existing.update({ replacedByDocumentId: document.id });
+    }
+
+    const docStatus = getDocumentStatus(document);
+    if (docStatus === 'expiring_soon') {
+      notifyDocumentExpiring(supplier, 1).catch(() => {});
     }
 
     res.status(201).json({
-      message: isProfileDoc ? 'Document uploaded and profile submitted for approval' : 'Document uploaded successfully',
+      message: 'Document uploaded successfully',
       document
     });
   } catch (error) {
@@ -160,7 +167,7 @@ const getDocuments = async (req, res) => {
         return res.status(404).json({ message: 'Supplier not found' });
       }
       documents = await db.Document.findAll({
-        where: { supplierId: supplier.id }
+        where: { supplierId: supplier.id, isActive: true }
       });
     } else if (req.user.role === 'procuring_entity') {
       const procuringEntity = await db.ProcuringEntity.findOne({
@@ -213,12 +220,38 @@ const deleteDocument = async (req, res) => {
       fs.unlinkSync(document.filePath);
     }
 
-    await document.destroy();
+    await document.update({ isActive: false });
 
     res.json({ message: 'Document deleted successfully' });
   } catch (error) {
     console.error('Delete document error:', error);
     res.status(500).json({ message: 'Error deleting document', error: error.message });
+  }
+};
+
+const updateDocumentMetadata = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const document = await db.Document.findByPk(documentId);
+    if (!document) return res.status(404).json({ message: 'Document not found' });
+
+    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+    if (!supplier || document.supplierId !== supplier.id) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const { validFrom, validTo, issuer, documentNumber } = req.body;
+    await document.update({
+      ...(validFrom !== undefined && { validFrom: validFrom || null }),
+      ...(validTo !== undefined && { validTo: validTo || null }),
+      ...(issuer !== undefined && { issuer }),
+      ...(documentNumber !== undefined && { documentNumber })
+    });
+
+    res.json({ message: 'Document metadata updated', document });
+  } catch (error) {
+    console.error('Update document metadata error:', error);
+    res.status(500).json({ message: 'Error updating document metadata', error: error.message });
   }
 };
 
@@ -228,5 +261,6 @@ module.exports = {
   uploadDocument,
   uploadProcuringEntityDocument,
   getDocuments,
-  deleteDocument
+  deleteDocument,
+  updateDocumentMetadata
 };

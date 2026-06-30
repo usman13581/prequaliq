@@ -57,6 +57,29 @@ module.exports = (sequelize, DataTypes) => {
         model: 'users',
         key: 'id'
       }
+    },
+    validFrom: {
+      type: DataTypes.DATEONLY
+    },
+    validTo: {
+      type: DataTypes.DATEONLY
+    },
+    issuer: {
+      type: DataTypes.STRING
+    },
+    documentNumber: {
+      type: DataTypes.STRING
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
+    replacedByDocumentId: {
+      type: DataTypes.UUID,
+      references: {
+        model: 'documents',
+        key: 'id'
+      }
     }
   }, {
     tableName: 'documents',

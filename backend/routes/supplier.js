@@ -6,10 +6,22 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 router.use(authorize('supplier'));
 
+router.get('/dashboard', supplierController.getDashboard);
 router.get('/profile', supplierController.getProfile);
 router.put('/profile', supplierController.updateProfile);
+router.get('/profile/completeness', supplierController.getCompleteness);
+router.post('/profile/submit', supplierController.submitProfile);
+router.get('/profile/export', supplierController.exportProfile);
+router.get('/qualification', supplierController.getQualification);
 router.put('/cpv-codes', supplierController.updateCPVCodes);
 router.put('/nuts-codes', supplierController.updateNUTSCodes);
+router.get('/references', supplierController.getReferences);
+router.post('/references', supplierController.createReference);
+router.put('/references/:referenceId', supplierController.updateReference);
+router.delete('/references/:referenceId', supplierController.deleteReference);
+router.get('/notifications', supplierController.getNotifications);
+router.put('/notifications/:notificationId/read', supplierController.markNotificationRead);
+router.put('/notifications/read-all', supplierController.markAllNotificationsRead);
 router.get('/questionnaires/active', supplierController.getActiveQuestionnaires);
 router.get('/questionnaires/history', supplierController.getQuestionnaireHistory);
 

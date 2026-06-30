@@ -1,35 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
-
 :root {
-  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif;
+  --background: #fafbfc;
+  --foreground: #0b1220;
+  --primary: #0f2744;
+  --primary-mid: #1a3a5c;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: #eff6ff;
+  --gold: #c9a227;
+  --muted: #5c6b7a;
+  --muted-light: #94a3b8;
+  --card: #ffffff;
+  --border: #e8ecf1;
+  --border-strong: #d1dae6;
+  --surface: #f4f6f9;
+  --surface-dark: #0b1220;
+
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
   color-scheme: light;
-  color: #1f2937;
-  background-color: #f9fafb;
-
+  color: var(--foreground);
+  background-color: var(--background);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #f9fafb;
+  background-color: var(--background);
+  color: var(--foreground);
+  touch-action: manipulation;
 }
 
 #root {
   width: 100%;
   min-height: 100vh;
+}
+
+button,
+a,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* App shell background — website-aligned */
+.app-page-bg {
+  background: linear-gradient(135deg, var(--background) 0%, var(--accent-subtle) 45%, var(--surface) 100%);
+}
+
+/* Subtle grid pattern utility (from website) */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(15, 39, 68, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 39, 68, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #2563eb 0%, #60a5fa 50%, #93c5fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* Custom scrollbar */
@@ -39,17 +84,17 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--surface);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--muted-light);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--muted);
 }
 
 /* Smooth transitions */
@@ -59,7 +104,6 @@ body {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -75,7 +119,6 @@ body {
   animation: fadeIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Line clamp utility */
 .line-clamp-3 {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -83,7 +126,7 @@ body {
   overflow: hidden;
 }
 
-/* Date-only picker calendar – good-looking, date only */
+/* Date-only picker — brand blue */
 .react-datepicker-wrapper {
   width: 100%;
 }
@@ -93,7 +136,7 @@ body {
 }
 .date-only-picker-calendar.react-datepicker {
   font-family: inherit;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
   overflow: hidden;
@@ -102,7 +145,7 @@ body {
   z-index: 50;
 }
 .react-datepicker__header {
-  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+  background: linear-gradient(135deg, var(--primary-mid) 0%, var(--primary) 100%);
   border-bottom: none;
   padding-top: 12px;
   border-radius: 12px 12px 0 0;
@@ -126,25 +169,25 @@ body {
   transition: background-color 0.15s, color 0.15s;
 }
 .react-datepicker__day:hover {
-  background-color: #ccfbf1;
-  color: #115e59;
+  background-color: var(--accent-subtle);
+  color: var(--primary);
 }
 .react-datepicker__day--selected,
 .react-datepicker__day--keyboard-selected {
-  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%) !important;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%) !important;
   color: #fff !important;
 }
 .react-datepicker__day--today {
   font-weight: 700;
-  background-color: #ccfbf1;
-  color: #0f766e;
+  background-color: var(--accent-subtle);
+  color: var(--accent);
 }
 .react-datepicker__day--today.react-datepicker__day--selected {
-  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%) !important;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%) !important;
   color: #fff !important;
 }
 .react-datepicker__day--outside-month {
-  color: #9ca3af;
+  color: var(--muted-light);
 }
 .react-datepicker__navigation {
   top: 12px;
@@ -169,32 +212,34 @@ body {
 .react-datepicker__month-dropdown,
 .react-datepicker__year-dropdown {
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
 }
 .react-datepicker__month-option:hover,
 .react-datepicker__year-option:hover {
-  background-color: #ccfbf1;
+  background-color: var(--accent-subtle);
 }
 .react-datepicker__month-option--selected_month,
 .react-datepicker__year-option--selected_year {
-  background-color: #99f6e4;
+  background-color: #dbeafe;
   font-weight: 600;
 }
 .react-datepicker__month-option--keyboard-selected,
 .react-datepicker__year-option--keyboard-selected {
-  background-color: #ccfbf1;
+  background-color: var(--accent-subtle);
 }
 .react-datepicker__triangle {
   display: none;
 }
 
-/* Login page – mature, professional procurement-themed background */
+/* Auth pages — website brand navy + blue */
 .login-page-bg {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 30%, #334155 60%, #1e293b 100%);
+  background:
+    linear-gradient(135deg, rgba(15, 39, 68, 0.92) 0%, rgba(26, 58, 92, 0.88) 40%, rgba(15, 39, 68, 0.94) 100%),
+    url('/static_resources/images/backgrounds/page-hero.jpg') center / cover no-repeat;
   background-attachment: fixed;
   z-index: 0;
 }
@@ -203,10 +248,9 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: 
-    radial-gradient(ellipse 60% 40% at 20% 20%, rgba(30, 58, 138, 0.15), transparent 60%),
-    radial-gradient(ellipse 50% 35% at 80% 80%, rgba(15, 23, 42, 0.2), transparent 60%),
-    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(51, 65, 85, 0.1), transparent 70%);
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 20%, rgba(37, 99, 235, 0.2), transparent 60%),
+    radial-gradient(ellipse 50% 35% at 80% 80%, rgba(15, 39, 68, 0.25), transparent 60%);
   pointer-events: none;
 }
 
@@ -214,9 +258,9 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: 
-    repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(255, 255, 255, 0.015) 1px, rgba(255, 255, 255, 0.015) 2px);
-  opacity: 0.4;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(255, 255, 255, 0.02) 1px, rgba(255, 255, 255, 0.02) 2px);
+  opacity: 0.5;
   pointer-events: none;
 }
 
@@ -253,13 +297,15 @@ body {
 .login-float-6 { animation: loginFloat 11s ease-in-out infinite 2.5s; }
 .login-float-7 { animation: loginFloatSlow 17s ease-in-out infinite 5s; }
 
-/* Button variants – Option A Slate & Teal */
-.btn-save, .btn-update {
-  background: #0f766e;
+/* Button variants — website accent blue */
+.btn-save,
+.btn-update {
+  background: var(--accent);
   color: #fff;
 }
-.btn-save:hover, .btn-update:hover {
-  background: #0d9488;
+.btn-save:hover,
+.btn-update:hover {
+  background: var(--accent-hover);
 }
 .btn-approve {
   background: #059669;
@@ -276,21 +322,21 @@ body {
   background: #ea580c;
 }
 .btn-cancel {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--border-strong);
 }
 .btn-cancel:hover {
-  background: #e2e8f0;
+  background: #e8ecf1;
 }
 .btn-close {
   background: transparent;
-  color: #64748b;
-  border: 1px solid #cbd5e1;
+  color: var(--muted);
+  border: 1px solid var(--border-strong);
 }
 .btn-close:hover {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--surface);
+  color: var(--foreground);
 }
 .btn-delete {
   background: #dc2626;
@@ -299,4 +345,29 @@ body {
 }
 .btn-delete:hover {
   background: #b91c1c;
+}
+
+/* Shared form input styling */
+.input-brand {
+  @apply w-full px-4 py-3 border-2 border-border-strong rounded-xl bg-card text-foreground text-base;
+  @apply focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all duration-200;
+  @apply hover:border-muted-light;
+}
+
+/* Auth card */
+.auth-card {
+  @apply max-w-md w-full bg-card/95 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/60 relative z-10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-float-1,
+  .login-float-2,
+  .login-float-3,
+  .login-float-4,
+  .login-float-5,
+  .login-float-6,
+  .login-float-7,
+  .animate-fadeIn {
+    animation: none !important;
+  }
 }

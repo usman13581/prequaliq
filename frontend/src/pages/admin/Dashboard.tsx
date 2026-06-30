@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { LogOut, Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, ChevronLeft, ChevronRight, User, Lock, Eye, EyeOff, Key, Camera, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
+import { Logo } from '../../components/ui/Logo';
 
 interface Supplier {
   id: string;
@@ -211,21 +211,19 @@ const AdminDashboard = () => {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50/30 to-slate-100">
+    <div className="min-h-screen app-page-bg">
       {/* Modern Navbar */}
-      <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
+      <nav className="bg-card/90 backdrop-blur-lg shadow-lg border-b border-border sticky top-0 z-40">
         <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
-              <Link to="/admin" className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent hover:opacity-90 transition-opacity cursor-pointer">
-                PrequaliQ
-              </Link>
+              <Logo to="/admin" subtitle={t('nav.administrator')} size="md" />
             </div>
             <div className="flex items-center gap-4">
               <LanguageSwitcher />
               <button
                 onClick={() => setShowProfileModal(true)}
-                className="hidden md:flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-primary-50 to-teal-50 rounded-xl border border-primary-200/50 hover:from-primary-100 hover:to-primary-100 transition-all duration-200 cursor-pointer"
+                className="hidden md:flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-primary-50 to-accent-subtle rounded-xl border border-primary-200/50 hover:from-primary-100 hover:to-primary-100 transition-all duration-200 cursor-pointer"
               >
                 <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
                   {user?.firstName?.[0]}{user?.lastName?.[0]}
@@ -1339,8 +1337,8 @@ const CreateSupplierModal = ({ onClose, onSuccess }: { onClose: () => void; onSu
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-fadeIn" style={{ top: 0, left: 0, right: 0, bottom: 0 }}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-gray-200/50 transform">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4" style={{ top: 0, left: 0, right: 0, bottom: 0 }}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto transform">
         <div className="sticky top-0 bg-gradient-to-r from-white to-blue-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>

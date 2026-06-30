@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 
 router.post('/supplier', authorize('supplier'), documentController.upload.single('file'), documentController.uploadDocument);
+router.put('/supplier/:documentId/metadata', authorize('supplier'), documentController.updateDocumentMetadata);
 router.post('/procuring-entity', authorize('procuring_entity'), documentController.upload.single('file'), documentController.uploadProcuringEntityDocument);
 router.get('/', documentController.getDocuments);
 router.delete('/:documentId', documentController.deleteDocument);
