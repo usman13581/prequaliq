@@ -6,6 +6,7 @@ import api from '../../services/api';
 import { DateOnlyPicker } from '../../components/DateOnlyPicker';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { Logo } from '../../components/ui/Logo';
+import { PortalSidebar } from '../../components/ui/PortalSidebar';
 import { SupplierOverviewTab } from '../../components/supplier/SupplierOverviewTab';
 import { SupplierNotificationsBell } from '../../components/supplier/SupplierNotificationsBell';
 import { SupplierProfileCompleteness, SupplierSubmitModal } from '../../components/supplier/SupplierProfileCompleteness';
@@ -913,33 +914,36 @@ const SupplierDashboard = () => {
     cpv.description.toLowerCase().includes(cpvSearchTerm.toLowerCase())
   );
 
+  const sidebarItems = [
+    { id: 'overview', label: t('supplierPortal.navOverview'), icon: LayoutDashboard },
+    { id: 'profile', label: t('supplierPortal.navProfile'), icon: User },
+    { id: 'questionnaires', label: t('supplierPortal.navQuestionnaires'), icon: FileText },
+    { id: 'history', label: t('supplierPortal.navHistory'), icon: History },
+  ];
+
   return (
-    <div className="min-h-screen app-page-bg">
-      {/* Navbar */}
-      <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
-        <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-20">
-            <div className="flex items-center gap-4">
-              <Logo to="/supplier" subtitle={t('nav.supplierPortal')} size="md" />
-            </div>
-            <div className="flex items-center gap-4">
+    <div className="min-h-screen app-page-bg flex flex-col">
+      {/* Top header */}
+      <header className="bg-card/90 backdrop-blur-lg shadow-sm border-b border-border sticky top-0 z-50 shrink-0">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16 sm:h-20">
+            <Logo to="/supplier" subtitle={t('nav.supplierPortal')} size="md" />
+            <div className="flex items-center gap-2 sm:gap-4">
               <SupplierNotificationsBell onNavigate={handleNavigateTab} />
               <LanguageSwitcher />
-              <button
-                onClick={() => setActiveTab('profile')}
-                className="hidden md:flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-primary-50 to-blue-50 rounded-xl border border-primary-200/50 hover:from-primary-100 hover:to-blue-100 transition-all duration-200 cursor-pointer"
-              >
-                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
+              <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-border">
+                <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white text-sm font-semibold">
                   {user?.firstName?.[0]}{user?.lastName?.[0]}
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-xs text-gray-500">{t('nav.supplier')}</p>
+                <div className="hidden lg:block">
+                  <p className="text-sm font-semibold text-gray-900 leading-tight">{user?.firstName} {user?.lastName}</p>
+                  <p className="text-xs text-muted">{t('nav.supplier')}</p>
                 </div>
-              </button>
+              </div>
               <button
+                type="button"
                 onClick={logout}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
+                className="flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 shadow-md transition-all font-medium text-sm"
               >
                 <LogOut size={18} />
                 <span className="hidden sm:inline">{t('common.logout')}</span>
@@ -947,74 +951,18 @@ const SupplierDashboard = () => {
             </div>
           </div>
         </div>
-      </nav>
+      </header>
 
-      <div className="w-full mx-auto px-5 sm:px-6 lg:px-8 py-8">
-        {/* Tabs */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 mb-6">
-          <div className="border-b border-gray-200/50">
-            <nav className="flex overflow-x-auto">
-              <button
-                onClick={() => setActiveTab('overview')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'overview'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'overview' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <LayoutDashboard className={activeTab === 'overview' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('supplierPortal.overviewTitle')}
-              </button>
-              <button
-                onClick={() => setActiveTab('profile')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'profile'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'profile' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <User className={activeTab === 'profile' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('supplierPortal.qualificationProfile')}
-              </button>
-              <button
-                onClick={() => setActiveTab('questionnaires')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'questionnaires'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'questionnaires' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <FileText className={activeTab === 'questionnaires' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('supplierPortal.buyerQuestionnaires')}
-              </button>
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'history'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'history' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <History className={activeTab === 'history' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.history')}
-              </button>
-            </nav>
-          </div>
+      <div className="flex flex-1 w-full max-w-[100vw]">
+        <PortalSidebar
+          items={sidebarItems}
+          activeId={activeTab}
+          onSelect={setActiveTab}
+        />
 
-          <div className="px-2 py-6">
-            {/* Overview Tab */}
+        <main className="portal-main-content flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+          <div className="max-w-[1400px] mx-auto">
+            {/* Overview */}
             {activeTab === 'overview' && (
               <SupplierOverviewTab
                 data={dashboardData}
@@ -2026,7 +1974,7 @@ const SupplierDashboard = () => {
             )}
 
           </div>
-        </div>
+        </main>
       </div>
 
       <SupplierSubmitModal

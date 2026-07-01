@@ -487,6 +487,10 @@
   "supplierPortal": {
     "overviewTitle": "Dashboard",
     "overviewSubtitle": "Your qualification status at a glance",
+    "navOverview": "Home",
+    "navProfile": "Profile",
+    "navQuestionnaires": "Forms",
+    "navHistory": "History",
     "qualificationProfile": "Qualification Profile",
     "buyerQuestionnaires": "Buyer Questionnaires",
     "profileCompleteness": "Profile completeness",

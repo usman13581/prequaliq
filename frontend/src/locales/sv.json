@@ -481,6 +481,10 @@
   "supplierPortal": {
     "overviewTitle": "Översikt",
     "overviewSubtitle": "Din kvalificeringsstatus i korthet",
+    "navOverview": "Hem",
+    "navProfile": "Profil",
+    "navQuestionnaires": "Formulär",
+    "navHistory": "Historik",
     "qualificationProfile": "Kvalificeringsprofil",
     "buyerQuestionnaires": "Upphandlarens frågeformulär",
     "profileCompleteness": "Profilens fullständighet",
