@@ -4,12 +4,17 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addM
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
-import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { Logo } from '../../components/ui/Logo';
+import { PortalLayout } from '../../components/ui/PortalLayout';
+import {
+  ProcuringEntityHomeTab,
+  EntityQuestionnaireStatsStrip,
+  type EntityDashboardStats
+} from '../../components/procuringEntity/ProcuringEntityHomeTab';
 import { 
-  LogOut, FileText, Search, User, Plus, Edit2, Trash2, Eye, 
+  FileText, Search, User, Plus, Edit2, Trash2, Eye, 
   Upload, X, Calendar, Building2, Save, XCircle, Camera,
-  CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Users, Power, PowerOff
+  CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Users, Power, PowerOff,
+  LayoutDashboard
 } from 'lucide-react';
 
 interface Document {
@@ -79,10 +84,12 @@ const TURNOVER_SEARCH_OPTIONS = [
 
 const ProcuringEntityDashboard = () => {
   const { t } = useTranslation();
-  const { user, logout, refreshUser, loading: authLoading } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState('questionnaires');
+  const [activeTab, setActiveTab] = useState('home');
   const [loading, setLoading] = useState(false);
+  const [dashboardStats, setDashboardStats] = useState<EntityDashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   
   // Profile state
   const [profile, setProfile] = useState<any>(null);
@@ -129,6 +136,21 @@ const ProcuringEntityDashboard = () => {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [selectedSupplierDetail, setSelectedSupplierDetail] = useState<any>(null);
   const [supplierDetailLoading, setSupplierDetailLoading] = useState(false);
+
+  const fetchDashboardStats = async (showLoading = true) => {
+    try {
+      if (showLoading) setStatsLoading(true);
+      const response = await api.get('/procuring-entity/dashboard/stats');
+      setDashboardStats(response.data.stats || null);
+    } catch (error: any) {
+      console.error('Error fetching dashboard stats:', error);
+      if (showLoading) {
+        showToast(error.response?.data?.message || t('entityPortal.statsLoadFailed'), 'error');
+      }
+    } finally {
+      if (showLoading) setStatsLoading(false);
+    }
+  };
 
   // Fetch profile and documents
   const fetchProfile = async () => {
@@ -243,8 +265,10 @@ const ProcuringEntityDashboard = () => {
   }, [selectedSupplierId]);
 
   useEffect(() => {
-    if (authLoading || !user) return;
-    if (activeTab === 'profile') {
+    if (!user?.id) return;
+    if (activeTab === 'home') {
+      fetchDashboardStats();
+    } else if (activeTab === 'profile') {
       fetchProfile();
     } else if (activeTab === 'questionnaires') {
       fetchQuestionnaires();
@@ -254,7 +278,7 @@ const ProcuringEntityDashboard = () => {
       fetchCPVCodes();
       fetchNUTSCodesForSearch();
     }
-  }, [activeTab, authLoading, user]);
+  }, [activeTab, user?.id]);
 
   // Update profile
   const handleUpdateProfile = async () => {
@@ -646,95 +670,39 @@ const ProcuringEntityDashboard = () => {
     }
   };
 
+  const sidebarItems = [
+    { id: 'home', label: t('entityPortal.navHome'), icon: LayoutDashboard },
+    { id: 'questionnaires', label: t('nav.questionnaires'), icon: FileText },
+    { id: 'suppliers', label: t('nav.searchSuppliers'), icon: Search },
+    { id: 'profile', label: t('nav.profile'), icon: User },
+  ];
+
   return (
-    <div className="min-h-screen app-page-bg">
-      {/* Navbar */}
-      <nav className="bg-card/90 backdrop-blur-lg shadow-lg border-b border-border sticky top-0 z-40">
-        <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-20">
-            <div className="flex items-center gap-4">
-              <Logo to="/procuring-entity" subtitle={t('nav.procuringEntity')} size="md" />
-            </div>
-            <div className="flex items-center gap-4">
-              <LanguageSwitcher />
-              <button
-                onClick={() => setActiveTab('profile')}
-                className="hidden md:flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-primary-50 to-blue-50 rounded-xl border border-primary-200/50 hover:from-primary-100 hover:to-blue-100 transition-all duration-200 cursor-pointer"
-              >
-                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
-                  {user?.firstName?.[0]}{user?.lastName?.[0]}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-xs text-gray-500">{t('nav.procuringEntity')}</p>
-                </div>
-              </button>
-              <button
-                onClick={logout}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
-              >
-                <LogOut size={18} />
-                <span className="hidden sm:inline">{t('common.logout')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <>
+      <PortalLayout
+        logoTo="/procuring-entity"
+        logoSubtitle={t('nav.procuringEntityPortal')}
+        roleLabel={t('nav.procuringEntity')}
+        sidebarItems={sidebarItems}
+        activeTab={activeTab}
+        onTabSelect={setActiveTab}
+        onProfileClick={() => setActiveTab('profile')}
+        sidebarVariant="wide"
+      >
+            {activeTab === 'home' && (
+              <ProcuringEntityHomeTab
+                stats={dashboardStats}
+                loading={statsLoading}
+                onNavigate={setActiveTab}
+              />
+            )}
 
-      <div className="w-full mx-auto px-5 sm:px-6 lg:px-8 py-8">
-        {/* Tabs */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 mb-6">
-          <div className="border-b border-gray-200/50">
-            <nav className="flex overflow-x-auto">
-              <button
-                onClick={() => setActiveTab('questionnaires')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'questionnaires'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'questionnaires' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <FileText className={activeTab === 'questionnaires' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.questionnaires')}
-              </button>
-              <button
-                onClick={() => setActiveTab('suppliers')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'suppliers'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'suppliers' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <Search className={activeTab === 'suppliers' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.searchSuppliers')}
-              </button>
-              <button
-                onClick={() => setActiveTab('profile')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 whitespace-nowrap ${
-                  activeTab === 'profile'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'profile' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <User className={activeTab === 'profile' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.profile')}
-              </button>
-            </nav>
-          </div>
-
-          <div className="px-2 py-6">
             {/* Questionnaires Tab */}
             {activeTab === 'questionnaires' && (
               <div className="space-y-6">
+                {questionnaires.length > 0 && (
+                  <EntityQuestionnaireStatsStrip questionnaires={questionnaires} />
+                )}
                 <div className="flex justify-between items-center">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{t('sections.questionnaireManagement')}</h2>
@@ -926,7 +894,7 @@ const ProcuringEntityDashboard = () => {
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Profile Information */}
                     <div className="lg:col-span-2 space-y-6">
-                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl p-6 border border-gray-200/50">
+                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl p-4 sm:p-5 border border-gray-200/50">
                         <h3 className="text-lg font-bold text-gray-900 mb-4">{t('common.profile')} Information</h3>
                         {/* Profile Picture */}
                         <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
@@ -1366,9 +1334,7 @@ const ProcuringEntityDashboard = () => {
                 )}
               </div>
             )}
-          </div>
-        </div>
-      </div>
+      </PortalLayout>
 
       {/* Create Questionnaire Modal */}
       {showCreateQuestionnaire && (
@@ -1453,7 +1419,7 @@ const ProcuringEntityDashboard = () => {
           }}
         />
       )}
-    </div>
+    </>
   );
 };
 

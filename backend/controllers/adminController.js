@@ -933,6 +933,126 @@ const debugSuppliers = async (req, res) => {
   }
 };
 
+const getDashboardStats = async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const supplierStatuses = ['pending', 'approved', 'rejected', 'requalification_required'];
+    const supplierStatusCounts = {};
+    await Promise.all(
+      supplierStatuses.map(async (status) => {
+        supplierStatusCounts[status] = await db.Supplier.count({ where: { status } });
+      })
+    );
+
+    const [
+      supplierTotal,
+      supplierActive,
+      supplierInactive,
+      suppliersNewThisMonth,
+      entityTotal,
+      entitiesActive,
+      entitiesInactive,
+      entitiesNewThisMonth,
+      questionnairesTotal,
+      questionnairesActive,
+      questionnairesOverdue,
+      responsesTotal,
+      responsesSubmitted,
+      responsesDraft,
+      pendingSubmissions,
+      recentSuppliers,
+      recentEntities
+    ] = await Promise.all([
+      db.Supplier.count(),
+      db.Supplier.count({
+        include: [{ model: db.User, as: 'user', where: { isActive: true }, required: true }]
+      }),
+      db.Supplier.count({
+        include: [{ model: db.User, as: 'user', where: { isActive: false }, required: true }]
+      }),
+      db.Supplier.count({ where: { createdAt: { [Op.gte]: monthStart } } }),
+      db.ProcuringEntity.count(),
+      db.ProcuringEntity.count({
+        include: [{ model: db.User, as: 'user', where: { isActive: true }, required: true }]
+      }),
+      db.ProcuringEntity.count({
+        include: [{ model: db.User, as: 'user', where: { isActive: false }, required: true }]
+      }),
+      db.ProcuringEntity.count({ where: { createdAt: { [Op.gte]: monthStart } } }),
+      db.Questionnaire.count(),
+      db.Questionnaire.count({ where: { isActive: true } }),
+      db.Questionnaire.count({
+        where: { isActive: true, deadline: { [Op.lt]: now } }
+      }),
+      db.QuestionnaireResponse.count(),
+      db.QuestionnaireResponse.count({ where: { status: 'submitted' } }),
+      db.QuestionnaireResponse.count({ where: { status: 'draft' } }),
+      db.SupplierProfileSubmission
+        ? db.SupplierProfileSubmission.count({ where: { status: 'pending' } })
+        : Promise.resolve(0),
+      db.Supplier.findAll({
+        limit: 5,
+        order: [['createdAt', 'DESC']],
+        include: [{
+          model: db.User,
+          as: 'user',
+          attributes: ['firstName', 'lastName', 'email', 'isActive']
+        }],
+        attributes: ['id', 'companyName', 'status', 'createdAt']
+      }),
+      db.ProcuringEntity.findAll({
+        limit: 5,
+        order: [['createdAt', 'DESC']],
+        include: [{
+          model: db.User,
+          as: 'user',
+          attributes: ['firstName', 'lastName', 'email', 'isActive']
+        }],
+        attributes: ['id', 'entityName', 'createdAt']
+      })
+    ]);
+
+    res.json({
+      stats: {
+        suppliers: {
+          total: supplierTotal,
+          ...supplierStatusCounts,
+          active: supplierActive,
+          inactive: supplierInactive,
+          newThisMonth: suppliersNewThisMonth
+        },
+        entities: {
+          total: entityTotal,
+          active: entitiesActive,
+          inactive: entitiesInactive,
+          newThisMonth: entitiesNewThisMonth
+        },
+        questionnaires: {
+          total: questionnairesTotal,
+          active: questionnairesActive,
+          overdue: questionnairesOverdue
+        },
+        responses: {
+          total: responsesTotal,
+          submitted: responsesSubmitted,
+          draft: responsesDraft
+        },
+        pendingSubmissions,
+        recentSuppliers,
+        recentEntities
+      }
+    });
+  } catch (error) {
+    console.error('Get dashboard stats error:', error);
+    res.status(500).json({ message: 'Error fetching dashboard stats', error: error.message });
+  }
+};
+
 module.exports = {
   createSupplier,
   createProcuringEntity,
@@ -951,5 +1071,6 @@ module.exports = {
   getCompanies,
   debugSuppliers,
   deleteSupplier,
-  deleteProcuringEntity
+  deleteProcuringEntity,
+  getDashboardStats
 };

@@ -21,7 +21,7 @@ type DashboardData = {
     profileSubmittedAt?: string;
     rejectionReason?: string;
   };
-  nextAction: { labelKey?: string; label?: string; tab: string };
+  nextAction: { labelKey?: string; label?: string; tab: string | null };
   companyName?: string;
 };
 
@@ -57,6 +57,7 @@ export function SupplierOverviewTab({
     : t(`common.${data.status}`);
 
   const nextLabel = translateNextActionLabel(t, data.nextAction.labelKey, data.nextAction.label);
+  const hasAction = Boolean(data.nextAction.tab);
 
   return (
     <div className="space-y-6">
@@ -144,18 +145,26 @@ export function SupplierOverviewTab({
         canDownload={data.status === 'approved' || data.status === 'requalification_required'}
       />
 
-      <div className="bg-white rounded-2xl p-6 border border-border shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <p className="text-sm text-muted">{t('supplierPortal.nextAction')}</p>
-          <p className="text-lg font-semibold text-gray-900">{nextLabel}</p>
+      <div className={`rounded-2xl p-6 border shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 ${
+        hasAction ? 'bg-white border-border sm:justify-between' : 'bg-green-50/80 border-green-200'
+      }`}>
+        <div className="flex items-start gap-3 min-w-0">
+          {!hasAction && <CheckCircle className="text-green-600 shrink-0 mt-0.5" size={22} />}
+          <div>
+            <p className="text-sm text-muted">{t('supplierPortal.nextAction')}</p>
+            <p className={`text-lg font-semibold ${hasAction ? 'text-gray-900' : 'text-green-800'}`}>{nextLabel}</p>
+          </div>
         </div>
-        <button
-          onClick={() => onNavigate(data.nextAction.tab)}
-          className="btn-save inline-flex items-center gap-2 px-6 py-3 rounded-full font-semibold"
-        >
-          {nextLabel}
-          <ArrowRight size={18} />
-        </button>
+        {hasAction && (
+          <button
+            type="button"
+            onClick={() => onNavigate(data.nextAction.tab!)}
+            className="btn-save inline-flex items-center gap-2 px-6 py-3 rounded-full font-semibold shrink-0"
+          >
+            {nextLabel}
+            <ArrowRight size={18} />
+          </button>
+        )}
       </div>
 
       {!data.completeness.readyToSubmit && data.completeness.blockers.length > 0 && (

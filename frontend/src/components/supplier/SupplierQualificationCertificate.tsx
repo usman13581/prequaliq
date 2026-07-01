@@ -21,7 +21,7 @@ function buildCertificateHtml(data: Qualification, t: TFunction) {
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${t('supplierPortal.certificateTitle')}</title>
 <style>
-  body { font-family: 'Segoe UI', system-ui, sans-serif; max-width: 720px; margin: 40px auto; color: #0f172a; }
+  body { font-family: Inter, 'Segoe UI', system-ui, sans-serif; max-width: 720px; margin: 40px auto; color: #0f172a; }
   .header { text-align: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 24px; margin-bottom: 32px; }
   h1 { color: #1e3a5f; margin: 0 0 8px; font-size: 28px; }
   .badge { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 6px 16px; border-radius: 999px; font-weight: 600; }

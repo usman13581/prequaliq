@@ -4,17 +4,21 @@ import { useToast } from '../../contexts/ToastContext';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { DateOnlyPicker } from '../../components/DateOnlyPicker';
-import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { Logo } from '../../components/ui/Logo';
-import { PortalSidebar } from '../../components/ui/PortalSidebar';
+import { PortalLayout } from '../../components/ui/PortalLayout';
 import { SupplierOverviewTab } from '../../components/supplier/SupplierOverviewTab';
 import { SupplierNotificationsBell } from '../../components/supplier/SupplierNotificationsBell';
-import { SupplierProfileCompleteness, SupplierSubmitModal } from '../../components/supplier/SupplierProfileCompleteness';
+import { SupplierExportProfileModal } from '../../components/supplier/SupplierExportProfileModal';
+import {
+  SupplierProfileCompletenessRail,
+  SupplierProfileCompletenessMobile,
+  SupplierQualificationStatusBar,
+  SupplierSubmitModal
+} from '../../components/supplier/SupplierProfileCompleteness';
 import { SupplierReferencesSection } from '../../components/supplier/SupplierReferencesSection';
 import { SupplierProfileSubmissionHistory } from '../../components/supplier/SupplierProfileSubmissionHistory';
 import { SupplierDocumentList } from '../../components/supplier/SupplierDocumentList';
 import { 
-  LogOut, FileText, History, User, Upload, Plus, Edit2, Eye, 
+  FileText, History, User, Upload, Plus, Edit2, Eye, 
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
   Search, ChevronDown, LayoutDashboard, Download
 } from 'lucide-react';
@@ -110,7 +114,7 @@ const getTurnoverValueForSelect = (val: string | number | undefined): string => 
 
 const SupplierDashboard = () => {
   const { t } = useTranslation();
-  const { user, logout, refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
@@ -118,6 +122,7 @@ const SupplierDashboard = () => {
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [completeness, setCompleteness] = useState<any>(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [submittingProfile, setSubmittingProfile] = useState(false);
   const [documentExpiryDates, setDocumentExpiryDates] = useState<Record<string, string>>({});
   const [questionnaireFilter, setQuestionnaireFilter] = useState<'all' | 'open' | 'draft' | 'submitted' | 'overdue'>('all');
@@ -263,22 +268,8 @@ const SupplierDashboard = () => {
     }
   };
 
-  const handleExportProfile = async () => {
-    try {
-      const res = await api.get('/supplier/profile/export');
-      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `supplier-profile-${profile?.companyName || 'export'}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast(t('supplierPortal.profileExported'), 'success');
-    } catch (error: any) {
-      showToast(error.response?.data?.message || t('common.error'), 'error');
-    }
+  const handleExportProfile = () => {
+    setShowExportModal(true);
   };
 
   const handleUpdateDocumentMetadata = async (id: string, metadata: { validFrom?: string; validTo?: string; issuer?: string; documentNumber?: string }) => {
@@ -922,46 +913,16 @@ const SupplierDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen app-page-bg flex flex-col">
-      {/* Top header */}
-      <header className="bg-card/90 backdrop-blur-lg shadow-sm border-b border-border sticky top-0 z-50 shrink-0">
-        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16 sm:h-20">
-            <Logo to="/supplier" subtitle={t('nav.supplierPortal')} size="md" />
-            <div className="flex items-center gap-2 sm:gap-4">
-              <SupplierNotificationsBell onNavigate={handleNavigateTab} />
-              <LanguageSwitcher />
-              <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-border">
-                <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                  {user?.firstName?.[0]}{user?.lastName?.[0]}
-                </div>
-                <div className="hidden lg:block">
-                  <p className="text-sm font-semibold text-gray-900 leading-tight">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-xs text-muted">{t('nav.supplier')}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={logout}
-                className="flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 shadow-md transition-all font-medium text-sm"
-              >
-                <LogOut size={18} />
-                <span className="hidden sm:inline">{t('common.logout')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex flex-1 w-full max-w-[100vw]">
-        <PortalSidebar
-          items={sidebarItems}
-          activeId={activeTab}
-          onSelect={setActiveTab}
-        />
-
-        <main className="portal-main-content flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-          <div className="max-w-[1400px] mx-auto">
+    <>
+      <PortalLayout
+        logoTo="/supplier"
+        logoSubtitle={t('nav.supplierPortal')}
+        roleLabel={t('nav.supplier')}
+        sidebarItems={sidebarItems}
+        activeTab={activeTab}
+        onTabSelect={setActiveTab}
+        headerExtra={<SupplierNotificationsBell onNavigate={handleNavigateTab} />}
+      >
             {/* Overview */}
             {activeTab === 'overview' && (
               <SupplierOverviewTab
@@ -1229,42 +1190,30 @@ const SupplierDashboard = () => {
 
             {/* Profile Tab */}
             {activeTab === 'profile' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{t('supplierPortal.qualificationProfile')}</h2>
-                    <p className="text-sm text-gray-500 mt-1">{t('dashboard.manageProfile')}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
+              <div className="space-y-3 -mt-1 lg:-mt-2">
+                {/* Mobile action buttons */}
+                <div className="lg:hidden flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleExportProfile}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-white hover:bg-surface font-semibold text-sm transition-colors"
+                  >
+                    <Download size={18} />
+                    {t('supplierPortal.exportProfile')}
+                  </button>
+                  {showSubmitButton && !editingProfile && (
                     <button
                       type="button"
-                      onClick={handleExportProfile}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-white hover:bg-surface font-semibold text-sm transition-colors"
+                      onClick={() => setShowSubmitModal(true)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-white font-semibold"
                     >
-                      <Download size={18} />
-                      {t('supplierPortal.exportProfile')}
+                      <CheckCircle size={20} />
+                      {t('supplierPortal.submitForQualification')}
                     </button>
-                    {!editingProfile && (
-                      <button
-                        onClick={() => setEditingProfile(true)}
-                        className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
-                      >
-                        <Edit2 size={20} />
-                        {t('actions.editProfile')}
-                      </button>
-                    )}
-                    {showSubmitButton && !editingProfile && (
-                      <button
-                        type="button"
-                        onClick={() => setShowSubmitModal(true)}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-white font-semibold hover:opacity-90 transition-opacity"
-                      >
-                        <CheckCircle size={20} />
-                        {t('supplierPortal.submitForQualification')}
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
+
+                <SupplierProfileCompletenessMobile completeness={completeness} />
 
                 {profile?.status === 'rejected' && profile?.rejectionReason && (
                   <div className="rounded-xl border border-red-200 bg-red-50 p-4">
@@ -1286,8 +1235,6 @@ const SupplierDashboard = () => {
                   </div>
                 )}
 
-                <SupplierProfileCompleteness completeness={completeness} />
-
                 {loading && !profile ? (
                   <div className="text-center py-16">
                     <div className="inline-flex flex-col items-center">
@@ -1296,65 +1243,108 @@ const SupplierDashboard = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Profile Information */}
-                    <div className="lg:col-span-2 space-y-6">
-                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">{t('common.profile')} Information</h3>
-                        {/* Profile Picture */}
-                        <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
-                          <div className="relative group">
-                            <div className="w-20 h-20 rounded-xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-2xl font-bold">
-                              {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
-                                <img
-                                  src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
-                                  alt="Profile"
-                                  className="w-full h-full object-cover"
+                  <div className="flex flex-col lg:flex-row gap-6 items-start mt-0">
+                    <div className="flex-1 min-w-0 space-y-6">
+                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl border border-gray-200/50 flex flex-col max-h-[calc(100vh-9rem)] lg:max-h-[calc(100vh-7.5rem)] min-h-[280px]">
+                        {/* Sticky: photo + edit/save/cancel + qualification status */}
+                        <div className="shrink-0 px-3 sm:px-4 pt-3 pb-2 border-b border-gray-200 bg-white/95 backdrop-blur-sm rounded-t-2xl z-10">
+                          <h3 className="text-lg font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                              <div className="relative group shrink-0">
+                                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
+                                  {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
+                                    <img
+                                      src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
+                                      alt="Profile"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
+                                  )}
+                                </div>
+                                <input
+                                  ref={profilePictureRef}
+                                  type="file"
+                                  accept="image/jpeg,image/jpg,image/png"
+                                  onChange={handleProfilePictureUpload}
+                                  className="hidden"
                                 />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    type="button"
+                                    onClick={() => profilePictureRef.current?.click()}
+                                    disabled={uploadingPicture}
+                                    className="p-2 bg-white/90 rounded-lg hover:bg-white"
+                                  >
+                                    <Camera size={18} className="text-gray-800" />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => profilePictureRef.current?.click()}
+                                  disabled={uploadingPicture}
+                                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                                >
+                                  <Upload size={14} />
+                                  {uploadingPicture ? t('common.loading') : ((profile?.user?.profilePicture ?? user?.profilePicture) ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto'))}
+                                </button>
+                                {(profile?.user?.profilePicture ?? user?.profilePicture) && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRemoveProfilePicture}
+                                    className="block mt-1 text-sm text-gray-500 hover:text-red-600 text-left"
+                                  >
+                                    {t('supplierPortal.removePhoto')}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                              {editingProfile ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={handleUpdateProfile}
+                                    disabled={loading}
+                                    className="btn-save flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                                  >
+                                    <Save size={16} />
+                                    {t('actions.saveChanges')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingProfile(false);
+                                      fetchProfile();
+                                    }}
+                                    className="btn-cancel px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
+                                  >
+                                    {t('common.cancel')}
+                                  </button>
+                                </>
                               ) : (
-                                <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingProfile(true)}
+                                  className="btn-save flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
+                                >
+                                  <Edit2 size={16} />
+                                  {t('actions.editProfile')}
+                                </button>
                               )}
                             </div>
-                            <input
-                              ref={profilePictureRef}
-                              type="file"
-                              accept="image/jpeg,image/jpg,image/png"
-                              onChange={handleProfilePictureUpload}
-                              className="hidden"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                type="button"
-                                onClick={() => profilePictureRef.current?.click()}
-                                disabled={uploadingPicture}
-                                className="p-2 bg-white/90 rounded-lg hover:bg-white"
-                              >
-                                <Camera size={20} className="text-gray-800" />
-                              </button>
-                            </div>
                           </div>
-                          <div>
-                            <button
-                              type="button"
-                              onClick={() => profilePictureRef.current?.click()}
-                              disabled={uploadingPicture}
-                              className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                            >
-                              <Upload size={14} />
-                              {uploadingPicture ? 'Uploading...' : ((profile?.user?.profilePicture ?? user?.profilePicture) ? 'Change photo' : 'Upload photo')}
-                            </button>
-                            {(profile?.user?.profilePicture ?? user?.profilePicture) && (
-                              <button
-                                type="button"
-                                onClick={handleRemoveProfilePicture}
-                                className="block mt-1 text-sm text-gray-500 hover:text-red-600"
-                              >
-                                Remove photo
-                              </button>
-                            )}
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <SupplierQualificationStatusBar profile={profile} />
                           </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                        {/* Scrollable profile fields */}
+                        <div className="flex-1 overflow-y-auto min-h-0 overscroll-behavior-contain px-3 sm:px-4 py-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
                             {editingProfile ? (
@@ -1898,84 +1888,40 @@ const SupplierDashboard = () => {
                             </div>
                           </div>
                         </div>
-
-                        {editingProfile && (
-                          <div className="flex gap-3 mt-6">
-                            <button
-                              onClick={handleUpdateProfile}
-                              disabled={loading}
-                              className="btn-save flex items-center gap-2 px-6 py-2.5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold"
-                            >
-                              <Save size={18} />
-                              {t('actions.saveChanges')}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingProfile(false);
-                                fetchProfile();
-                              }}
-                              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Status Card */}
-                    <div className="space-y-6">
-                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">{t('supplierPortal.qualificationStatus')}</h3>
-                        <div className="space-y-3">
-                          <div>
-                            <span className="text-sm text-gray-600">{t('supplierPortal.qualificationStatus')}</span>
-                            <div className="mt-1">
-                              <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full ${
-                                profile?.status === 'approved' ? 'bg-green-100 text-green-700' :
-                                profile?.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                profile?.status === 'requalification_required' ? 'bg-orange-100 text-orange-800' :
-                                'bg-yellow-100 text-yellow-700'
-                              }`}>
-                                {profile?.status === 'requalification_required'
-                                  ? t('supplierPortal.requalificationTitle')
-                                  : (profile?.status?.charAt(0).toUpperCase() + profile?.status?.slice(1) || t('common.pending'))}
-                              </span>
-                            </div>
-                          </div>
-                          {profile?.status === 'rejected' && profile?.rejectionReason && (
-                            <div>
-                              <span className="text-sm text-gray-600">{t('supplierPortal.rejectionTitle')}</span>
-                              <p className="mt-1 text-sm text-red-600">{profile.rejectionReason}</p>
-                            </div>
-                          )}
-                          {profile?.status === 'requalification_required' && profile?.qualificationExpiresAt && (
-                            <div>
-                              <span className="text-sm text-gray-600">{t('supplierPortal.validUntil')}</span>
-                              <p className="mt-1 text-sm text-orange-700">
-                                {new Date(profile.qualificationExpiresAt).toLocaleDateString()}
-                              </p>
-                            </div>
-                          )}
-                          {profile?.profileSubmittedAt && (
-                            <div>
-                              <span className="text-sm text-gray-600">{t('columns.submittedAt')}</span>
-                              <p className="mt-1 text-sm text-gray-700">
-                                {new Date(profile.profileSubmittedAt).toLocaleDateString()}
-                              </p>
-                            </div>
-                          )}
                         </div>
                       </div>
                     </div>
+
+                    {/* Right rail: actions + completeness checklist */}
+                    <aside className="hidden lg:flex flex-col gap-3 w-52 xl:w-56 shrink-0 sticky top-24 self-start">
+                      <div className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={handleExportProfile}
+                          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-white hover:bg-surface font-semibold text-sm transition-colors"
+                        >
+                          <Download size={16} />
+                          {t('supplierPortal.exportProfile')}
+                        </button>
+                        {showSubmitButton && !editingProfile && (
+                          <button
+                            type="button"
+                            onClick={() => setShowSubmitModal(true)}
+                            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-accent text-white font-semibold text-sm hover:opacity-90"
+                          >
+                            <CheckCircle size={16} />
+                            {t('supplierPortal.submitForQualification')}
+                          </button>
+                        )}
+                      </div>
+                      <SupplierProfileCompletenessRail completeness={completeness} />
+                    </aside>
                   </div>
                 )}
               </div>
             )}
 
-          </div>
-        </main>
-      </div>
+      </PortalLayout>
 
       <SupplierSubmitModal
         open={showSubmitModal}
@@ -1983,6 +1929,12 @@ const SupplierDashboard = () => {
         loading={submittingProfile}
         onClose={() => setShowSubmitModal(false)}
         onConfirm={handleSubmitProfile}
+      />
+
+      <SupplierExportProfileModal
+        open={showExportModal}
+        companyName={profile?.companyName}
+        onClose={() => setShowExportModal(false)}
       />
 
       {/* CPV Code Selector Modal */}
@@ -2043,7 +1995,7 @@ const SupplierDashboard = () => {
           loadResponse={loadQuestionnaireResponse}
         />
       )}
-    </div>
+    </>
   );
 };
 

@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 router.use(authorize('procuring_entity'));
 
+router.get('/dashboard/stats', procuringEntityController.getDashboardStats);
 router.get('/profile', procuringEntityController.getProfile);
 router.put('/profile', procuringEntityController.updateProfile);
 router.get('/suppliers', procuringEntityController.getSuppliers);

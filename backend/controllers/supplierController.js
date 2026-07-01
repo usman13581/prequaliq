@@ -1,6 +1,11 @@
 const db = require('../models');
 const { Op } = require('sequelize');
 const { sendSupplierProfileSubmittedToAdminEmail, sendSupplierProfileSubmittedConfirmationEmail } = require('../services/emailService');
+const {
+  generateExcelBuffer,
+  generatePdfBuffer,
+  getExportFilename
+} = require('../services/supplierProfileExportService');
 const { evaluateSupplierCompleteness } = require('../services/supplierCompleteness');
 const {
   notifyRequalificationRequired,
@@ -170,7 +175,7 @@ const getDashboard = async (req, res) => {
       }
     }
 
-    let nextAction = { labelKey: 'viewDashboard', tab: 'overview' };
+    let nextAction = { labelKey: 'allSet', tab: null };
     if (supplier.status === 'rejected') {
       nextAction = { labelKey: 'fixAndResubmit', tab: 'profile' };
     } else if (supplier.status === 'requalification_required') {
@@ -498,13 +503,34 @@ const exportProfile = async (req, res) => {
   try {
     const supplier = await loadSupplierForUser(req.user.id);
     if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
+
     const completeness = evaluateSupplierCompleteness(supplier);
+    const format = String(req.query.format || 'json').toLowerCase();
+    const lang = String(req.query.lang || 'en').split('-')[0];
+
+    if (format === 'pdf') {
+      const buffer = await generatePdfBuffer(supplier, completeness, lang);
+      const filename = getExportFilename(supplier.companyName, 'pdf');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(buffer);
+    }
+
+    if (format === 'excel' || format === 'xlsx') {
+      const buffer = await generateExcelBuffer(supplier, completeness, lang);
+      const filename = getExportFilename(supplier.companyName, 'excel');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(Buffer.from(buffer));
+    }
+
     res.json({
       exportedAt: new Date().toISOString(),
       supplier: supplier.toJSON(),
       completeness
     });
   } catch (error) {
+    console.error('Export profile error:', error);
     res.status(500).json({ message: 'Error exporting profile', error: error.message });
   }
 };

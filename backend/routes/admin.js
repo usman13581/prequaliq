@@ -7,6 +7,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 router.use(authorize('admin'));
 
+router.get('/dashboard/stats', adminController.getDashboardStats);
 router.post('/suppliers', adminController.createSupplier);
 router.post('/procuring-entities', adminController.createProcuringEntity);
 router.post('/companies', adminController.createCompany);

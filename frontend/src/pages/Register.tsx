@@ -47,7 +47,7 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 py-12 relative">
+    <div className="font-website min-h-screen flex items-center justify-center p-4 py-12 relative">
       <div className="login-page-bg" aria-hidden="true" />
       <div className="absolute top-4 right-4 z-10">
         <LanguageSwitcher />

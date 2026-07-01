@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { LogOut, Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, ChevronLeft, ChevronRight, User, Lock, Eye, EyeOff, Key, Camera, Upload } from 'lucide-react';
+import { Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, ChevronLeft, ChevronRight, User, Lock, Eye, EyeOff, Key, Camera, Upload, LayoutDashboard } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
-import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { Logo } from '../../components/ui/Logo';
+import { PortalLayout } from '../../components/ui/PortalLayout';
+import { AdminHomeTab, AdminSupplierStatsStrip, AdminEntityStatsStrip } from '../../components/admin/AdminHomeTab';
+import type { AdminDashboardStats } from '../../lib/adminStats';
+import { statsFromSuppliers, statsFromEntities } from '../../lib/adminStats';
 
 interface Supplier {
   id: string;
@@ -56,11 +58,12 @@ const getTurnoverValueForSelect = (val: string | number | undefined): string => 
 
 const AdminDashboard = () => {
   const { t } = useTranslation();
-  const { user, logout } = useAuth();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState('suppliers');
+  const [activeTab, setActiveTab] = useState('home');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [procuringEntities, setProcuringEntities] = useState<ProcuringEntity[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<AdminDashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showCreateSupplier, setShowCreateSupplier] = useState(false);
   const [showCreateEntity, setShowCreateEntity] = useState(false);
@@ -108,6 +111,22 @@ const AdminDashboard = () => {
   };
 
 
+  const fetchDashboardStats = async (showLoading = true) => {
+    try {
+      if (showLoading) setStatsLoading(true);
+      const response = await api.get('/admin/dashboard/stats');
+      setDashboardStats(response.data.stats || null);
+    } catch (error: any) {
+      console.error('Error fetching dashboard stats:', error);
+      if (showLoading) {
+        showToast(error.response?.data?.message || t('adminPortal.statsLoadFailed'), 'error');
+      }
+    } finally {
+      if (showLoading) setStatsLoading(false);
+    }
+  };
+
+
   // Approve/Reject supplier
   const reviewSupplier = async (supplierId: string, action: 'approve' | 'reject') => {
     try {
@@ -118,6 +137,7 @@ const AdminDashboard = () => {
       await api.put(`/admin/suppliers/${supplierId}/review`, { action, rejectionReason });
       showToast(action === 'approve' ? t('msg.supplierApproved') : t('msg.supplierRejected'), 'success');
       fetchSuppliers(false);
+      fetchDashboardStats(false);
       // Reset to first page if current page becomes empty
       const currentPageStart = (supplierPage - 1) * itemsPerPage;
       if (currentPageStart >= suppliers.length - 1 && supplierPage > 1) {
@@ -197,140 +217,60 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchSuppliers(false);
     fetchProcuringEntities(false);
+    fetchDashboardStats(false);
   }, []);
 
   // Load data when tab changes (refresh current tab)
   useEffect(() => {
-    if (activeTab === 'suppliers') {
+    if (activeTab === 'home') {
+      fetchDashboardStats();
+    } else if (activeTab === 'suppliers') {
       fetchSuppliers();
-      setSupplierPage(1); // Reset to first page when switching tabs
+      setSupplierPage(1);
     } else if (activeTab === 'entities') {
       fetchProcuringEntities();
-      setEntityPage(1); // Reset to first page when switching tabs
+      setEntityPage(1);
     }
   }, [activeTab]);
 
+  const sidebarItems = [
+    { id: 'home', label: t('adminPortal.navHome'), icon: LayoutDashboard },
+    { id: 'suppliers', label: t('nav.suppliers'), icon: Users },
+    { id: 'entities', label: t('nav.entities'), icon: Building2 },
+    { id: 'profile', label: t('nav.profile'), icon: User },
+  ];
+
+  const handleSidebarSelect = (id: string) => {
+    if (id === 'profile') {
+      setShowProfileModal(true);
+      return;
+    }
+    setActiveTab(id);
+  };
+
+  const sidebarActiveId = showProfileModal ? 'profile' : activeTab;
+
   return (
-    <div className="min-h-screen app-page-bg">
-      {/* Modern Navbar */}
-      <nav className="bg-card/90 backdrop-blur-lg shadow-lg border-b border-border sticky top-0 z-40">
-        <div className="w-full mx-auto px-5 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-20">
-            <div className="flex items-center gap-4">
-              <Logo to="/admin" subtitle={t('nav.administrator')} size="md" />
-            </div>
-            <div className="flex items-center gap-4">
-              <LanguageSwitcher />
-              <button
-                onClick={() => setShowProfileModal(true)}
-                className="hidden md:flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-primary-50 to-accent-subtle rounded-xl border border-primary-200/50 hover:from-primary-100 hover:to-primary-100 transition-all duration-200 cursor-pointer"
-              >
-                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
-                  {user?.firstName?.[0]}{user?.lastName?.[0]}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-xs text-gray-500">{t('nav.administrator')}</p>
-                </div>
-              </button>
-              <button
-                onClick={logout}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
-              >
-                <LogOut size={18} />
-                <span className="hidden sm:inline">{t('common.logout')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <>
+      <PortalLayout
+        logoTo="/admin"
+        logoSubtitle={t('nav.adminDashboard')}
+        roleLabel={t('nav.administrator')}
+        sidebarItems={sidebarItems}
+        activeTab={sidebarActiveId}
+        onTabSelect={handleSidebarSelect}
+        onProfileClick={() => setShowProfileModal(true)}
+      >
+        {activeTab === 'home' && (
+          <AdminHomeTab
+            stats={dashboardStats}
+            loading={statsLoading}
+          />
+        )}
 
-      <div className="w-full mx-auto px-5 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-white/50 hover:shadow-2xl transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">{t('nav.totalSuppliers')}</p>
-                <p className="text-3xl font-bold text-gray-900">{suppliers.length}</p>
-                <p className="text-xs text-gray-500 mt-2">
-                  {suppliers.filter(s => s.status === 'approved').length} {t('nav.approved')}
-                </p>
-              </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Users className="text-white" size={28} />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-6 border border-white/50 hover:shadow-2xl transition-all duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">{t('nav.procuringEntities')}</p>
-                <p className="text-3xl font-bold text-gray-900">{procuringEntities.length}</p>
-                <p className="text-xs text-gray-500 mt-2">
-                  {procuringEntities.filter(e => e.user?.isActive).length} {t('nav.active')}
-                </p>
-              </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-lg">
-                <Building2 className="text-white" size={28} />
-              </div>
-            </div>
-          </div>
-          
-        </div>
-
-        {/* Main Content Card */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/50 overflow-hidden">
-          {/* Modern Tab Navigation */}
-          <div className="bg-gradient-to-r from-primary-50/80 to-primary-100/50 border-b border-gray-200/50">
-            <nav className="flex space-x-1 px-2">
-              <button
-                onClick={() => setActiveTab('suppliers')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
-                  activeTab === 'suppliers'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'suppliers' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <Users className={activeTab === 'suppliers' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.suppliers')}
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                  activeTab === 'suppliers'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {suppliers.length}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('entities')}
-                className={`relative py-4 px-3 font-semibold text-sm flex items-center gap-2 transition-all duration-200 ${
-                  activeTab === 'entities'
-                    ? 'text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {activeTab === 'entities' && (
-                  <span className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-800 rounded-t-full"></span>
-                )}
-                <Building2 className={activeTab === 'entities' ? 'text-primary-600' : 'text-gray-400'} size={20} />
-                {t('nav.entities')}
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                  activeTab === 'entities'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {procuringEntities.length}
-                </span>
-              </button>
-            </nav>
-          </div>
-
-          <div className="px-2 py-6">
+        {(activeTab === 'suppliers' || activeTab === 'entities') && (
+        <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 overflow-hidden">
+          <div className="px-3 sm:px-4 py-4">
             {loading && (
               <div className="text-center py-16">
                 <div className="inline-flex flex-col items-center">
@@ -346,7 +286,9 @@ const AdminDashboard = () => {
             )}
 
             {!loading && activeTab === 'suppliers' && (
-              <div className="px-2 py-6">
+              <div className="space-y-6">
+                <AdminSupplierStatsStrip stats={statsFromSuppliers(suppliers)} />
+              <div className="px-0 sm:px-1">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{t('sections.supplierManagement')}</h2>
@@ -546,10 +488,13 @@ const AdminDashboard = () => {
                   </>
                 )}
               </div>
+              </div>
             )}
 
             {!loading && activeTab === 'entities' && (
-              <div className="px-2 py-6">
+              <div className="space-y-6">
+                <AdminEntityStatsStrip stats={statsFromEntities(procuringEntities)} />
+              <div className="px-0 sm:px-1">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{t('sections.entityManagement')}</h2>
@@ -720,11 +665,13 @@ const AdminDashboard = () => {
                   </>
                 )}
               </div>
+              </div>
             )}
 
           </div>
         </div>
-      </div>
+        )}
+      </PortalLayout>
 
       {/* Create Supplier Modal */}
       {showCreateSupplier && (
@@ -832,7 +779,7 @@ const AdminDashboard = () => {
           onConfirm={handleDeleteEntity}
         />
       )}
-    </div>
+    </>
   );
 };
 

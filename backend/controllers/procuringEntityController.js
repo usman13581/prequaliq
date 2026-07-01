@@ -367,9 +367,118 @@ const getSupplierDetails = async (req, res) => {
   }
 };
 
+const getDashboardStats = async (req, res) => {
+  try {
+    const entity = await db.ProcuringEntity.findOne({
+      where: { userId: req.user.id },
+      attributes: ['id', 'entityName']
+    });
+    if (!entity) {
+      return res.status(404).json({ message: 'Procuring entity not found' });
+    }
+
+    const now = new Date();
+    const entityId = entity.id;
+    const questionnaireWhere = { procuringEntityId: entityId };
+    const questionnaireJoin = {
+      model: db.Questionnaire,
+      as: 'questionnaire',
+      where: questionnaireWhere,
+      attributes: [],
+      required: true
+    };
+
+    const [
+      questionnairesTotal,
+      questionnairesActive,
+      questionnairesOverdue,
+      questionnairesOpen,
+      responsesSubmitted,
+      responsesDraft,
+      matchingSuppliers,
+      recentQuestionnaires,
+      nearestQuestionnaire
+    ] = await Promise.all([
+      db.Questionnaire.count({ where: questionnaireWhere }),
+      db.Questionnaire.count({ where: { ...questionnaireWhere, isActive: true } }),
+      db.Questionnaire.count({
+        where: { ...questionnaireWhere, isActive: true, deadline: { [Op.lt]: now } }
+      }),
+      db.Questionnaire.count({
+        where: { ...questionnaireWhere, isActive: true, deadline: { [Op.gte]: now } }
+      }),
+      db.QuestionnaireResponse.count({
+        where: { status: 'submitted' },
+        include: [questionnaireJoin]
+      }),
+      db.QuestionnaireResponse.count({
+        where: { status: 'draft' },
+        include: [questionnaireJoin]
+      }),
+      db.QuestionnaireResponse.count({
+        distinct: true,
+        col: 'supplierId',
+        where: { status: 'submitted' },
+        include: [questionnaireJoin]
+      }),
+      db.Questionnaire.findAll({
+        where: questionnaireWhere,
+        limit: 5,
+        order: [['createdAt', 'DESC']],
+        include: [{ model: db.CPVCode, as: 'cpvCode', attributes: ['code', 'description'] }],
+        attributes: ['id', 'title', 'deadline', 'isActive', 'createdAt']
+      }),
+      db.Questionnaire.findOne({
+        where: { procuringEntityId: entityId, isActive: true, deadline: { [Op.gte]: now } },
+        order: [['deadline', 'ASC']],
+        attributes: ['id', 'title', 'deadline']
+      })
+    ]);
+
+    let nextAction = { labelKey: 'allSet', tab: null };
+    if (questionnairesTotal === 0) {
+      nextAction = { labelKey: 'createQuestionnaire', tab: 'questionnaires' };
+    } else if (questionnairesOverdue > 0) {
+      nextAction = { labelKey: 'reviewOverdue', tab: 'questionnaires' };
+    } else if (responsesDraft > 0) {
+      nextAction = { labelKey: 'reviewDrafts', tab: 'questionnaires' };
+    } else if (matchingSuppliers === 0 && questionnairesOpen > 0) {
+      nextAction = { labelKey: 'awaitingResponses', tab: 'questionnaires' };
+    } else if (matchingSuppliers > 0) {
+      nextAction = { labelKey: 'searchSuppliers', tab: 'suppliers' };
+    }
+
+    res.json({
+      stats: {
+        entityName: entity.entityName,
+        questionnaires: {
+          total: questionnairesTotal,
+          active: questionnairesActive,
+          overdue: questionnairesOverdue,
+          open: questionnairesOpen
+        },
+        responses: {
+          submitted: responsesSubmitted,
+          draft: responsesDraft,
+          total: responsesSubmitted + responsesDraft
+        },
+        matchingSuppliers,
+        nearestDeadline: nearestQuestionnaire?.deadline || null,
+        nearestDeadlineTitle: nearestQuestionnaire?.title || null,
+        recentQuestionnaires,
+        nextAction
+      }
+    });
+  } catch (error) {
+    console.error('Get procuring entity dashboard stats error:', error);
+    res.status(500).json({ message: 'Error fetching dashboard stats', error: error.message });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   getSuppliers,
-  getSupplierDetails
+  getSupplierDetails,
+  getDashboardStats
 };
