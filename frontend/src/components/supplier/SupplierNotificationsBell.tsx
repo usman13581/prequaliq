@@ -52,6 +52,13 @@ export function SupplierNotificationsBell({ onNavigate }: { onNavigate: (tab: st
     fetchNotifications();
   };
 
+  const handleMarkAllRead = async () => {
+    try {
+      await api.put('/supplier/notifications/read-all');
+      fetchNotifications();
+    } catch { /* ignore */ }
+  };
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -69,8 +76,17 @@ export function SupplierNotificationsBell({ onNavigate }: { onNavigate: (tab: st
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-[min(100vw-2rem,320px)] bg-white rounded-xl shadow-2xl border border-border z-50 max-h-96 overflow-y-auto">
-          <div className="px-4 py-3 border-b border-border font-semibold text-gray-900">
-            {t('supplierPortal.notifications')}
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
+            <span className="font-semibold text-gray-900">{t('supplierPortal.notifications')}</span>
+            {unread > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                className="text-xs text-primary-600 hover:underline font-medium"
+              >
+                {t('supplierPortal.markAllRead')}
+              </button>
+            )}
           </div>
           {notifications.length === 0 ? (
             <p className="p-4 text-sm text-muted">{t('supplierPortal.noNotifications')}</p>

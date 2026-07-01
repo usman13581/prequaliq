@@ -575,13 +575,37 @@ const getSupplierById = async (req, res) => {
         {
           model: db.User,
           as: 'user',
-          attributes: ['id', 'email', 'firstName', 'lastName', 'phone']
+          attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'isActive']
         },
         {
           model: db.CPVCode,
           as: 'cpvCodes',
           through: { attributes: [] }
-        }
+        },
+        ...(db.NUTSCode ? [{
+          model: db.NUTSCode,
+          as: 'nutsCodes',
+          through: { attributes: [] },
+          required: false
+        }] : []),
+        {
+          model: db.Document,
+          as: 'documents',
+          required: false
+        },
+        ...(db.SupplierReference ? [{
+          model: db.SupplierReference,
+          as: 'references',
+          required: false
+        }] : []),
+        ...(db.SupplierProfileSubmission ? [{
+          model: db.SupplierProfileSubmission,
+          as: 'profileSubmissions',
+          required: false,
+          separate: true,
+          order: [['submittedAt', 'DESC']],
+          limit: 10
+        }] : [])
       ]
     });
 

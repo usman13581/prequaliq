@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle, XCircle } from 'lucide-react';
+import { translateCompletenessSection } from '../../lib/supplierCompletenessI18n';
 
 type Completeness = {
   percent: number;
@@ -39,7 +40,7 @@ export function SupplierProfileCompleteness({ completeness }: { completeness: Co
             key={section.id}
             className={`text-sm px-3 py-2 rounded-lg border ${section.complete ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
           >
-            {section.label}
+            {translateCompletenessSection(t, section)}
           </div>
         ))}
       </div>
@@ -76,7 +77,7 @@ export function SupplierSubmitModal({
           {completeness?.sections.map((s) => (
             <div key={s.id} className="flex items-center gap-2 text-sm">
               {s.complete ? <CheckCircle className="text-green-600" size={16} /> : <XCircle className="text-red-500" size={16} />}
-              <span>{s.label}</span>
+              <span>{translateCompletenessSection(t, s)}</span>
             </div>
           ))}
           <label className="flex items-start gap-2 text-sm text-gray-700">

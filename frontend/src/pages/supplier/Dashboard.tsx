@@ -10,6 +10,7 @@ import { SupplierOverviewTab } from '../../components/supplier/SupplierOverviewT
 import { SupplierNotificationsBell } from '../../components/supplier/SupplierNotificationsBell';
 import { SupplierProfileCompleteness, SupplierSubmitModal } from '../../components/supplier/SupplierProfileCompleteness';
 import { SupplierReferencesSection } from '../../components/supplier/SupplierReferencesSection';
+import { SupplierProfileSubmissionHistory } from '../../components/supplier/SupplierProfileSubmissionHistory';
 import { SupplierDocumentList } from '../../components/supplier/SupplierDocumentList';
 import { 
   LogOut, FileText, History, User, Upload, Plus, Edit2, Eye, 
@@ -282,6 +283,7 @@ const SupplierDashboard = () => {
   const handleUpdateDocumentMetadata = async (id: string, metadata: { validFrom?: string; validTo?: string; issuer?: string; documentNumber?: string }) => {
     try {
       await api.put(`/documents/supplier/${id}/metadata`, metadata);
+      showToast(t('supplierPortal.metadataSaved'), 'success');
       await fetchProfile();
       await fetchCompleteness();
     } catch (error: any) {
@@ -726,7 +728,7 @@ const SupplierDashboard = () => {
         documents={getDocumentsForQuestion(docType)}
         getDocumentUrl={getDocumentUrl}
         onDelete={handleDeleteDocument}
-        onUpdateValidTo={(id, validTo) => handleUpdateDocumentMetadata(id, { validTo })}
+        onUpdateMetadata={handleUpdateDocumentMetadata}
       />
     </div>
   );
@@ -1877,6 +1879,8 @@ const SupplierDashboard = () => {
                             </div>
 
                             <SupplierReferencesSection editing={editingProfile} />
+
+                            <SupplierProfileSubmissionHistory />
 
                             {/* Insurance */}
                             <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">

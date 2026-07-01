@@ -12,6 +12,7 @@ router.put('/profile', supplierController.updateProfile);
 router.get('/profile/completeness', supplierController.getCompleteness);
 router.post('/profile/submit', supplierController.submitProfile);
 router.get('/profile/export', supplierController.exportProfile);
+router.get('/profile/submissions', supplierController.getProfileSubmissions);
 router.get('/qualification', supplierController.getQualification);
 router.put('/cpv-codes', supplierController.updateCPVCodes);
 router.put('/nuts-codes', supplierController.updateNUTSCodes);

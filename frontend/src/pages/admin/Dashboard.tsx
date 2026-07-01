@@ -10,7 +10,7 @@ import { Logo } from '../../components/ui/Logo';
 interface Supplier {
   id: string;
   companyName: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'requalification_required';
   isActive?: boolean;
   user: {
     email: string;
@@ -403,9 +403,13 @@ const AdminDashboard = () => {
                                 <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
                                   supplier.status === 'approved' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
                                   supplier.status === 'rejected' ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' :
+                                  supplier.status === 'requalification_required' ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white' :
                                   'bg-gradient-to-r from-yellow-400 to-yellow-500 text-white'
                                 }`}>
-                                  {supplier.status === 'approved' ? t('common.approved') : supplier.status === 'rejected' ? t('common.rejected') : t('common.pending')}
+                                  {supplier.status === 'approved' ? t('common.approved') :
+                                    supplier.status === 'rejected' ? t('common.rejected') :
+                                    supplier.status === 'requalification_required' ? t('supplierPortal.requalificationTitle') :
+                                    t('common.pending')}
                                 </span>
                                 <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
                                   supplier.user?.isActive 
@@ -1763,6 +1767,13 @@ type SupplierWithProfile = Supplier & {
   environmentalManagementSystem?: string; socialResponsibilityManagementSystem?: string;
   ohsManagementSystem?: string; groundsForExclusion?: string;
   laborLawRegulations?: string; sanctionsRussiaBelarus?: string;
+  qualifiedAt?: string; qualificationExpiresAt?: string; profileVersion?: number;
+  profileSubmittedAt?: string; rejectionReason?: string;
+  insurerName?: string; insurancePolicyNumber?: string; insuranceCoverageAmount?: string | number;
+  insuranceValidTo?: string;
+  references?: { id: string; projectName: string }[];
+  profileSubmissions?: { id: string; version: number; status: string; submittedAt: string; reviewedAt?: string }[];
+  documents?: { id: string; fileName: string; validTo?: string; isActive?: boolean }[];
 };
 
 const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: SupplierWithProfile; onClose: () => void; onSuccess: () => void }) => {
@@ -1888,6 +1899,46 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="rounded-xl border border-primary-100 bg-primary-50/50 p-4 space-y-3">
+            <h4 className="font-bold text-gray-900">{t('adminSupplier.qualificationSummary')}</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div><span className="text-muted">{t('columns.status')}:</span> <strong>{supplier.status}</strong></div>
+              <div><span className="text-muted">{t('adminSupplier.profileVersion')}:</span> <strong>v{supplier.profileVersion || 0}</strong></div>
+              {supplier.qualifiedAt && (
+                <div><span className="text-muted">{t('adminSupplier.qualifiedAt')}:</span> <strong>{new Date(supplier.qualifiedAt).toLocaleDateString()}</strong></div>
+              )}
+              {supplier.qualificationExpiresAt && (
+                <div><span className="text-muted">{t('adminSupplier.expiresAt')}:</span> <strong>{new Date(supplier.qualificationExpiresAt).toLocaleDateString()}</strong></div>
+              )}
+              {supplier.profileSubmittedAt && (
+                <div><span className="text-muted">{t('adminSupplier.submittedAt')}:</span> <strong>{new Date(supplier.profileSubmittedAt).toLocaleDateString()}</strong></div>
+              )}
+              <div><span className="text-muted">{t('adminSupplier.referencesCount')}:</span> <strong>{supplier.references?.length || 0}</strong></div>
+              <div><span className="text-muted">{t('adminSupplier.documentsCount')}:</span> <strong>{(supplier.documents || []).filter((d) => d.isActive !== false).length}</strong></div>
+              {(supplier.insurerName || supplier.insurancePolicyNumber) && (
+                <div className="sm:col-span-2">
+                  <span className="text-muted">{t('adminSupplier.insurance')}:</span>{' '}
+                  <strong>{[supplier.insurerName, supplier.insurancePolicyNumber].filter(Boolean).join(' · ')}</strong>
+                </div>
+              )}
+            </div>
+            {supplier.rejectionReason && (
+              <p className="text-sm text-red-600">{supplier.rejectionReason}</p>
+            )}
+            {supplier.profileSubmissions && supplier.profileSubmissions.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted uppercase mb-2">{t('adminSupplier.recentSubmissions')}</p>
+                <ul className="space-y-1 text-sm">
+                  {supplier.profileSubmissions.slice(0, 5).map((s) => (
+                    <li key={s.id} className="flex justify-between gap-2">
+                      <span>v{s.version} · {new Date(s.submittedAt).toLocaleDateString()}</span>
+                      <span className="font-medium">{s.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="edit-firstName" className="block text-sm font-semibold text-gray-700 mb-2">

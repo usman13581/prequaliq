@@ -64,7 +64,7 @@ function evaluateSupplierCompleteness(supplier) {
     complete: companyMissing.length === 0,
     missing: companyMissing
   });
-  if (companyMissing.length) blockers.push('Complete company information');
+  if (companyMissing.length) blockers.push('company_information');
 
   Object.entries(TEXT_FIELDS).forEach(([key, field]) => {
     const hasText = isNonEmpty(supplier[field]);
@@ -86,18 +86,18 @@ function evaluateSupplierCompleteness(supplier) {
       missing,
       documentStatus: docStatus
     });
-    if (!hasText) blockers.push(`Answer question ${key.slice(1)}`);
-    if (needsDoc && !doc) blockers.push(`Upload document for question ${key.slice(1)}`);
-    if (needsDoc && doc && docStatus === 'expired') blockers.push(`Renew expired document for question ${key.slice(1)}`);
+    if (!hasText) blockers.push(`answer_${key}`);
+    if (needsDoc && !doc) blockers.push(`document_${key}`);
+    if (needsDoc && doc && docStatus === 'expired') blockers.push(`expired_document_${key}`);
   });
 
   const cpvOk = cpvCodes.length > 0;
   sections.push({ id: 'cpv', label: 'CPV codes', complete: cpvOk, missing: cpvOk ? [] : ['cpv'] });
-  if (!cpvOk) blockers.push('Select at least one CPV code');
+  if (!cpvOk) blockers.push('cpv_codes');
 
   const nutsOk = nutsCodes.length > 0;
   sections.push({ id: 'nuts', label: 'NUTS regions', complete: nutsOk, missing: nutsOk ? [] : ['nuts'] });
-  if (!nutsOk) blockers.push('Select at least one NUTS region');
+  if (!nutsOk) blockers.push('nuts_regions');
 
   const refsOk = references.length > 0 || isNonEmpty(supplier.technicalCapacityProfessionalExperience);
   sections.push({
@@ -106,7 +106,7 @@ function evaluateSupplierCompleteness(supplier) {
     complete: refsOk,
     missing: refsOk ? [] : ['reference_or_q12']
   });
-  if (!refsOk) blockers.push('Add at least one reference or complete question 12');
+  if (!refsOk) blockers.push('references');
 
   const insuranceOk = isNonEmpty(supplier.insurerName) && isNonEmpty(supplier.insurancePolicyNumber);
   sections.push({
@@ -115,11 +115,11 @@ function evaluateSupplierCompleteness(supplier) {
     complete: insuranceOk,
     missing: insuranceOk ? [] : ['insurance']
   });
-  if (!insuranceOk) blockers.push('Complete insurance information');
+  if (!insuranceOk) blockers.push('insurance');
 
   const completedCount = sections.filter((s) => s.complete).length;
   const percent = Math.round((completedCount / sections.length) * 100);
-  const readyToSubmit = blockers.filter((b) => !b.includes('expiring')).length === 0 && percent === 100;
+  const readyToSubmit = blockers.filter((b) => !String(b).includes('expiring')).length === 0 && percent === 100;
 
   const activeDocs = getActiveDocuments(documents);
   const expiringCount = activeDocs.filter((d) => getDocumentStatus(d) === 'expiring_soon').length;

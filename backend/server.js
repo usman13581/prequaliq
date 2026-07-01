@@ -58,4 +58,10 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  try {
+    const { startSupplierExpiryScheduler } = require('./services/supplierExpiryScheduler');
+    startSupplierExpiryScheduler();
+  } catch (err) {
+    console.warn('Supplier expiry scheduler not started:', err.message);
+  }
 });

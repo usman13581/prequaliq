@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import {
-  CheckCircle, AlertTriangle, FileText, Shield, Clock, Award, ArrowRight
+  CheckCircle, AlertTriangle, FileText, Shield, Clock, ArrowRight
 } from 'lucide-react';
+import { translateCompletenessBlocker, translateNextActionLabel } from '../../lib/supplierCompletenessI18n';
+import { SupplierQualificationCertificate } from './SupplierQualificationCertificate';
 
 type DashboardData = {
   status: string;
@@ -19,7 +21,8 @@ type DashboardData = {
     profileSubmittedAt?: string;
     rejectionReason?: string;
   };
-  nextAction: { label: string; tab: string };
+  nextAction: { labelKey?: string; label?: string; tab: string };
+  companyName?: string;
 };
 
 export function SupplierOverviewTab({
@@ -48,6 +51,12 @@ export function SupplierOverviewTab({
     rejected: 'bg-red-100 text-red-800',
     requalification_required: 'bg-orange-100 text-orange-800'
   };
+
+  const statusLabel = data.status === 'requalification_required'
+    ? t('supplierPortal.requalificationTitle')
+    : t(`common.${data.status}`);
+
+  const nextLabel = translateNextActionLabel(t, data.nextAction.labelKey, data.nextAction.label);
 
   return (
     <div className="space-y-6">
@@ -83,8 +92,7 @@ export function SupplierOverviewTab({
             <Shield className="text-primary-600" size={20} />
           </div>
           <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${statusColors[data.status] || 'bg-gray-100 text-gray-800'}`}>
-            {t(`common.${data.status === 'requalification_required' ? 'pending' : data.status}`)}
-            {data.status === 'requalification_required' && ' *'}
+            {statusLabel}
           </span>
         </div>
 
@@ -130,30 +138,22 @@ export function SupplierOverviewTab({
         </div>
       </div>
 
-      {data.status === 'approved' && data.qualification.qualificationExpiresAt && (
-        <div className="bg-gradient-to-r from-primary-50 to-accent-subtle rounded-2xl p-6 border border-primary-100">
-          <div className="flex items-start gap-3">
-            <Award className="text-primary-700 shrink-0" size={24} />
-            <div>
-              <h3 className="font-bold text-gray-900">{t('supplierPortal.certificateTitle')}</h3>
-              <p className="text-sm text-muted mt-1">
-                {t('supplierPortal.validUntil')}: {new Date(data.qualification.qualificationExpiresAt).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      <SupplierQualificationCertificate
+        companyName={data.companyName}
+        qualificationExpiresAt={data.qualification.qualificationExpiresAt}
+        canDownload={data.status === 'approved' || data.status === 'requalification_required'}
+      />
 
       <div className="bg-white rounded-2xl p-6 border border-border shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <p className="text-sm text-muted">{t('supplierPortal.nextAction')}</p>
-          <p className="text-lg font-semibold text-gray-900">{data.nextAction.label}</p>
+          <p className="text-lg font-semibold text-gray-900">{nextLabel}</p>
         </div>
         <button
           onClick={() => onNavigate(data.nextAction.tab)}
           className="btn-save inline-flex items-center gap-2 px-6 py-3 rounded-full font-semibold"
         >
-          {data.nextAction.label}
+          {nextLabel}
           <ArrowRight size={18} />
         </button>
       </div>
@@ -165,7 +165,7 @@ export function SupplierOverviewTab({
             {data.completeness.blockers.slice(0, 8).map((item) => (
               <li key={item} className="text-sm text-gray-700 flex items-start gap-2">
                 <span className="text-red-500 mt-0.5">•</span>
-                {item}
+                {translateCompletenessBlocker(t, item)}
               </li>
             ))}
           </ul>

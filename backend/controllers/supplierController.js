@@ -170,23 +170,24 @@ const getDashboard = async (req, res) => {
       }
     }
 
-    let nextAction = { label: 'View dashboard', tab: 'overview' };
+    let nextAction = { labelKey: 'viewDashboard', tab: 'overview' };
     if (supplier.status === 'rejected') {
-      nextAction = { label: 'Fix and resubmit profile', tab: 'profile' };
+      nextAction = { labelKey: 'fixAndResubmit', tab: 'profile' };
     } else if (supplier.status === 'requalification_required') {
-      nextAction = { label: 'Complete annual re-qualification', tab: 'profile' };
+      nextAction = { labelKey: 'completeRequalification', tab: 'profile' };
     } else if (!completeness.readyToSubmit && supplier.status !== 'approved') {
-      nextAction = { label: 'Complete qualification profile', tab: 'profile' };
+      nextAction = { labelKey: 'completeProfile', tab: 'profile' };
     } else if (completeness.readyToSubmit && ['pending', 'rejected'].includes(supplier.status)) {
-      nextAction = { label: 'Submit for qualification', tab: 'profile' };
+      nextAction = { labelKey: 'submitForQualification', tab: 'profile' };
     } else if (openQuestionnaires > 0) {
-      nextAction = { label: 'Respond to buyer questionnaire', tab: 'questionnaires' };
+      nextAction = { labelKey: 'respondQuestionnaire', tab: 'questionnaires' };
     } else if (completeness.documents.expiringCount > 0) {
-      nextAction = { label: 'Review expiring documents', tab: 'profile' };
+      nextAction = { labelKey: 'reviewDocuments', tab: 'profile' };
     }
 
     res.json({
       status: supplier.status,
+      companyName: supplier.companyName,
       completeness,
       documents: completeness.documents,
       openQuestionnaires,
@@ -508,6 +509,23 @@ const exportProfile = async (req, res) => {
   }
 };
 
+const getProfileSubmissions = async (req, res) => {
+  try {
+    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+    if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
+    const submissions = db.SupplierProfileSubmission
+      ? await db.SupplierProfileSubmission.findAll({
+        where: { supplierId: supplier.id },
+        order: [['submittedAt', 'DESC']],
+        limit: 20
+      })
+      : [];
+    res.json({ submissions });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching submission history', error: error.message });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -526,5 +544,6 @@ module.exports = {
   markAllNotificationsRead,
   getActiveQuestionnaires,
   getQuestionnaireHistory,
-  exportProfile
+  exportProfile,
+  getProfileSubmissions
 };
