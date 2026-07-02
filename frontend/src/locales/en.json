@@ -21,6 +21,7 @@
     "required": "Required",
     "active": "Active",
     "inactive": "Inactive",
+    "paginationShowing": "Showing {{from}} to {{to}} of {{total}} {{label}}",
     "expired": "Expired",
     "submitted": "Submitted",
     "draft": "Draft",
@@ -124,6 +125,7 @@
     "nearestDeadline": "Next deadline",
     "recentQuestionnaires": "Recent questionnaires",
     "withResponses": "With responses",
+    "responsesLabel": "responses",
     "statsLoadFailed": "Failed to load dashboard insights",
     "nextActions": {
       "allSet": "You're all set — no action needed right now",

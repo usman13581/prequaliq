@@ -21,6 +21,7 @@
     "required": "Obligatoriskt",
     "active": "Aktiv",
     "inactive": "Inaktiv",
+    "paginationShowing": "Visar {{from}} till {{to}} av {{total}} {{label}}",
     "expired": "Utgånget",
     "submitted": "Inskickad",
     "draft": "Utkast",
@@ -124,6 +125,7 @@
     "nearestDeadline": "Nästa deadline",
     "recentQuestionnaires": "Senaste enkäter",
     "withResponses": "Med svar",
+    "responsesLabel": "svar",
     "statsLoadFailed": "Kunde inte ladda översiktsdata",
     "nextActions": {
       "allSet": "Allt klart — inget behöver göras just nu",

@@ -10,6 +10,9 @@ import {
   EntityQuestionnaireStatsStrip,
   type EntityDashboardStats
 } from '../../components/procuringEntity/ProcuringEntityHomeTab';
+import { useListPagination } from '../../hooks/useListPagination';
+import { ListPagination } from '../../components/ui/ListPagination';
+import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
 import { 
   FileText, Search, User, Plus, Edit2, Trash2, Eye, 
   Upload, X, Calendar, Building2, Save, XCircle, Camera,
@@ -670,6 +673,65 @@ const ProcuringEntityDashboard = () => {
     }
   };
 
+  const {
+    page: questionnaireListPage,
+    setPage: setQuestionnaireListPage,
+    paginatedItems: paginatedEntityQuestionnaires,
+    total: entityQuestionnaireTotal,
+    pageSize: entityQuestionnairePageSize
+  } = useListPagination(questionnaires);
+
+  const openQuestionnaireEditor = (questionnaire: Questionnaire) => {
+    try {
+      const questionsForEdit = (questionnaire.questions || []).map((q: Question, index: number) => ({
+        id: q.id,
+        questionText: q.questionText || '',
+        questionType: q.questionType || 'text',
+        options: Array.isArray(q.options) ? q.options : [],
+        isRequired: q.isRequired !== undefined ? q.isRequired : true,
+        requiresDocument: q.requiresDocument || false,
+        documentType: q.documentType || '',
+        order: q.order !== undefined ? q.order : index,
+        attachedDocumentId: q.attachedDocumentId ?? q.attachedDocument?.id ?? null,
+        attachedDocument: q.attachedDocument ?? null
+      }));
+
+      let deadlineForEdit = '';
+      if (questionnaire.deadline) {
+        try {
+          const date = new Date(questionnaire.deadline);
+          if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            deadlineForEdit = `${year}-${month}-${day}T${hours}:${minutes}`;
+          }
+        } catch (e) {
+          console.error('Error formatting deadline:', e);
+        }
+      }
+
+      const qToEdit: Questionnaire = {
+        id: questionnaire.id,
+        title: questionnaire.title || '',
+        description: questionnaire.description || '',
+        deadline: deadlineForEdit,
+        cpvCodeId: questionnaire.cpvCode?.id || '',
+        cpvCode: questionnaire.cpvCode || { id: '', code: '', description: '' },
+        questions: questionsForEdit,
+        createdAt: questionnaire.createdAt || new Date().toISOString(),
+        isActive: questionnaire.isActive !== undefined ? questionnaire.isActive : true
+      };
+      setEditingQuestionnaire(qToEdit);
+      fetchCPVCodes();
+    } catch (error: any) {
+      console.error('Error preparing questionnaire for edit:', error);
+      showToast(`${t('msg.errorPreparingQuestionnaire')}: ${error.message}`, 'error');
+    }
+  };
+
   const sidebarItems = [
     { id: 'home', label: t('entityPortal.navHome'), icon: LayoutDashboard },
     { id: 'questionnaires', label: t('nav.questionnaires'), icon: FileText },
@@ -727,138 +789,89 @@ const ProcuringEntityDashboard = () => {
                     <p className="text-sm text-gray-500 mt-2">{t('sections.createFirstQuestionnaire')}</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {questionnaires.map((questionnaire) => (
-                      <div
+                  <div className="space-y-2">
+                    {paginatedEntityQuestionnaires.map((questionnaire) => (
+                      <QuestionnaireSlimRow
                         key={questionnaire.id}
-                        className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">{questionnaire.title}</h3>
-                            {questionnaire.description && (
-                              <p className="text-gray-600 mb-3">{questionnaire.description}</p>
-                            )}
-                            <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                              <span className="flex items-center gap-1">
-                                <Building2 size={16} />
-                                {questionnaire.cpvCode?.code} - {questionnaire.cpvCode?.description}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar size={16} />
-                                {t('columns.deadline')}: {new Date(questionnaire.deadline).toLocaleDateString()}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <FileText size={16} />
-                                {questionnaire.questions?.length || 0} {t('sections.questionsCount')}
-                              </span>
-                              {questionnaire.responses && (
-                                <span className="flex items-center gap-1">
-                                  <CheckCircle size={16} />
-                                  {questionnaire.responses.length} responses
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setSelectedQuestionnaire(questionnaire)}
-                              className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
-                            >
-                              <Eye size={16} />
-                              View
-                            </button>
-                            <button
-                              onClick={() => {
-                                try {
-                                  // Prepare questionnaire for editing - ensure questions have proper structure (include attachedDocument)
-                                  const questionsForEdit = (questionnaire.questions || []).map((q: Question, index: number) => ({
-                                    id: q.id,
-                                    questionText: q.questionText || '',
-                                    questionType: q.questionType || 'text',
-                                    options: Array.isArray(q.options) ? q.options : [],
-                                    isRequired: q.isRequired !== undefined ? q.isRequired : true,
-                                    requiresDocument: q.requiresDocument || false,
-                                    documentType: q.documentType || '',
-                                    order: q.order !== undefined ? q.order : index,
-                                    attachedDocumentId: q.attachedDocumentId ?? q.attachedDocument?.id ?? null,
-                                    attachedDocument: q.attachedDocument ?? null
-                                  }));
-
-                                  // Convert deadline to datetime-local format
-                                  let deadlineForEdit = '';
-                                  if (questionnaire.deadline) {
-                                    try {
-                                      const date = new Date(questionnaire.deadline);
-                                      if (!isNaN(date.getTime())) {
-                                        const year = date.getFullYear();
-                                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                                        const day = String(date.getDate()).padStart(2, '0');
-                                        const hours = String(date.getHours()).padStart(2, '0');
-                                        const minutes = String(date.getMinutes()).padStart(2, '0');
-                                        deadlineForEdit = `${year}-${month}-${day}T${hours}:${minutes}`;
-                                      }
-                                    } catch (e) {
-                                      console.error('Error formatting deadline:', e);
-                                    }
-                                  }
-
-                                  const qToEdit: Questionnaire = {
-                                    id: questionnaire.id,
-                                    title: questionnaire.title || '',
-                                    description: questionnaire.description || '',
-                                    deadline: deadlineForEdit,
-                                    cpvCodeId: questionnaire.cpvCode?.id || '',
-                                    cpvCode: questionnaire.cpvCode || { id: '', code: '', description: '' },
-                                    questions: questionsForEdit,
-                                    createdAt: questionnaire.createdAt || new Date().toISOString(),
-                                    isActive: questionnaire.isActive !== undefined ? questionnaire.isActive : true
-                                  };
-                                  setEditingQuestionnaire(qToEdit);
-                                  fetchCPVCodes();
-                                } catch (error: any) {
-                                  console.error('Error preparing questionnaire for edit:', error);
-                                  showToast(`${t('msg.errorPreparingQuestionnaire')}: ${error.message}`, 'error');
-                                }
-                              }}
-                              className="px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
-                            >
-                              <Edit2 size={16} />
-                              {t('buttons.editQuestionnaire')}
-                            </button>
+                        title={questionnaire.title}
+                        description={questionnaire.description}
+                        meta={
+                          <>
+                            <span className="inline-flex items-center gap-1">
+                              <Building2 size={14} />
+                              {questionnaire.cpvCode?.code} - {questionnaire.cpvCode?.description}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar size={14} />
+                              {t('columns.deadline')}: {new Date(questionnaire.deadline).toLocaleDateString()}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <FileText size={14} />
+                              {questionnaire.questions?.length || 0} {t('sections.questionsCount')}
+                            </span>
                             {questionnaire.responses && questionnaire.responses.length > 0 && (
-                              <button
-                                onClick={() => fetchQuestionnaireResponses(questionnaire.id)}
-                                className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
-                              >
-                                <Users size={16} />
-                                Responses ({questionnaire.responses.length})
-                              </button>
+                              <span className="inline-flex items-center gap-1">
+                                <CheckCircle size={14} />
+                                {questionnaire.responses.length} {t('entityPortal.responsesLabel')}
+                              </span>
                             )}
-                            <button
-                              onClick={() => handleToggleQuestionnaireStatus(questionnaire.id, questionnaire.isActive ?? false)}
-                              className={`px-4 py-2 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2 ${
-                                questionnaire.isActive
-                                  ? 'bg-orange-50 hover:bg-orange-100 text-orange-700'
-                                  : 'bg-green-50 hover:bg-green-100 text-green-700'
-                              }`}
+                          </>
+                        }
+                        trailing={
+                          <>
+                            <StatusBadge tone={questionnaire.isActive !== false ? 'green' : 'gray'}>
+                              {questionnaire.isActive !== false ? t('nav.active') : t('common.inactive')}
+                            </StatusBadge>
+                            <RowActionButton
+                              variant="secondary"
+                              onClick={() => setSelectedQuestionnaire(questionnaire)}
                             >
-                              {questionnaire.isActive ? <PowerOff size={16} /> : <Power size={16} />}
-                              {questionnaire.isActive ? t('buttons.deactivate') : t('buttons.activate')}
-                            </button>
-                            {(!questionnaire.responses || questionnaire.responses.length === 0 || questionnaire.responses.every((r: any) => r.status === 'draft')) && (
-                              <button
-                                onClick={() => handleDeleteQuestionnaire(questionnaire.id)}
-                                className="btn-delete px-4 py-2 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
+                              <Eye size={14} />
+                              {t('buttons.view')}
+                            </RowActionButton>
+                            <RowActionButton
+                              variant="muted"
+                              onClick={() => openQuestionnaireEditor(questionnaire)}
+                            >
+                              <Edit2 size={14} />
+                              {t('buttons.editQuestionnaire')}
+                            </RowActionButton>
+                            {questionnaire.responses && questionnaire.responses.length > 0 && (
+                              <RowActionButton
+                                variant="muted"
+                                onClick={() => fetchQuestionnaireResponses(questionnaire.id)}
                               >
-                                <Trash2 size={16} />
-                                Delete
-                              </button>
+                                <Users size={14} />
+                                {t('buttons.viewResponses')} ({questionnaire.responses.length})
+                              </RowActionButton>
                             )}
-                          </div>
-                        </div>
-                      </div>
+                            <RowActionButton
+                              variant="muted"
+                              onClick={() => handleToggleQuestionnaireStatus(questionnaire.id, questionnaire.isActive ?? false)}
+                            >
+                              {questionnaire.isActive ? <PowerOff size={14} /> : <Power size={14} />}
+                              {questionnaire.isActive ? t('buttons.deactivate') : t('buttons.activate')}
+                            </RowActionButton>
+                            {(!questionnaire.responses || questionnaire.responses.length === 0 || questionnaire.responses.every((r: any) => r.status === 'draft')) && (
+                              <RowActionButton
+                                variant="danger"
+                                onClick={() => handleDeleteQuestionnaire(questionnaire.id)}
+                              >
+                                <Trash2 size={14} />
+                                {t('common.delete')}
+                              </RowActionButton>
+                            )}
+                          </>
+                        }
+                      />
                     ))}
+                    <ListPagination
+                      page={questionnaireListPage}
+                      pageSize={entityQuestionnairePageSize}
+                      total={entityQuestionnaireTotal}
+                      onPageChange={setQuestionnaireListPage}
+                      itemLabel={t('nav.questionnaires').toLowerCase()}
+                    />
                   </div>
                 )}
               </div>

@@ -17,6 +17,9 @@ import {
 import { SupplierReferencesSection } from '../../components/supplier/SupplierReferencesSection';
 import { SupplierProfileSubmissionHistory } from '../../components/supplier/SupplierProfileSubmissionHistory';
 import { SupplierDocumentList } from '../../components/supplier/SupplierDocumentList';
+import { useListPagination } from '../../hooks/useListPagination';
+import { ListPagination } from '../../components/ui/ListPagination';
+import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
 import { 
   FileText, History, User, Upload, Plus, Edit2, Eye, 
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
@@ -688,6 +691,26 @@ const SupplierDashboard = () => {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
+  const {
+    page: questionnairePage,
+    setPage: setQuestionnairePage,
+    paginatedItems: paginatedQuestionnaires,
+    total: filteredQuestionnaireTotal,
+    pageSize: questionnairePageSize
+  } = useListPagination(filteredQuestionnaires);
+
+  const {
+    page: historyPage,
+    setPage: setHistoryPage,
+    paginatedItems: paginatedHistory,
+    total: historyTotal,
+    pageSize: historyPageSize
+  } = useListPagination(questionnaireHistory);
+
+  useEffect(() => {
+    setQuestionnairePage(1);
+  }, [questionnaireFilter, questionnaireSort, setQuestionnairePage]);
+
   const showSubmitButton = profile && (
     profile.status === 'pending' ||
     profile.status === 'rejected' ||
@@ -982,85 +1005,80 @@ const SupplierDashboard = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {filteredQuestionnaires.map((questionnaire) => {
+                  <div className="space-y-2">
+                    {paginatedQuestionnaires.map((questionnaire) => {
                       const hasResponse = questionnaire.responses && questionnaire.responses.length > 0;
                       const isSubmitted = hasResponse && questionnaire.responses?.[0]?.status === 'submitted';
                       const isExpired = new Date(questionnaire.deadline) < new Date();
 
                       return (
-                        <div
+                        <QuestionnaireSlimRow
                           key={questionnaire.id}
-                          className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <h3 className="text-xl font-bold text-gray-900">{questionnaire.title}</h3>
-                                {isSubmitted && (
-                                  <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                                    {t('common.submitted')}
-                                  </span>
-                                )}
-                                {hasResponse && !isSubmitted && (
-                                  <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full">
-                                    {t('common.draft')}
-                                  </span>
-                                )}
-                                {isExpired && (
-                                  <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
-                                    {t('common.expired')}
-                                  </span>
-                                )}
-                              </div>
-                              {questionnaire.description && (
-                                <p className="text-gray-600 mb-3">{questionnaire.description}</p>
+                          title={questionnaire.title}
+                          description={questionnaire.description}
+                          meta={
+                            <>
+                              <span className="inline-flex items-center gap-1">
+                                <Building2 size={14} />
+                                {questionnaire.cpvCode?.code} - {questionnaire.cpvCode?.description}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Calendar size={14} />
+                                {t('columns.deadline')}: {new Date(questionnaire.deadline).toLocaleDateString()}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <FileText size={14} />
+                                {questionnaire.questions?.length || 0} {t('sections.questionsCount')}
+                              </span>
+                            </>
+                          }
+                          trailing={
+                            <>
+                              {isSubmitted && (
+                                <StatusBadge tone="green">{t('common.submitted')}</StatusBadge>
                               )}
-                              <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                                <span className="flex items-center gap-1">
-                                  <Building2 size={16} />
-                                  {questionnaire.cpvCode?.code} - {questionnaire.cpvCode?.description}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <Calendar size={16} />
-                                  {t('columns.deadline')}: {new Date(questionnaire.deadline).toLocaleDateString()}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <FileText size={16} />
-                                  {questionnaire.questions?.length || 0} {t('sections.questionsCount')}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
+                              {hasResponse && !isSubmitted && (
+                                <StatusBadge tone="yellow">{t('common.draft')}</StatusBadge>
+                              )}
+                              {isExpired && (
+                                <StatusBadge tone="red">{t('common.expired')}</StatusBadge>
+                              )}
                               {!isExpired && !isSubmitted && (
-                                <button
+                                <RowActionButton
+                                  variant="primary"
                                   onClick={async () => {
                                     await loadQuestionnaireResponse(questionnaire.id);
                                     setSelectedQuestionnaire(questionnaire);
                                   }}
-                                  className="btn-save px-4 py-2 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
                                 >
-                                  {hasResponse ? <Edit2 size={16} /> : <Plus size={16} />}
+                                  {hasResponse ? <Edit2 size={14} /> : <Plus size={14} />}
                                   {hasResponse ? t('buttons.continue') : t('buttons.respond')}
-                                </button>
+                                </RowActionButton>
                               )}
                               {isSubmitted && (
-                                <button
+                                <RowActionButton
+                                  variant="secondary"
                                   onClick={async () => {
                                     await loadQuestionnaireResponse(questionnaire.id);
                                     setSelectedQuestionnaire(questionnaire);
                                   }}
-                                  className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
                                 >
-                                  <Eye size={16} />
+                                  <Eye size={14} />
                                   {t('buttons.view')}
-                                </button>
+                                </RowActionButton>
                               )}
-                            </div>
-                          </div>
-                        </div>
+                            </>
+                          }
+                        />
                       );
                     })}
+                    <ListPagination
+                      page={questionnairePage}
+                      pageSize={questionnairePageSize}
+                      total={filteredQuestionnaireTotal}
+                      onPageChange={setQuestionnairePage}
+                      itemLabel={t('nav.questionnaires').toLowerCase()}
+                    />
                   </div>
                 )}
               </div>
@@ -1088,101 +1106,88 @@ const SupplierDashboard = () => {
                     <p className="text-sm text-gray-500 mt-2">{t('sections.submittedHistoryWillAppear')}</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {questionnaireHistory.map((response) => {
-                      // For submitted responses in history, don't show as expired even if deadline was changed retroactively
-                      // Submitted responses are always viewable regardless of current deadline status
-                      const isExpired = false; // Always false for submitted responses - they're always viewable
-                      return (
-                      <div
+                  <div className="space-y-2">
+                    {paginatedHistory.map((response) => (
+                      <QuestionnaireSlimRow
                         key={response.id}
-                        className="bg-gradient-to-br from-white to-green-50/30 rounded-2xl p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">
-                              {response.questionnaire?.title}
-                            </h3>
-                            <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
-                              <span className="flex items-center gap-1">
-                                <Building2 size={16} />
-                                {response.questionnaire?.cpvCode?.code} - {response.questionnaire?.cpvCode?.description}
+                        title={response.questionnaire?.title || ''}
+                        meta={
+                          <>
+                            <span className="inline-flex items-center gap-1">
+                              <Building2 size={14} />
+                              {response.questionnaire?.cpvCode?.code} - {response.questionnaire?.cpvCode?.description}
+                            </span>
+                            {response.submittedAt && (
+                              <span className="inline-flex items-center gap-1">
+                                <Calendar size={14} />
+                                {t('columns.submittedAt')}: {new Date(response.submittedAt).toLocaleDateString()}
                               </span>
-                              {response.submittedAt && (
-                                <span className="flex items-center gap-1">
-                                  <Calendar size={16} />
-                                  {t('columns.submittedAt')}: {new Date(response.submittedAt).toLocaleDateString()}
-                                </span>
-                              )}
-                              {response.questionnaire?.deadline && (
-                                <span className="flex items-center gap-1">
-                                  <Calendar size={16} />
-                                  {t('columns.deadline')}: {new Date(response.questionnaire.deadline).toLocaleDateString()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex gap-2 flex-wrap">
-                              <span className="inline-block px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                                {t('common.submitted')}
+                            )}
+                            {response.questionnaire?.deadline && (
+                              <span className="inline-flex items-center gap-1">
+                                <Calendar size={14} />
+                                {t('columns.deadline')}: {new Date(response.questionnaire.deadline).toLocaleDateString()}
                               </span>
-                              {isExpired && (
-                                <span className="inline-block px-3 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded-full">
-                                  {t('common.expired')}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            onClick={async () => {
-                              // Set questionnaire with response status so modal shows as read-only
-                              // Also pre-populate answers from history if available
-                              const preloadedAnswers: Record<string, any> = {};
-                              if (response.answers && response.answers.length > 0) {
-                                response.answers.forEach((answer: any) => {
-                                  let answerValue = answer.answerValue;
-                                  // Handle different answer value formats
-                                  if (answerValue === null || answerValue === undefined) {
-                                    answerValue = answer.answerText || '';
-                                  } else if (typeof answerValue === 'object') {
-                                    if (Array.isArray(answerValue)) {
-                                      answerValue = answerValue.join(',');
-                                    } else if (answerValue.value !== undefined) {
-                                      answerValue = answerValue.value;
-                                    } else {
-                                      answerValue = JSON.stringify(answerValue);
+                            )}
+                          </>
+                        }
+                        trailing={
+                          <>
+                            <StatusBadge tone="green">{t('common.submitted')}</StatusBadge>
+                            <RowActionButton
+                              variant="secondary"
+                              onClick={async () => {
+                                const preloadedAnswers: Record<string, any> = {};
+                                if (response.answers && response.answers.length > 0) {
+                                  response.answers.forEach((answer: any) => {
+                                    let answerValue = answer.answerValue;
+                                    if (answerValue === null || answerValue === undefined) {
+                                      answerValue = answer.answerText || '';
+                                    } else if (typeof answerValue === 'object') {
+                                      if (Array.isArray(answerValue)) {
+                                        answerValue = answerValue.join(',');
+                                      } else if (answerValue.value !== undefined) {
+                                        answerValue = answerValue.value;
+                                      } else {
+                                        answerValue = JSON.stringify(answerValue);
+                                      }
+                                    } else if (typeof answerValue !== 'string') {
+                                      answerValue = String(answerValue);
                                     }
-                                  } else if (typeof answerValue !== 'string') {
-                                    answerValue = String(answerValue);
-                                  }
-                                  preloadedAnswers[answer.questionId] = {
-                                    answerText: answer.answerText || answerValue || '',
-                                    answerValue: answerValue || answer.answerText || '',
-                                    documentId: answer.documentId || null,
-                                    document: answer.document || null
-                                  };
+                                    preloadedAnswers[answer.questionId] = {
+                                      answerText: answer.answerText || answerValue || '',
+                                      answerValue: answerValue || answer.answerText || '',
+                                      documentId: answer.documentId || null,
+                                      document: answer.document || null
+                                    };
+                                  });
+                                }
+                                setQuestionnaireResponse(preloadedAnswers);
+                                setSelectedQuestionnaire({
+                                  ...response.questionnaire,
+                                  responses: [{
+                                    id: response.id,
+                                    status: response.status,
+                                    submittedAt: response.submittedAt
+                                  }]
                                 });
-                              }
-                              setQuestionnaireResponse(preloadedAnswers);
-                              setSelectedQuestionnaire({
-                                ...response.questionnaire,
-                                responses: [{
-                                  id: response.id,
-                                  status: response.status,
-                                  submittedAt: response.submittedAt
-                                }]
-                              });
-                              // Still load to ensure we have the latest data, but preloaded answers will show immediately
-                              await loadQuestionnaireResponse(response.questionnaire.id);
-                            }}
-                            className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-all duration-200 font-medium text-sm flex items-center gap-2"
-                          >
-                            <Eye size={16} />
-                            {t('buttons.viewResponse')}
-                          </button>
-                        </div>
-                      </div>
-                      );
-                    })}
+                                await loadQuestionnaireResponse(response.questionnaire.id);
+                              }}
+                            >
+                              <Eye size={14} />
+                              {t('buttons.viewResponse')}
+                            </RowActionButton>
+                          </>
+                        }
+                      />
+                    ))}
+                    <ListPagination
+                      page={historyPage}
+                      pageSize={historyPageSize}
+                      total={historyTotal}
+                      onPageChange={setHistoryPage}
+                      itemLabel={t('nav.history').toLowerCase()}
+                    />
                   </div>
                 )}
               </div>
