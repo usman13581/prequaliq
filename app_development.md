@@ -1,20 +1,20 @@
-# PrequaliQ — App Development Guide
+# App Development Guide
 
-Single reference for **tech stack**, **project structure**, **UI standards**, **API patterns**, **setup**, and **deployment**. Use this when building new features in PrequaliQ or spinning up a **new app with the same stack and UI**.
+Single reference for **tech stack**, **project structure**, **UI standards**, **API patterns**, **setup**, and **deployment**. Use this when starting a **new full-stack app** or extending an existing one built with this stack.
 
 ---
 
-## 1. Product overview
+## 1. Application pattern
 
-**PrequaliQ** is a supplier qualification and procurement platform with three roles:
+Typical shape: **multi-role web app** with authenticated portals and public auth pages.
 
-| Role | Route prefix | Purpose |
-|------|--------------|---------|
-| **Admin** | `/admin` | Manage suppliers & entities, approve profiles, platform insights |
-| **Procuring entity** | `/procuring-entity` | Questionnaires, supplier search, profile |
-| **Supplier** | `/supplier` | Profile, CPV/NUTS, questionnaires, documents |
+| Layer | Pattern |
+|-------|---------|
+| **Public** | `/login`, `/register` — marketing-style UI |
+| **Portals** | One route prefix per role (e.g. `/admin`, `/app`, `/client`) |
+| **API** | REST under `/api/*`, JWT auth, role-based guards |
 
-**Auth pages:** `/login`, `/register` (public, marketing-style UI).
+Define your own roles, routes, and domain models — keep the **shell** (layout, auth, API client, i18n) consistent.
 
 ---
 
@@ -31,7 +31,7 @@ Single reference for **tech stack**, **project structure**, **UI standards**, **
 | **Multer** | File uploads |
 | **bcryptjs** | Password hashing |
 | **nodemailer / resend** | Email |
-| **exceljs / pdfkit** | Supplier profile export |
+| **exceljs / pdfkit** | Optional exports |
 
 ### Frontend
 | Technology | Purpose |
@@ -41,7 +41,7 @@ Single reference for **tech stack**, **project structure**, **UI standards**, **
 | **Vite** | Build tool & dev server |
 | **Tailwind CSS** | Styling |
 | **React Router v6** | Routing |
-| **react-i18next** | EN / SV translations |
+| **react-i18next** | Translations (e.g. EN / SV) |
 | **axios** | API client |
 | **react-query** | Server state (light usage) |
 | **lucide-react** | Icons |
@@ -51,29 +51,27 @@ Single reference for **tech stack**, **project structure**, **UI standards**, **
 ### Infrastructure (production)
 | Service | Use |
 |---------|-----|
-| **Railway** | API + frontend + PostgreSQL |
-| **GitHub** | `usman13581/prequaliq` |
+| **Railway** (or similar) | API + frontend + PostgreSQL |
+| **GitHub** | Source control |
 
 ---
 
 ## 3. Project structure
 
 ```
-prequaliq-platform/
+your-app/
 ├── app_development.md     # This file
 ├── README.md
-├── SETUP.md               # Legacy — see §6 here
-├── DEPLOYMENT.md          # Legacy — see §8 here
-├── package.json           # Root: npm run dev (concurrent)
+├── package.json           # Root: npm run dev (concurrent backend + frontend)
 ├── backend/
 │   ├── server.js          # Express entry, route mounting
-│   ├── routes/            # auth, admin, supplier, procuringEntity, questionnaires, documents, cpv, nuts
+│   ├── routes/            # auth, admin, domain routes
 │   ├── controllers/
 │   ├── models/            # Sequelize models
 │   ├── middleware/        # auth.js (JWT + authorize roles)
 │   ├── migrations/        # Sequelize migrations
-│   ├── services/          # email, exports, completeness, schedulers
-│   ├── scripts/           # migrate, seed, ensureAdmin
+│   ├── services/          # email, exports, schedulers
+│   ├── scripts/           # migrate, seed, bootstrap users
 │   ├── uploads/           # Uploaded files (gitignored)
 │   └── .env
 └── frontend/
@@ -82,16 +80,13 @@ prequaliq-platform/
     │   ├── index.css      # Design tokens, portal styles, buttons
     │   ├── contexts/      # AuthContext, ToastContext
     │   ├── services/api.ts
-    │   ├── pages/         # admin/, supplier/, procuringEntity/, Login, Register
+    │   ├── pages/         # Per-role dashboards, Login, Register
     │   ├── components/
     │   │   ├── ui/        # PortalLayout, PortalSidebar, Logo, ListPagination
-    │   │   ├── admin/     # AdminHomeTab, AdminStatCards
-    │   │   ├── supplier/
-    │   │   ├── procuringEntity/
-    │   │   └── questionnaires/  # QuestionnaireSlimRow
-    │   ├── hooks/         # useListPagination
-    │   ├── lib/           # adminStats, helpers
-    │   └── locales/       # en.json, sv.json
+    │   │   └── [domain]/  # Feature-specific components
+    │   ├── hooks/         # useListPagination, etc.
+    │   ├── lib/           # Shared helpers
+    │   └── locales/       # en.json, sv.json (or your locales)
     ├── tailwind.config.js
     └── .env                 # VITE_API_URL, VITE_UPLOADS_URL
 ```
@@ -138,18 +133,19 @@ import { PortalLayout } from '../../components/ui/PortalLayout';
 import { LayoutDashboard, User, FileText } from 'lucide-react';
 
 const sidebarItems = [
-  { id: 'home', label: t('entityPortal.navHome'), icon: LayoutDashboard },
+  { id: 'home', label: t('portal.navHome'), icon: LayoutDashboard },
   { id: 'profile', label: t('nav.profile'), icon: User },
+  { id: 'items', label: t('portal.navItems'), icon: FileText },
 ];
 
 <PortalLayout
-  logoTo="/supplier"
-  logoSubtitle={t('nav.supplierPortal')}
-  roleLabel={t('nav.supplier')}
+  logoTo="/app"
+  logoSubtitle={t('portal.title')}
+  roleLabel={t('portal.roleLabel')}
   sidebarItems={sidebarItems}
   activeTab={activeTab}
   onTabSelect={setActiveTab}
-  sidebarVariant="compact"  // or "wide" for procuring entity
+  sidebarVariant="compact"  // or "wide"
 >
   {activeTab === 'home' && <HomeTab />}
 </PortalLayout>
@@ -160,12 +156,7 @@ const sidebarItems = [
 - Header: `portal-top-header` (light gradient)
 - Sidebar: `portal-sidebar` (navy vertical rail, icon + label)
 - Main content: reduced padding (`p-3 sm:p-4 lg:p-5`), tab content only scrolls where needed
-- Default tab: **Home** with dashboard insights (admin + procuring entity + supplier overview)
-
-**Reference implementations:**
-- `frontend/src/pages/admin/Dashboard.tsx`
-- `frontend/src/pages/supplier/Dashboard.tsx`
-- `frontend/src/pages/procuringEntity/Dashboard.tsx`
+- Default tab: **Home** with dashboard insights (stat cards)
 
 ### 4.4 Buttons
 
@@ -174,8 +165,8 @@ Use CSS classes from `index.css` (not ad-hoc colors):
 | Class | Use |
 |-------|-----|
 | `btn-save` / `btn-update` | Primary action (blue) |
-| `btn-approve` | Approve (green) |
-| `btn-reject` | Reject (orange) |
+| `btn-approve` | Positive confirm (green) |
+| `btn-reject` | Caution action (orange) |
 | `btn-cancel` | Secondary cancel |
 | `btn-delete` | Destructive |
 | `btn-close` | Neutral dismiss |
@@ -191,9 +182,9 @@ Logout in header: red gradient button (see `PortalLayout`).
 
 ### 4.6 Cards & lists
 
-**Stat cards (home insights):** `AdminStatCard`, `AdminStatsGrid` from `components/admin/AdminStatCards.tsx`
+**Stat cards (home insights):** reusable grid of metric cards — title, value, optional trend/icon
 
-**Slim list rows:** `QuestionnaireSlimRow` — title + meta left, status badge + actions right
+**Slim list rows:** title + meta on the left, status badge + actions on the right
 
 **Pagination:** `ListPagination` + `useListPagination` hook — **10 items per page** default
 
@@ -204,7 +195,7 @@ import { ListPagination } from '../../components/ui/ListPagination';
 const { page, setPage, paginatedItems, total, pageSize } = useListPagination(items);
 ```
 
-**Empty states:** dashed border, icon, title + hint (see questionnaire empty states in dashboards)
+**Empty states:** dashed border, icon, title + hint
 
 ### 4.7 Auth pages
 
@@ -216,9 +207,9 @@ const { page, setPage, paginatedItems, total, pageSize } = useListPagination(ite
 ### 4.8 i18n
 
 - All user-visible strings via `useTranslation()` → `t('key')`
-- Files: `frontend/src/locales/en.json`, `sv.json`
-- Add keys to **both** languages
-- Namespace examples: `common.*`, `nav.*`, `buttons.*`, `adminPortal.*`, `entityPortal.*`, `supplierPortal.*`
+- Files: `frontend/src/locales/en.json`, `sv.json` (add locales as needed)
+- Add keys to **every** locale file
+- Namespace examples: `common.*`, `nav.*`, `buttons.*`, `portal.*`, `adminPortal.*`
 
 ### 4.9 Icons
 
@@ -237,7 +228,7 @@ Use **lucide-react** only. Size: 14–20px in compact rows, 20–22px in headers
 } />
 ```
 
-Roles: `admin` | `supplier` | `procuring_entity`
+Define roles in your User model (e.g. `admin`, `user`, `manager`) and match them in `ProtectedRoute`.
 
 ### 5.2 Auth (`AuthContext`)
 
@@ -254,7 +245,7 @@ Roles: `admin` | `supplier` | `procuring_entity`
 
 ### 5.4 Dashboard tab pattern
 
-Each portal dashboard is one large component with:
+Each portal dashboard is one component with tab state:
 
 ```tsx
 const [activeTab, setActiveTab] = useState('home');
@@ -293,12 +284,12 @@ cp backend/.env.example backend/.env
 # Edit DB credentials + JWT_SECRET
 
 # 3. Create database
-createdb prequaliq_db
+createdb your_app_db
 
 # 4. Migrate
 cd backend && npm run migrate
 
-# 5. (Optional) seed CPV
+# 5. (Optional) seed data
 npm run seed
 
 # 6. Run both servers from root
@@ -320,28 +311,28 @@ cd .. && npm run dev
 | `PORT` | API port (default 5000) |
 | `NODE_ENV` | `development` / `production` |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL |
-| `DATABASE_URL` | Alternative (Railway production) |
+| `DATABASE_URL` | Alternative (hosted DB in production) |
 | `JWT_SECRET` | Required — strong random string |
 | `JWT_EXPIRE` | Default `7d` |
 | `FRONTEND_URL` | CORS origin (default `http://localhost:5173`) |
 | `UPLOAD_PATH` | `./uploads` |
 | `MAX_FILE_SIZE` | Bytes (default 10MB) |
-| `EMAIL_*` / SMTP | See `backend/EMAIL_SETUP.md` |
+| `EMAIL_*` / SMTP | Transactional email |
 
 **Frontend (`frontend/.env`):**
 
 | Variable | Description |
 |----------|-------------|
-| `VITE_API_URL` | Prod: `https://your-api.railway.app/api` |
-| `VITE_UPLOADS_URL` | Prod: `https://your-api.railway.app/uploads` |
+| `VITE_API_URL` | Prod: `https://your-api.example.com/api` |
+| `VITE_UPLOADS_URL` | Prod: `https://your-api.example.com/uploads` |
 
-### Create admin user
+### Bootstrap admin user
 
 ```bash
 cd backend && npm run create-admin
 ```
 
-Or `POST /api/auth/register` with `"role": "admin"` (if registration allows).
+Or `POST /api/auth/register` with `"role": "admin"` (if your registration flow allows it).
 
 ### Troubleshooting
 
@@ -359,15 +350,12 @@ Or `POST /api/auth/register` with `"role": "admin"` (if registration allows).
 
 ### 7.1 Route mounting (`server.js`)
 
+Mount domain routes under `/api`:
+
 ```
-/api/auth
-/api/admin
-/api/procuring-entity
-/api/supplier
-/api/questionnaires
-/api/documents
-/api/cpv
-/api/nuts
+/api/auth          # register, login, profile
+/api/admin         # admin-only resources
+/api/[resource]    # your domain routes
 ```
 
 Static uploads: `/uploads`
@@ -377,7 +365,7 @@ Static uploads: `/uploads`
 ```js
 const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
-router.use(authorize('procuring_entity')); // role guard
+router.use(authorize('admin')); // role guard — use your role names
 ```
 
 ### 7.3 Migrations
@@ -388,47 +376,23 @@ npm run migrate                    # dev
 NODE_ENV=production npx sequelize-cli db:migrate   # prod manual
 ```
 
-Production `npm start` runs `scripts/runMigrations.js` automatically.
+Production `npm start` can run `scripts/runMigrations.js` automatically on boot.
 
-### 7.4 Key API endpoints
+### 7.4 API conventions
 
-**Auth**
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/profile`
+| Pattern | Example |
+|---------|---------|
+| Health | `GET /api/health` |
+| Auth | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/profile` |
+| List | `GET /api/[resource]` |
+| Detail | `GET /api/[resource]/:id` |
+| Create | `POST /api/[resource]` |
+| Update | `PUT` or `PATCH /api/[resource]/:id` |
+| Delete | `DELETE /api/[resource]/:id` |
+| Dashboard stats | `GET /api/[role]/dashboard/stats` |
+| Uploads | `POST /api/documents` + `GET /api/documents`, serve from `/uploads` |
 
-**Admin**
-- `GET /api/admin/dashboard/stats`
-- `GET /api/admin/suppliers`
-- `PUT /api/admin/suppliers/:id/review`
-- `GET /api/admin/procuring-entities`
-
-**Supplier**
-- `GET /api/supplier/dashboard` (overview)
-- `GET /api/supplier/profile`
-- `PUT /api/supplier/profile`
-- `GET /api/supplier/questionnaires/active`
-- `GET /api/supplier/questionnaires/history`
-
-**Procuring entity**
-- `GET /api/procuring-entity/dashboard/stats`
-- `GET /api/procuring-entity/profile`
-- `GET /api/procuring-entity/suppliers`
-- `GET /api/questionnaires` (entity's questionnaires)
-
-**Questionnaires**
-- `POST /api/questionnaires` — create
-- `GET /api/questionnaires/:id/responses`
-- `POST /api/questionnaires/:id/responses` — supplier submit
-
-**Documents**
-- `POST /api/documents/supplier`
-- `GET /api/documents`
-- `DELETE /api/documents/:id`
-
-**CPV / NUTS**
-- `GET /api/cpv`
-- `GET /api/nuts`
+Use consistent JSON shapes, HTTP status codes, and error messages. Protect routes with `authenticate` + `authorize(role)`.
 
 ---
 
@@ -436,8 +400,8 @@ Production `npm start` runs `scripts/runMigrations.js` automatically.
 
 ### Pre-deployment
 1. Backup production database
-2. Set `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, email vars on Railway
-3. Frontend: `VITE_API_URL`, `VITE_UPLOADS_URL`
+2. Set `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, email vars on host
+3. Frontend build vars: `VITE_API_URL`, `VITE_UPLOADS_URL`
 
 ### Steps
 
@@ -455,11 +419,7 @@ cd ../backend
 NODE_ENV=production npm start
 ```
 
-Serve `frontend/dist` via Railway static service or Nginx.
-
-**Production URLs (current):**
-- API: `https://prequaliq-production.up.railway.app`
-- Frontend: Railway static deployment
+Serve `frontend/dist` via static hosting (same platform, CDN, or Nginx reverse proxy to API).
 
 ### Rollback migration
 
@@ -470,7 +430,7 @@ NODE_ENV=production npx sequelize-cli db:migrate:undo
 
 ---
 
-## 9. Building a new app with this stack
+## 9. Starting a new app with this stack
 
 ### 9.1 Copy checklist
 
@@ -496,23 +456,23 @@ NODE_ENV=production npx sequelize-cli db:migrate:undo
 3. Mount in `server.js`
 4. Create `pages/yourRole/Dashboard.tsx` with `PortalLayout`
 5. Add route in `App.tsx` with `ProtectedRoute`
-6. Add `yourRolePortal.*` keys in `en.json` / `sv.json`
-7. Optional: `GET /api/your-role/dashboard/stats` + Home tab
+6. Add `yourRolePortal.*` keys in locale files
+7. Optional: `GET /api/your-role/dashboard/stats` + Home tab with stat cards
 
 ### 9.3 New list page (template)
 
-1. Fetch data in `useEffect` when tab active
+1. Fetch data in `useEffect` when tab is active
 2. Use `useListPagination(items, 10)`
-3. Map to `QuestionnaireSlimRow` or similar slim row
+3. Map items to a slim row component (title/meta left, status + actions right)
 4. Add `ListPagination` at bottom
-5. Status badges before action buttons on the right
+5. Place status badges before action buttons on the right
 
 ### 9.4 Code style
 
 - **TypeScript** on frontend; **JavaScript** on backend (CommonJS)
 - Prefer functional React components + hooks
-- No inline English strings in JSX — use `t()`
-- Keep dashboard files large but tab-isolated; extract components when reused 2+ times
+- No inline user-facing strings in JSX — use `t()`
+- Keep dashboard files tab-isolated; extract components when reused 2+ times
 - Use existing button classes — don't invent new primary colors
 
 ---
@@ -530,17 +490,16 @@ UI rules:
 - Auth/marketing uses font-website (Plus Jakarta Sans)
 - Colors: navy primary (#0f2744), blue accent (#2563eb)
 - Buttons: btn-save, btn-delete, btn-cancel classes
-- Home tabs use AdminStatCard pattern for insights
+- Home tabs use stat card grid for insights
 - Lists: slim rows + ListPagination (10/page)
-- All strings in en.json and sv.json
+- All strings in locale JSON files (every language)
 
 Read app_development.md in repo root for full details.
-Reference: frontend/src/pages/supplier/Dashboard.tsx
 ```
 
 ---
 
-## 11. Related files (quick index)
+## 11. Key files (quick index)
 
 | Topic | File |
 |-------|------|
@@ -548,15 +507,14 @@ Reference: frontend/src/pages/supplier/Dashboard.tsx
 | Tailwind theme | `frontend/tailwind.config.js` |
 | Portal shell | `frontend/src/components/ui/PortalLayout.tsx` |
 | Sidebar | `frontend/src/components/ui/PortalSidebar.tsx` |
-| Stat cards | `frontend/src/components/admin/AdminStatCards.tsx` |
-| Slim rows | `frontend/src/components/questionnaires/QuestionnaireSlimRow.tsx` |
-| Pagination | `frontend/src/hooks/useListPagination.ts` |
-| API | `frontend/src/services/api.ts` |
+| Pagination hook | `frontend/src/hooks/useListPagination.ts` |
+| Pagination UI | `frontend/src/components/ui/ListPagination.tsx` |
+| API client | `frontend/src/services/api.ts` |
 | Auth | `frontend/src/contexts/AuthContext.tsx` |
 | Routes | `frontend/src/App.tsx` |
-| Email setup | `backend/EMAIL_SETUP.md` |
 | Migrations | `backend/migrations/` |
+| Auth middleware | `backend/middleware/auth.js` |
 
 ---
 
-*Last updated: merged from README.md, SETUP.md, DEPLOYMENT.md, and current portal UI patterns.*
+*Reusable guide for full-stack apps on this stack — copy `app_development.md` into any new project repo.*
