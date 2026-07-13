@@ -1446,7 +1446,7 @@ const ProcuringEntityDashboard = () => {
           setQuestionnaire={setNewQuestionnaire}
           cpvCodes={cpvCatalog.cpvCodes}
           cpvLoading={cpvCatalog.loading}
-          onCpvSearch={(term) => cpvCatalog.searchDebounced(term, newQuestionnaire.cpvCodeId)}
+          onCpvSearch={(term: string) => cpvCatalog.searchDebounced(term, newQuestionnaire.cpvCodeId)}
           updateQuestionAttachment={updateQuestionAttachment}
           onClose={() => {
             setShowCreateQuestionnaire(false);
@@ -1484,7 +1484,7 @@ const ProcuringEntityDashboard = () => {
           setQuestionnaire={setEditingQuestionnaire}
           cpvCodes={cpvCatalog.cpvCodes}
           cpvLoading={cpvCatalog.loading}
-          onCpvSearch={(term) => cpvCatalog.searchDebounced(term, editingQuestionnaire.cpvCodeId)}
+          onCpvSearch={(term: string) => cpvCatalog.searchDebounced(term, editingQuestionnaire.cpvCodeId)}
           updateQuestionAttachment={updateQuestionAttachmentInEdit}
           onClose={() => {
             setEditingQuestionnaire(null);
