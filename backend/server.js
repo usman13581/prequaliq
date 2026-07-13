@@ -19,6 +19,10 @@ app.use(express.urlencoded({ extended: true }));
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// API documentation (Swagger UI)
+app.use('/api-docs', require('./routes/docs'));
+app.get('/api/docs', (_req, res) => res.redirect(301, '/api-docs'));
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
@@ -35,7 +39,8 @@ app.get('/', (req, res) => {
     message: 'PrequaliQ API',
     status: 'running',
     health: '/api/health',
-    docs: 'Use the frontend app or API routes under /api/...'
+    docs: '/api-docs',
+    gpuAiDocs: process.env.AI_SERVICE_URL ? `${process.env.AI_SERVICE_URL.replace(/\/$/, '')}/docs` : null
   });
 });
 
@@ -58,6 +63,10 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`API docs: http://localhost:${PORT}/api-docs`);
+  if (process.env.AI_SERVICE_URL) {
+    console.log(`GPU AI docs: ${process.env.AI_SERVICE_URL.replace(/\/$/, '')}/docs`);
+  }
   try {
     const { startSupplierExpiryScheduler } = require('./services/supplierExpiryScheduler');
     startSupplierExpiryScheduler();

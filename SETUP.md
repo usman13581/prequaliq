@@ -1,5 +1,7 @@
 # PrequaliQ Platform Setup Guide
 
+> **Consolidated guide:** see **[app_development.md](../app_development.md)** (§6 Local development setup).
+
 ## Prerequisites
 
 - Node.js (v18 or higher)

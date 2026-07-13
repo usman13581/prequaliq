@@ -6,7 +6,7 @@ import { translateCompletenessSection } from '../../lib/supplierCompletenessI18n
 export type Completeness = {
   percent: number;
   readyToSubmit: boolean;
-  sections: { id: string; label: string; complete: boolean }[];
+  sections: { id: string; label: string; complete: boolean; missing?: string[] }[];
   blockers: string[];
 };
 

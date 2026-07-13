@@ -1,5 +1,11 @@
 const db = require('../models');
 const { Op } = require('sequelize');
+const fs = require('fs');
+const { profileAiUpload, mapAiErrorResponse } = require('../utils/profileAiUpload');
+const { extractTextFromPdf } = require('../services/pdfTextService');
+const { processDocumentsForProfile } = require('../services/procuringEntityProfileAiService');
+const { generateQuestionnaireDraft, understandQuestionnaireDescription } = require('../services/questionnaireAiService');
+const { validateQuestionnaireDescription } = require('../services/questionnaireDescriptionValidation');
 
 // Get procuring entity profile
 const getProfile = async (req, res) => {
@@ -475,10 +481,139 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+const suggestProfileFromDocuments = (req, res) => {
+  profileAiUpload(req, res, async (uploadErr) => {
+    const tmpPaths = (req.files || []).map((f) => f.path);
+    try {
+      if (uploadErr) {
+        return res.status(400).json({ message: uploadErr.message || 'Upload failed' });
+      }
+      if (!req.files?.length) {
+        return res.status(400).json({ message: 'No PDF documents uploaded' });
+      }
+
+      const entity = await db.ProcuringEntity.findOne({
+        where: { userId: req.user.id },
+        include: [{ model: db.User, as: 'user' }],
+      });
+      if (!entity) {
+        return res.status(404).json({ message: 'Procuring entity profile not found' });
+      }
+
+      const language = (req.body?.language || 'en').slice(0, 2);
+      const documents = [];
+
+      for (const file of req.files) {
+        try {
+          const text = await extractTextFromPdf(file.path);
+          documents.push({ fileName: file.originalname, text });
+        } catch (pdfErr) {
+          documents.push({
+            fileName: file.originalname,
+            text: '',
+            error: pdfErr.message || 'Could not read PDF text',
+          });
+        }
+      }
+
+      if (!documents.some((doc) => doc.text && doc.text.length >= 20)) {
+        return res.status(400).json({
+          message:
+            'Could not extract text from any uploaded PDF. Use text-based PDFs (not scanned images only).',
+          code: 'PDF_TEXT_EMPTY',
+        });
+      }
+
+      const user = entity.user || {};
+      const currentProfile = {
+        entityName: entity.entityName,
+        address: entity.address,
+        city: entity.city,
+        country: entity.country,
+        phone: user.phone || entity.phone,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      };
+
+      const result = await processDocumentsForProfile(documents, {
+        language,
+        currentProfile,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Procuring entity profile AI suggest error:', error);
+      return mapAiErrorResponse(res, error);
+    } finally {
+      for (const p of tmpPaths) {
+        if (p && fs.existsSync(p)) fs.unlink(p, () => {});
+      }
+    }
+  });
+};
+
+const suggestQuestionnaireUnderstand = async (req, res) => {
+  try {
+    const entity = await db.ProcuringEntity.findOne({ where: { userId: req.user.id } });
+    if (!entity) {
+      return res.status(404).json({ message: 'Procuring entity profile not found' });
+    }
+
+    const description = String(req.body?.description || '').trim();
+    const language = (req.body?.language || 'en').slice(0, 2);
+
+    const result = await understandQuestionnaireDescription(description, { language });
+    return res.json({
+      ...result,
+      userDescription: description,
+    });
+  } catch (error) {
+    console.error('Questionnaire AI understand error:', error);
+    const validationCodes = new Set(['DESCRIPTION_TOO_SHORT', 'DESCRIPTION_TOO_LONG']);
+    if (validationCodes.has(error.code)) {
+      return res.status(400).json({ message: error.message, code: error.code });
+    }
+    return mapAiErrorResponse(res, error);
+  }
+};
+
+const suggestQuestionnaireFromDescription = async (req, res) => {
+  try {
+    const entity = await db.ProcuringEntity.findOne({ where: { userId: req.user.id } });
+    if (!entity) {
+      return res.status(404).json({ message: 'Procuring entity profile not found' });
+    }
+
+    const description = String(req.body?.description || '').trim();
+    const language = (req.body?.language || 'en').slice(0, 2);
+
+    const validation = validateQuestionnaireDescription(description, language);
+    if (!validation.valid) {
+      return res.status(400).json({
+        message: validation.message,
+        code: validation.code,
+      });
+    }
+
+    const result = await generateQuestionnaireDraft(description, { language });
+    return res.json(result);
+  } catch (error) {
+    console.error('Questionnaire AI suggest error:', error);
+    const validationCodes = new Set(['DESCRIPTION_TOO_SHORT', 'DESCRIPTION_TOO_LONG']);
+    if (validationCodes.has(error.code)) {
+      return res.status(400).json({ message: error.message, code: error.code });
+    }
+    return mapAiErrorResponse(res, error);
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   getSuppliers,
   getSupplierDetails,
-  getDashboardStats
+  getDashboardStats,
+  suggestProfileFromDocuments,
+  suggestQuestionnaireUnderstand,
+  suggestQuestionnaireFromDescription,
 };

@@ -21,6 +21,9 @@
   --surface: #f4f6f9;
   --surface-dark: #0b1220;
 
+  /* Shared portal top bar height (supplier / admin / procuring entity) */
+  --portal-header-height: 3.5rem;
+
   --font-app: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-website: 'Plus Jakarta Sans', system-ui, sans-serif;
 
@@ -398,6 +401,16 @@ a,
   );
   border-bottom: 1px solid var(--border);
   box-shadow: 0 1px 3px rgba(15, 39, 68, 0.04);
+}
+
+.portal-top-header-bar {
+  height: var(--portal-header-height);
+}
+
+@media (min-width: 640px) {
+  :root {
+    --portal-header-height: 4rem;
+  }
 }
 
 /* Portal left sidebar — icon + label (HR-style rail) */

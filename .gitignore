@@ -12,6 +12,10 @@ frontend/node_modules/
 backend/.env
 backend/.env.prod
 frontend/.env
+ai-service/.env
+ai-service/deploy.env
+ai-service/__pycache__/
+**/__pycache__/
 
 # Build outputs
 dist/

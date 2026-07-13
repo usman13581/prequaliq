@@ -1,5 +1,51 @@
 const db = require('../models');
 const { Op } = require('sequelize');
+const multer = require('multer');
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const { extractTextFromPdf } = require('../services/pdfTextService');
+const {
+  suggestInsuranceFields,
+  checkAiHealth,
+  getGpuEndpointsCatalog,
+  getBackendAiEndpointsCatalog
+} = require('../services/aiExtractionService');
+const { processDocumentsForProfile } = require('../services/supplierProfileAiService');
+
+const insuranceAiUpload = multer({
+  storage: multer.diskStorage({
+    destination: os.tmpdir(),
+    filename: (_req, file, cb) => {
+      cb(null, `insurance-ai-${Date.now()}${path.extname(file.originalname) || '.pdf'}`);
+    }
+  }),
+  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const isPdf =
+      file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname || '');
+    if (isPdf) return cb(null, true);
+    cb(new Error('Only PDF files are allowed for AI extraction'));
+  }
+}).single('document');
+
+const profileAiUpload = multer({
+  storage: multer.diskStorage({
+    destination: os.tmpdir(),
+    filename: (_req, file, cb) => {
+      const safe = (file.originalname || 'doc').replace(/[^a-zA-Z0-9._-]/g, '_');
+      cb(null, `profile-ai-${Date.now()}-${safe}`);
+    }
+  }),
+  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const isPdf =
+      file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname || '');
+    if (isPdf) return cb(null, true);
+    cb(new Error('Only PDF files are allowed for AI extraction'));
+  }
+}).array('documents', 10);
+
 const { sendSupplierProfileSubmittedToAdminEmail, sendSupplierProfileSubmittedConfirmationEmail } = require('../services/emailService');
 const {
   generateExcelBuffer,
@@ -12,6 +58,8 @@ const {
   notifyDocumentExpiring,
   createNotification
 } = require('../services/supplierNotificationService');
+
+const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || '').replace(/\/$/, '');
 
 const PROFILE_INCLUDES = [
   { model: db.User, as: 'user', attributes: { exclude: ['password'] } },
@@ -552,9 +600,155 @@ const getProfileSubmissions = async (req, res) => {
   }
 };
 
+const getAiStatus = async (_req, res) => {
+  try {
+    const health = await checkAiHealth();
+    res.json(health);
+  } catch (error) {
+    res.status(500).json({ message: 'Error checking AI status', error: error.message });
+  }
+};
+
+const getAiEndpoints = async (_req, res) => {
+  try {
+    const backend = getBackendAiEndpointsCatalog();
+    const gpu = await getGpuEndpointsCatalog();
+    res.json({
+      backend,
+      gpu,
+      urls: {
+        gpuDocs: backend.gpuDocsUrl,
+        gpuEndpoints: AI_SERVICE_URL ? `${AI_SERVICE_URL}/endpoints` : null,
+        backendStatus: '/api/supplier/ai/status',
+        backendEndpoints: '/api/supplier/ai/endpoints',
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching AI endpoints', error: error.message });
+  }
+};
+
+function mapAiErrorResponse(res, error) {
+  const code = error.code;
+  if (code === 'AI_NOT_CONFIGURED') {
+    return res.status(503).json({ message: 'AI service is not configured', code });
+  }
+  if (code === 'AI_UNAVAILABLE' || code === 'AI_TIMEOUT') {
+    return res.status(503).json({
+      message: error.message || 'AI service is unavailable. Start your GPU server and try again.',
+      code
+    });
+  }
+  return res.status(500).json({
+    message: error.message || 'Error generating AI suggestions',
+    code: code || 'AI_ERROR'
+  });
+}
+
+const suggestInsuranceFromDocument = (req, res) => {
+  insuranceAiUpload(req, res, async (uploadErr) => {
+    let tmpPath = req.file?.path;
+    try {
+      if (uploadErr) {
+        return res.status(400).json({ message: uploadErr.message || 'Upload failed' });
+      }
+      if (!req.file) {
+        return res.status(400).json({ message: 'No PDF document uploaded' });
+      }
+
+      const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+      if (!supplier) {
+        return res.status(404).json({ message: 'Supplier not found' });
+      }
+
+      const text = await extractTextFromPdf(tmpPath);
+      const language = (req.body?.language || 'en').slice(0, 2);
+      const suggestions = await suggestInsuranceFields(text, { language });
+
+      res.json({
+        suggestions: {
+          insurerName: suggestions.insurerName ?? null,
+          insurancePolicyNumber: suggestions.insurancePolicyNumber ?? null,
+          insuranceCoverageAmount: suggestions.insuranceCoverageAmount ?? null,
+          insuranceValidTo: suggestions.insuranceValidTo ?? null
+        },
+        disclaimer: 'AI suggestions require human review before saving.'
+      });
+    } catch (error) {
+      console.error('Insurance AI suggest error:', error);
+      return mapAiErrorResponse(res, error);
+    } finally {
+      if (tmpPath && fs.existsSync(tmpPath)) {
+        fs.unlink(tmpPath, () => {});
+      }
+    }
+  });
+};
+
+const suggestProfileFromDocuments = (req, res) => {
+  profileAiUpload(req, res, async (uploadErr) => {
+    const tmpPaths = (req.files || []).map((f) => f.path);
+    try {
+      if (uploadErr) {
+        return res.status(400).json({ message: uploadErr.message || 'Upload failed' });
+      }
+      if (!req.files?.length) {
+        return res.status(400).json({ message: 'No PDF documents uploaded' });
+      }
+
+      const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+      if (!supplier) {
+        return res.status(404).json({ message: 'Supplier not found' });
+      }
+
+      const language = (req.body?.language || 'en').slice(0, 2);
+      const documents = [];
+
+      for (const file of req.files) {
+        try {
+          const text = await extractTextFromPdf(file.path);
+          documents.push({ fileName: file.originalname, text });
+        } catch (pdfErr) {
+          documents.push({
+            fileName: file.originalname,
+            text: '',
+            error: pdfErr.message || 'Could not read PDF text',
+          });
+        }
+      }
+
+      if (!documents.some((doc) => doc.text && doc.text.length >= 20)) {
+        return res.status(400).json({
+          message:
+            'Could not extract text from any uploaded PDF. Use text-based PDFs (not scanned images only).',
+          code: 'PDF_TEXT_EMPTY',
+        });
+      }
+
+      const result = await processDocumentsForProfile(documents, {
+        language,
+        currentProfile: supplier.toJSON(),
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Profile AI suggest error:', error);
+      return mapAiErrorResponse(res, error);
+    } finally {
+      for (const p of tmpPaths) {
+        if (p && fs.existsSync(p)) fs.unlink(p, () => {});
+      }
+    }
+  });
+};
+
 module.exports = {
   getProfile,
   updateProfile,
+  getAiStatus,
+  getAiEndpoints,
+  suggestInsuranceFromDocument,
+  suggestProfileFromDocuments,
   getCompleteness,
   getDashboard,
   submitProfile,

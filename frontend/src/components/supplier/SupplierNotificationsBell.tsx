@@ -64,10 +64,10 @@ export function SupplierNotificationsBell({ onNavigate }: { onNavigate: (tab: st
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="relative p-2 rounded-xl hover:bg-surface transition-colors"
+        className="relative p-1.5 rounded-lg hover:bg-surface transition-colors"
         aria-label={t('supplierPortal.notifications')}
       >
-        <Bell size={22} className="text-gray-700" />
+        <Bell size={20} className="text-gray-700" />
         {unread > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
             {unread > 9 ? '9+' : unread}

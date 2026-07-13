@@ -21,7 +21,7 @@ export function PortalSidebar({ items, activeId, onSelect, className = '', varia
     <>
       {/* Desktop: sticky left rail */}
       <aside
-        className={`portal-sidebar ${isWide ? 'portal-sidebar--wide' : ''} hidden md:flex flex-col shrink-0 sticky top-16 sm:top-20 self-start h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)] py-3 ${isWide ? 'w-[5.75rem]' : 'w-16'} ${className}`}
+        className={`portal-sidebar ${isWide ? 'portal-sidebar--wide' : ''} hidden md:flex flex-col shrink-0 sticky top-[var(--portal-header-height)] self-start h-[calc(100vh-var(--portal-header-height))] py-2.5 ${isWide ? 'w-[5.75rem]' : 'w-16'} ${className}`}
         aria-label="Main navigation"
       >
         <nav className="flex flex-col gap-0.5 px-1">

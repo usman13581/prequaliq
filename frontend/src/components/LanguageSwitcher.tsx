@@ -14,12 +14,12 @@ export const LanguageSwitcher: React.FC = () => {
     <div
       role="group"
       aria-label={t('common.language')}
-      className="flex rounded-xl border border-border bg-surface p-0.5 shadow-sm"
+      className="flex rounded-lg border border-border bg-surface p-0.5 shadow-sm"
     >
       <button
         type="button"
         onClick={() => setLang('en')}
-        className={`relative rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-all duration-200 ${
+        className={`relative rounded-md px-2.5 py-1 text-xs font-semibold transition-all duration-200 ${
           current === 'en'
             ? 'bg-primary-800 text-white shadow-sm'
             : 'text-muted hover:text-primary hover:bg-white/60'
@@ -31,7 +31,7 @@ export const LanguageSwitcher: React.FC = () => {
       <button
         type="button"
         onClick={() => setLang('sv')}
-        className={`relative rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-all duration-200 ${
+        className={`relative rounded-md px-2.5 py-1 text-xs font-semibold transition-all duration-200 ${
           current === 'sv'
             ? 'bg-primary-800 text-white shadow-sm'
             : 'text-muted hover:text-primary hover:bg-white/60'

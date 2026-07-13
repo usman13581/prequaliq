@@ -1,5 +1,7 @@
 # PrequaliQ Production Deployment Guide
 
+> **Consolidated guide:** see **[app_development.md](../app_development.md)** (§8 Production deployment).
+
 ## Pre-deployment checklist
 
 1. **Database backup** – Take a backup of production database before deployment

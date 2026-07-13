@@ -8,6 +8,7 @@ import Register from './pages/Register';
 import AdminDashboard from './pages/admin/Dashboard';
 import SupplierDashboard from './pages/supplier/Dashboard';
 import ProcuringEntityDashboard from './pages/procuringEntity/Dashboard';
+import Developer from './pages/Developer';
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route path="/developer" element={<Developer />} />
               <Route path="/" element={<Navigate to="/login" replace />} />
             </Routes>
           </Router>

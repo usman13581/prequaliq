@@ -17,7 +17,10 @@ import {
 import { SupplierReferencesSection } from '../../components/supplier/SupplierReferencesSection';
 import { SupplierProfileSubmissionHistory } from '../../components/supplier/SupplierProfileSubmissionHistory';
 import { SupplierDocumentList } from '../../components/supplier/SupplierDocumentList';
+import { SupplierAiProfileAssist } from '../../components/supplier/SupplierAiProfileAssist';
+import { SupplierProfileTabsNav, type ProfileTabId } from '../../components/supplier/SupplierProfileTabsNav';
 import { useListPagination } from '../../hooks/useListPagination';
+import { useCpvCatalogSearch } from '../../hooks/useCpvCatalogSearch';
 import { ListPagination } from '../../components/ui/ListPagination';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
 import { 
@@ -167,8 +170,9 @@ const SupplierDashboard = () => {
   const [uploadingQuestionDoc, setUploadingQuestionDoc] = useState<string | null>(null);
   const [uploadingPicture, setUploadingPicture] = useState(false);
   const profilePictureRef = useRef<HTMLInputElement>(null);
+  const [activeProfileTab, setActiveProfileTab] = useState<ProfileTabId>('basic');
   const [selectedCPVCodes, setSelectedCPVCodes] = useState<string[]>([]);
-  const [cpvCodes, setCpvCodes] = useState<CPVCode[]>([]);
+  const cpvCatalog = useCpvCatalogSearch();
   const [cpvSearchTerm, setCpvSearchTerm] = useState('');
   const [showCPVSelector, setShowCPVSelector] = useState(false);
   
@@ -288,21 +292,6 @@ const SupplierDashboard = () => {
 
   const handleNavigateTab = (tab: string) => {
     setActiveTab(tab);
-  };
-
-  // Fetch CPV codes (limit so large lists don't timeout)
-  const fetchCPVCodes = async (searchTerm?: string) => {
-    try {
-      const params: Record<string, string> = { limit: '2000' };
-      if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim();
-      const response = await api.get('/cpv', { params });
-      const list = response.data.cpvCodes || [];
-      setCpvCodes(Array.isArray(list) ? list : []);
-    } catch (error: any) {
-      console.error('Failed to fetch CPV codes:', error);
-      showToast(error.response?.data?.message || t('cpvCodes.failedToLoad'), 'error');
-      setCpvCodes([]);
-    }
   };
 
   // Fetch NUTS codes
@@ -517,7 +506,6 @@ const SupplierDashboard = () => {
       fetchDashboard();
     } else if (activeTab === 'profile') {
       fetchProfile();
-      fetchCPVCodes();
       fetchCompleteness();
     } else if (activeTab === 'questionnaires') {
       fetchActiveQuestionnaires();
@@ -525,6 +513,23 @@ const SupplierDashboard = () => {
       fetchQuestionnaireHistory();
     }
   }, [activeTab]);
+
+  const handleAiProfileApply = (fields: Record<string, string>) => {
+    setProfileData((prev) => {
+      const next = { ...prev };
+      for (const [key, value] of Object.entries(fields)) {
+        if (key in next) {
+          (next as Record<string, string>)[key] = value;
+        }
+      }
+      return next;
+    });
+    if (!editingProfile) setEditingProfile(true);
+    const insuranceKeys = ['insurerName', 'insurancePolicyNumber', 'insuranceCoverageAmount', 'insuranceValidTo'];
+    if (Object.keys(fields).some((key) => insuranceKeys.includes(key))) {
+      setActiveProfileTab('insurance');
+    }
+  };
 
   // Update profile
   const handleUpdateProfile = async () => {
@@ -923,10 +928,10 @@ const SupplierDashboard = () => {
     }
   };
 
-  const filteredCPVCodes = cpvCodes.filter(cpv =>
-    cpv.code.toLowerCase().includes(cpvSearchTerm.toLowerCase()) ||
-    cpv.description.toLowerCase().includes(cpvSearchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    if (!showCPVSelector) return;
+    cpvCatalog.searchDebounced(cpvSearchTerm, selectedCPVCodes);
+  }, [showCPVSelector, cpvSearchTerm, selectedCPVCodes, cpvCatalog.searchDebounced]);
 
   const sidebarItems = [
     { id: 'overview', label: t('supplierPortal.navOverview'), icon: LayoutDashboard },
@@ -1250,14 +1255,14 @@ const SupplierDashboard = () => {
                 ) : (
                   <div className="flex flex-col lg:flex-row gap-6 items-start mt-0">
                     <div className="flex-1 min-w-0 space-y-6">
-                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl border border-gray-200/50 flex flex-col max-h-[calc(100vh-9rem)] lg:max-h-[calc(100vh-7.5rem)] min-h-[280px]">
+                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl border border-gray-200/50 flex flex-col max-h-[calc(100vh-var(--portal-header-height)-5.5rem)] lg:max-h-[calc(100vh-var(--portal-header-height)-4rem)] min-h-[280px]">
                         {/* Sticky: photo + edit/save/cancel + qualification status */}
                         <div className="shrink-0 px-3 sm:px-4 pt-3 pb-2 border-b border-gray-200 bg-white/95 backdrop-blur-sm rounded-t-2xl z-10">
                           <h3 className="text-lg font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                              <div className="relative group shrink-0">
-                                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
+                              <div className="relative group shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-gray-200">
+                                <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
                                   {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
                                     <img
                                       src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
@@ -1275,7 +1280,7 @@ const SupplierDashboard = () => {
                                   onChange={handleProfilePictureUpload}
                                   className="hidden"
                                 />
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                   <button
                                     type="button"
                                     onClick={() => profilePictureRef.current?.click()}
@@ -1347,8 +1352,28 @@ const SupplierDashboard = () => {
                           </div>
                         </div>
 
-                        {/* Scrollable profile fields */}
-                        <div className="flex-1 overflow-y-auto min-h-0 overscroll-behavior-contain px-3 sm:px-4 py-3">
+                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                        <SupplierAiProfileAssist.Root
+                          enabled={editingProfile}
+                          onApply={handleAiProfileApply}
+                          onStartEdit={() => { if (!editingProfile) setEditingProfile(true); }}
+                        >
+                          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                            {editingProfile && (
+                              <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 border-b border-gray-100 bg-white/80 space-y-2">
+                                <SupplierAiProfileAssist.UploadBar />
+                              </div>
+                            )}
+                            <div className="flex flex-col flex-1 min-w-0 min-h-0">
+                              <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-gray-100 bg-white/80">
+                                <SupplierProfileTabsNav
+                                  activeTab={activeProfileTab}
+                                  onTabChange={setActiveProfileTab}
+                                  completeness={completeness}
+                                />
+                              </div>
+                              <div className="flex-1 overflow-y-auto min-h-0 overscroll-behavior-contain px-3 sm:px-4 py-4">
+                          {activeProfileTab === 'basic' && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
@@ -1536,13 +1561,12 @@ const SupplierDashboard = () => {
                               </div>
                             )}
                           </div>
-                        </div>
+                          </div>
+                          )}
 
-                        {/* Common Questions */}
-                        <div className="mt-8 border-t border-gray-200 pt-8">
-                          <h3 className="text-lg font-bold text-gray-900 mb-6">{t('commonQuestions.sectionTitle')}</h3>
+                          {activeProfileTab === 'financial' && (
                           <div className="space-y-6">
-                            {/* Q1 – Information about the Supplier (Turnover) */}
+                            {/* Q1 – Turnover */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
                                 <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q1Label')}</label>
@@ -1592,8 +1616,12 @@ const SupplierDashboard = () => {
                               )}
                               {renderProfileDocuments(DOCUMENT_TYPES.q2)}
                             </div>
+                          </div>
+                          )}
 
-                            {/* Q3 – Locations of Operations (NUTS Codes) - card */}
+                          {activeProfileTab === 'scope' && (
+                          <div className="space-y-6">
+                            {/* Q3 – NUTS Codes */}
                             <div className="bg-gradient-to-br from-white to-green-50/30 rounded-2xl p-6 border border-gray-200/50">
                               <div className="flex justify-between items-center mb-2">
                                 <div className="flex items-center gap-2">
@@ -1635,7 +1663,11 @@ const SupplierDashboard = () => {
                                 </div>
                                 {!editingProfile && (
                                   <button
-                                    onClick={() => { setShowCPVSelector(true); fetchCPVCodes(); }}
+                                    onClick={() => {
+                                      setCpvSearchTerm('');
+                                      setShowCPVSelector(true);
+                                      cpvCatalog.fetchCodes('', selectedCPVCodes);
+                                    }}
                                     className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm"
                                   >
                                     <Edit2 size={16} />
@@ -1656,8 +1688,12 @@ const SupplierDashboard = () => {
                                 <p className="text-gray-500 text-sm">{t('cpvCodes.noCodesSelected')}</p>
                               )}
                             </div>
+                          </div>
+                          )}
 
-                            {/* Q5 – Management System – Quality */}
+                          {activeProfileTab === 'certifications' && (
+                          <div className="space-y-6">
+                            {/* Q5 – Quality */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
                                 <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q5Label')}</label>
@@ -1740,7 +1776,11 @@ const SupplierDashboard = () => {
                               )}
                               {renderProfileDocuments(DOCUMENT_TYPES.q8)}
                             </div>
+                          </div>
+                          )}
 
+                          {activeProfileTab === 'compliance' && (
+                          <div className="space-y-6">
                             {/* Q9 – Grounds for Exclusion */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
@@ -1800,8 +1840,12 @@ const SupplierDashboard = () => {
                                 </div>
                               )}
                             </div>
+                          </div>
+                          )}
 
-                            {/* Q12 – Technical and professional capacity */}
+                          {activeProfileTab === 'references' && (
+                          <div className="space-y-6">
+                            {/* Q12 – Technical capacity */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
                                 <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q12Label')}</label>
@@ -1824,11 +1868,15 @@ const SupplierDashboard = () => {
                             <SupplierReferencesSection editing={editingProfile} />
 
                             <SupplierProfileSubmissionHistory />
+                          </div>
+                          )}
 
-                            {/* Insurance */}
+                          {activeProfileTab === 'insurance' && (
                             <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
-                              <h4 className="text-base font-bold text-gray-900 mb-1">{t('supplierPortal.insuranceTitle')}</h4>
-                              <p className="text-xs text-muted mb-4">{t('supplierPortal.insuranceSubtitle')}</p>
+                              <div className="mb-4">
+                                <h4 className="text-base font-bold text-gray-900 mb-1">{t('supplierPortal.insuranceTitle')}</h4>
+                                <p className="text-xs text-muted">{t('supplierPortal.insuranceSubtitle')}</p>
+                              </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                   <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insurerName')}</label>
@@ -1891,14 +1939,18 @@ const SupplierDashboard = () => {
                                 </div>
                               </div>
                             </div>
+                          )}
+                                </div>
+                              </div>
                           </div>
-                        </div>
+                          {editingProfile && <SupplierAiProfileAssist.Drawer />}
+                        </SupplierAiProfileAssist.Root>
                         </div>
                       </div>
                     </div>
 
                     {/* Right rail: actions + completeness checklist */}
-                    <aside className="hidden lg:flex flex-col gap-3 w-52 xl:w-56 shrink-0 sticky top-24 self-start">
+                    <aside className="hidden lg:flex flex-col gap-3 w-52 xl:w-56 shrink-0 sticky top-[calc(var(--portal-header-height)+1rem)] self-start">
                       <div className="flex flex-col gap-2">
                         <button
                           type="button"
@@ -1945,7 +1997,7 @@ const SupplierDashboard = () => {
       {/* CPV Code Selector Modal */}
       {showCPVSelector && (
         <CPVSelectorModal
-          cpvCodes={filteredCPVCodes}
+          cpvCodes={cpvCatalog.cpvCodes}
           selectedCPVCodes={selectedCPVCodes}
           toggleCPVCode={toggleCPVCode}
           searchTerm={cpvSearchTerm}
@@ -1956,6 +2008,7 @@ const SupplierDashboard = () => {
           }}
           onSave={handleUpdateCPVCodes}
           loading={loading}
+          cpvLoading={cpvCatalog.loading}
         />
       )}
 
@@ -2013,7 +2066,8 @@ const CPVSelectorModal = ({
   setSearchTerm,
   onClose,
   onSave,
-  loading
+  loading,
+  cpvLoading = false,
 }: any) => {
   const { t } = useTranslation();
   useEffect(() => {
@@ -2052,7 +2106,11 @@ const CPVSelectorModal = ({
         </div>
         <div className="p-6">
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {cpvCodes.length === 0 ? (
+            {cpvLoading ? (
+              <div className="text-center py-8 text-muted">
+                <p className="font-medium">{t('common.loading')}</p>
+              </div>
+            ) : cpvCodes.length === 0 ? (
               <div className="text-center py-8 text-amber-700 bg-amber-50 rounded-lg px-4">
                 <p className="font-medium">{t('cpvCodes.noCodesLoaded')}</p>
                 <p className="text-sm mt-1">{t('cpvCodes.noCodesLoadedHint')}</p>

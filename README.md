@@ -2,6 +2,8 @@
 
 A centralized procurement and supplier qualification platform connecting Admin, Procuring Entities, and Suppliers.
 
+> **Full development guide (tech stack, UI standards, setup, deployment):** see **[app_development.md](./app_development.md)**
+
 ## Features
 
 - **Multi-role Access Control**: Admin, Procuring Entity, and Supplier roles
@@ -64,6 +66,22 @@ prequaliq-platform/
 - Complete profile and upload documents
 - Select CPV categories
 - Respond to questionnaires
+- **AI profile assist**: upload qualification PDFs; GPU extracts fields for human review (insurance, company, certificates, financials)
+
+## AI document extraction (optional)
+
+Self-hosted on a Trooper GPU with Ollama. PDF text is extracted on the backend; only plain text is sent to the GPU.
+
+| Layer | URL |
+|-------|-----|
+| GPU Swagger docs | http://connect01.trooper.ai:22528/docs |
+| GPU endpoint catalog | http://connect01.trooper.ai:22528/endpoints |
+| Backend AI status (supplier JWT) | http://localhost:5001/api/supplier/ai/status |
+| Backend AI catalog (supplier JWT) | http://localhost:5001/api/supplier/ai/endpoints |
+
+Configure `AI_SERVICE_URL` and `AI_API_KEY` in `backend/.env`. See [ai-service/README.md](./ai-service/README.md) for GPU deploy.
+
+**Supplier UI:** Profile tab → **AI profile assist** (multi-PDF) or insurance section → **AI suggest from PDF** (single insurance PDF). All suggestions require manual confirmation before save.
 
 ## Local Deployment (Production-style)
 

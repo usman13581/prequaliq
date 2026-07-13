@@ -10,6 +10,22 @@ import {
   EntityQuestionnaireStatsStrip,
   type EntityDashboardStats
 } from '../../components/procuringEntity/ProcuringEntityHomeTab';
+import { ProcuringEntityAiProfileAssist } from '../../components/procuringEntity/ProcuringEntityAiProfileAssist';
+import {
+  ProcuringEntityProfileTabsNav,
+  type EntityProfileTabId,
+} from '../../components/procuringEntity/ProcuringEntityProfileTabsNav';
+import {
+  ProcuringEntityProfileCompletenessRail,
+  ProcuringEntityProfileCompletenessMobile,
+  useEntityCompleteness,
+} from '../../components/procuringEntity/ProcuringEntityProfileCompleteness';
+import {
+  ProcuringEntityQuestionnaireAiAssist,
+  type AppliedQuestionnaireDraft,
+} from '../../components/procuringEntity/ProcuringEntityQuestionnaireAiAssist';
+import { CpvSearchSelect } from '../../components/cpv/CpvSearchSelect';
+import { useCpvCatalogSearch } from '../../hooks/useCpvCatalogSearch';
 import { useListPagination } from '../../hooks/useListPagination';
 import { ListPagination } from '../../components/ui/ListPagination';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
@@ -97,6 +113,7 @@ const ProcuringEntityDashboard = () => {
   // Profile state
   const [profile, setProfile] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [activeProfileTab, setActiveProfileTab] = useState<EntityProfileTabId>('contact');
   const [profileData, setProfileData] = useState({
     firstName: '',
     lastName: '',
@@ -111,6 +128,7 @@ const ProcuringEntityDashboard = () => {
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [uploadingPicture, setUploadingPicture] = useState(false);
   const profilePictureRef = useRef<HTMLInputElement>(null);
+  const entityCompleteness = useEntityCompleteness(profileData, documents.length);
   
   // Questionnaire state
   const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([]);
@@ -122,7 +140,7 @@ const ProcuringEntityDashboard = () => {
     cpvCodeId: '',
     questions: [] as Question[]
   });
-  const [cpvCodes, setCpvCodes] = useState<CPVCode[]>([]);
+  const cpvCatalog = useCpvCatalogSearch();
   const [selectedQuestionnaire, setSelectedQuestionnaire] = useState<Questionnaire | null>(null);
   const [editingQuestionnaire, setEditingQuestionnaire] = useState<Questionnaire | null>(null);
   const [viewingResponses, setViewingResponses] = useState<Questionnaire | null>(null);
@@ -194,21 +212,6 @@ const ProcuringEntityDashboard = () => {
     }
   };
 
-  // Fetch CPV codes (limit so large lists don't timeout)
-  const fetchCPVCodes = async (searchTerm?: string) => {
-    try {
-      const params: Record<string, string> = { limit: '2000' };
-      if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim();
-      const response = await api.get('/cpv', { params });
-      const list = response.data.cpvCodes || [];
-      setCpvCodes(Array.isArray(list) ? list : []);
-    } catch (error: any) {
-      console.error('Failed to fetch CPV codes:', error);
-      showToast(error.response?.data?.message || 'Failed to load CPV codes', 'error');
-      setCpvCodes([]);
-    }
-  };
-
   // Fetch NUTS codes for supplier search filter
   const fetchNUTSCodesForSearch = async () => {
     try {
@@ -275,13 +278,54 @@ const ProcuringEntityDashboard = () => {
       fetchProfile();
     } else if (activeTab === 'questionnaires') {
       fetchQuestionnaires();
-      fetchCPVCodes();
+      cpvCatalog.fetchCodes();
     } else if (activeTab === 'suppliers') {
       fetchSuppliers(1);
-      fetchCPVCodes();
+      cpvCatalog.fetchCodes();
       fetchNUTSCodesForSearch();
     }
   }, [activeTab, user?.id]);
+
+  const handleAiProfileApply = (fields: Record<string, string>) => {
+    setProfileData((prev) => {
+      const next = { ...prev };
+      for (const [key, value] of Object.entries(fields)) {
+        if (key === 'companyName') {
+          next.entityName = value;
+        } else if (key in next) {
+          (next as Record<string, string>)[key] = value;
+        }
+      }
+      return next;
+    });
+    if (!editingProfile) setEditingProfile(true);
+    const orgKeys = ['entityName', 'companyName', 'address', 'city', 'country'];
+    if (Object.keys(fields).some((key) => orgKeys.includes(key))) {
+      setActiveProfileTab('organization');
+    } else if (Object.keys(fields).some((key) => ['firstName', 'lastName', 'phone'].includes(key))) {
+      setActiveProfileTab('contact');
+    }
+  };
+
+  const handleAiQuestionnaireApply = async (draft: AppliedQuestionnaireDraft) => {
+    await cpvCatalog.fetchCodes('', draft.cpvCodeId);
+    setNewQuestionnaire({
+      title: draft.title,
+      description: draft.description,
+      deadline: '',
+      cpvCodeId: draft.cpvCodeId,
+      questions: draft.questions.map((q) => ({
+        questionText: q.questionText,
+        questionType: q.questionType as Question['questionType'],
+        isRequired: q.isRequired,
+        requiresDocument: q.requiresDocument,
+        documentType: q.documentType,
+        options: q.options,
+        order: q.order,
+      })),
+    });
+    setShowCreateQuestionnaire(true);
+  };
 
   // Update profile
   const handleUpdateProfile = async () => {
@@ -725,7 +769,7 @@ const ProcuringEntityDashboard = () => {
         isActive: questionnaire.isActive !== undefined ? questionnaire.isActive : true
       };
       setEditingQuestionnaire(qToEdit);
-      fetchCPVCodes();
+      cpvCatalog.fetchCodes('', qToEdit.cpvCodeId);
     } catch (error: any) {
       console.error('Error preparing questionnaire for edit:', error);
       showToast(`${t('msg.errorPreparingQuestionnaire')}: ${error.message}`, 'error');
@@ -761,7 +805,9 @@ const ProcuringEntityDashboard = () => {
 
             {/* Questionnaires Tab */}
             {activeTab === 'questionnaires' && (
+              <ProcuringEntityQuestionnaireAiAssist.Root onApply={handleAiQuestionnaireApply}>
               <div className="space-y-6">
+                <ProcuringEntityQuestionnaireAiAssist.InputBar />
                 {questionnaires.length > 0 && (
                   <EntityQuestionnaireStatsStrip questionnaires={questionnaires} />
                 )}
@@ -773,7 +819,7 @@ const ProcuringEntityDashboard = () => {
                   <button
                     onClick={() => {
                       setShowCreateQuestionnaire(true);
-                      fetchCPVCodes();
+                      cpvCatalog.fetchCodes('', newQuestionnaire.cpvCodeId);
                     }}
                     className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
                   >
@@ -875,26 +921,14 @@ const ProcuringEntityDashboard = () => {
                   </div>
                 )}
               </div>
+              <ProcuringEntityQuestionnaireAiAssist.Drawer />
+              </ProcuringEntityQuestionnaireAiAssist.Root>
             )}
 
             {/* Profile Tab */}
             {activeTab === 'profile' && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{t('common.profile')} Management</h2>
-                    <p className="text-sm text-gray-500 mt-1">{t('dashboard.manageProfileEntity')}</p>
-                  </div>
-                  {!editingProfile && (
-                    <button
-                      onClick={() => setEditingProfile(true)}
-                      className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
-                    >
-                      <Edit2 size={20} />
-                      {t('actions.editProfile')}
-                    </button>
-                  )}
-                </div>
+              <div className="space-y-4">
+                <ProcuringEntityProfileCompletenessMobile completeness={entityCompleteness} />
 
                 {loading && !profile ? (
                   <div className="text-center py-16">
@@ -904,265 +938,319 @@ const ProcuringEntityDashboard = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Profile Information */}
-                    <div className="lg:col-span-2 space-y-6">
-                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl p-4 sm:p-5 border border-gray-200/50">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">{t('common.profile')} Information</h3>
-                        {/* Profile Picture */}
-                        <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
-                          <div className="relative group">
-                            <div className="w-20 h-20 rounded-xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-2xl font-bold">
-                              {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
-                                <img
-                                  src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
-                                  alt="Profile"
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
-                              )}
-                            </div>
-                            <input
-                              ref={profilePictureRef}
-                              type="file"
-                              accept="image/jpeg,image/jpg,image/png"
-                              onChange={handleProfilePictureUpload}
-                              className="hidden"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                type="button"
-                                onClick={() => profilePictureRef.current?.click()}
-                                disabled={uploadingPicture}
-                                className="p-2 bg-white/90 rounded-lg hover:bg-white"
-                              >
-                                <Camera size={20} className="text-gray-800" />
-                              </button>
-                            </div>
-                          </div>
-                          <div>
-                            <button
-                              type="button"
-                              onClick={() => profilePictureRef.current?.click()}
-                              disabled={uploadingPicture}
-                              className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                            >
-                              <Upload size={14} />
-                              {uploadingPicture ? 'Uploading...' : ((profile?.user?.profilePicture ?? user?.profilePicture) ? 'Change photo' : 'Upload photo')}
-                            </button>
-                            {(profile?.user?.profilePicture ?? user?.profilePicture) && (
-                              <button
-                                type="button"
-                                onClick={handleRemoveProfilePicture}
-                                className="block mt-1 text-sm text-gray-500 hover:text-red-600"
-                              >
-                                Remove photo
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
-                            {editingProfile ? (
-                              <input
-                                type="text"
-                                value={profileData.firstName}
-                                onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                              />
-                            ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.firstName || 'N/A'}
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.lastName')}</label>
-                            {editingProfile ? (
-                              <input
-                                type="text"
-                                value={profileData.lastName}
-                                onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                              />
-                            ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.lastName || 'N/A'}
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.email')}</label>
-                            <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                              {profileData.email || 'N/A'}
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.phone')}</label>
-                            {editingProfile ? (
-                              <input
-                                type="tel"
-                                value={profileData.phone}
-                                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                              />
-                            ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.phone || 'N/A'}
-                              </div>
-                            )}
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.entityName')}</label>
-                            {editingProfile ? (
-                              <input
-                                type="text"
-                                value={profileData.entityName}
-                                onChange={(e) => setProfileData({ ...profileData, entityName: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                              />
-                            ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.entityName || 'N/A'}
-                              </div>
-                            )}
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.address')}</label>
-                            {editingProfile ? (
-                              <input
-                                type="text"
-                                value={profileData.address}
-                                onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                              />
-                            ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.address || 'N/A'}
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.city')}</label>
-                            {editingProfile ? (
-                              <input
-                                type="text"
-                                value={profileData.city}
-                                onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                              />
-                            ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.city || 'N/A'}
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.country')}</label>
-                            {editingProfile ? (
-                              <input
-                                type="text"
-                                value={profileData.country}
-                                onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                              />
-                            ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.country || 'N/A'}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {editingProfile && (
-                          <div className="flex gap-3 mt-6">
-                            <button
-                              onClick={handleUpdateProfile}
-                              disabled={loading}
-                              className="btn-save flex items-center gap-2 px-6 py-2.5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold"
-                            >
-                              <Save size={18} />
-                              {t('actions.saveChanges')}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingProfile(false);
-                                fetchProfile();
-                              }}
-                              className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
-                            >
-                              {t('common.cancel')}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Documents */}
-                    <div className="space-y-6">
-                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl p-6 border border-gray-200/50">
-                        <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-lg font-bold text-gray-900">{t('sections.documents')}</h3>
-                          <label className="cursor-pointer">
-                            <input
-                              type="file"
-                              onChange={handleDocumentUpload}
-                              disabled={uploadingDoc}
-                              className="hidden"
-                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                            />
-                            <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
-                              <Upload size={16} />
-                              {uploadingDoc ? t('sections.uploading') : t('sections.upload')}
-                            </div>
-                          </label>
-                        </div>
-                        {documents.length === 0 ? (
-                          <div className="text-center py-8 text-gray-500">
-                            <FileText size={32} className="mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">{t('sections.noDocumentsUploaded')}</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {documents.map((doc) => (
-                              <div
-                                key={doc.id}
-                                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200"
-                              >
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <FileText className="text-primary-600 flex-shrink-0" size={20} />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-900 truncate">{doc.fileName}</p>
-                                    <p className="text-xs text-gray-500">
-                                      {(doc.fileSize / 1024).toFixed(2)} KB
-                                    </p>
-                                  </div>
+                  <div className="flex flex-col lg:flex-row gap-6 items-start mt-0">
+                    <div className="flex-1 min-w-0 space-y-6">
+                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl border border-gray-200/50 flex flex-col max-h-[calc(100vh-var(--portal-header-height)-5.5rem)] lg:max-h-[calc(100vh-var(--portal-header-height)-4rem)] min-h-[280px]">
+                        <div className="shrink-0 px-3 sm:px-4 pt-3 pb-2 border-b border-gray-200 bg-white/95 backdrop-blur-sm rounded-t-2xl z-10">
+                          <h3 className="text-lg font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                              <div className="relative group shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-gray-200">
+                                <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
+                                  {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
+                                    <img
+                                      src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
+                                      alt="Profile"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
+                                  )}
                                 </div>
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  <a
-                                    href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${doc.filePath.replace(/^.*[\\\/]/, '')}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-all duration-200"
-                                    title={t('sections.viewDownload')}
-                                  >
-                                    <Eye size={16} />
-                                  </a>
+                                <input
+                                  ref={profilePictureRef}
+                                  type="file"
+                                  accept="image/jpeg,image/jpg,image/png"
+                                  onChange={handleProfilePictureUpload}
+                                  className="hidden"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                   <button
-                                    onClick={() => handleDeleteDocument(doc.id)}
-                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
-                                    title={t('common.delete')}
+                                    type="button"
+                                    onClick={() => profilePictureRef.current?.click()}
+                                    disabled={uploadingPicture}
+                                    className="p-2 bg-white/90 rounded-lg hover:bg-white"
                                   >
-                                    <Trash2 size={16} />
+                                    <Camera size={18} className="text-gray-800" />
                                   </button>
                                 </div>
                               </div>
-                            ))}
+                              <div className="min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => profilePictureRef.current?.click()}
+                                  disabled={uploadingPicture}
+                                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                                >
+                                  <Upload size={14} />
+                                  {uploadingPicture ? t('common.loading') : ((profile?.user?.profilePicture ?? user?.profilePicture) ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto'))}
+                                </button>
+                                {(profile?.user?.profilePicture ?? user?.profilePicture) && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRemoveProfilePicture}
+                                    className="block mt-1 text-sm text-gray-500 hover:text-red-600 text-left"
+                                  >
+                                    {t('supplierPortal.removePhoto')}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                              {editingProfile ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={handleUpdateProfile}
+                                    disabled={loading}
+                                    className="btn-save flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                                  >
+                                    <Save size={16} />
+                                    {t('actions.saveChanges')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingProfile(false);
+                                      fetchProfile();
+                                    }}
+                                    className="btn-cancel px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
+                                  >
+                                    {t('common.cancel')}
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingProfile(true)}
+                                  className="btn-save flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
+                                >
+                                  <Edit2 size={16} />
+                                  {t('actions.editProfile')}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        )}
+                        </div>
+
+                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                          <ProcuringEntityAiProfileAssist.Root
+                            enabled={editingProfile}
+                            onApply={handleAiProfileApply}
+                            onStartEdit={() => { if (!editingProfile) setEditingProfile(true); }}
+                          >
+                            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                              {editingProfile && (
+                                <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 border-b border-gray-100 bg-white/80 space-y-2">
+                                  <ProcuringEntityAiProfileAssist.UploadBar />
+                                </div>
+                              )}
+                              <div className="flex flex-col flex-1 min-w-0 min-h-0">
+                                <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-gray-100 bg-white/80">
+                                  <ProcuringEntityProfileTabsNav
+                                    activeTab={activeProfileTab}
+                                    onTabChange={setActiveProfileTab}
+                                    completeness={entityCompleteness}
+                                  />
+                                </div>
+                                <div className="flex-1 overflow-y-auto min-h-0 overscroll-behavior-contain px-3 sm:px-4 py-4">
+                                  {activeProfileTab === 'contact' && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
+                                        {editingProfile ? (
+                                          <input
+                                            type="text"
+                                            value={profileData.firstName}
+                                            onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                          />
+                                        ) : (
+                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                            {profileData.firstName || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.lastName')}</label>
+                                        {editingProfile ? (
+                                          <input
+                                            type="text"
+                                            value={profileData.lastName}
+                                            onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                          />
+                                        ) : (
+                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                            {profileData.lastName || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.email')}</label>
+                                        <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                          {profileData.email || 'N/A'}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.phone')}</label>
+                                        {editingProfile ? (
+                                          <input
+                                            type="tel"
+                                            value={profileData.phone}
+                                            onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                          />
+                                        ) : (
+                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                            {profileData.phone || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {activeProfileTab === 'organization' && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div className="md:col-span-2">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.entityName')}</label>
+                                        {editingProfile ? (
+                                          <input
+                                            type="text"
+                                            value={profileData.entityName}
+                                            onChange={(e) => setProfileData({ ...profileData, entityName: e.target.value })}
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                          />
+                                        ) : (
+                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                            {profileData.entityName || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="md:col-span-2">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.address')}</label>
+                                        {editingProfile ? (
+                                          <input
+                                            type="text"
+                                            value={profileData.address}
+                                            onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                          />
+                                        ) : (
+                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                            {profileData.address || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.city')}</label>
+                                        {editingProfile ? (
+                                          <input
+                                            type="text"
+                                            value={profileData.city}
+                                            onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                          />
+                                        ) : (
+                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                            {profileData.city || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.country')}</label>
+                                        {editingProfile ? (
+                                          <input
+                                            type="text"
+                                            value={profileData.country}
+                                            onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                          />
+                                        ) : (
+                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                            {profileData.country || 'N/A'}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {activeProfileTab === 'documents' && (
+                                    <div className="space-y-4">
+                                      <div className="flex justify-between items-center gap-3">
+                                        <p className="text-sm text-muted">{t('entityPortal.documentsHint')}</p>
+                                        <label className="cursor-pointer shrink-0">
+                                          <input
+                                            type="file"
+                                            onChange={handleDocumentUpload}
+                                            disabled={uploadingDoc}
+                                            className="hidden"
+                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                          />
+                                          <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
+                                            <Upload size={16} />
+                                            {uploadingDoc ? t('sections.uploading') : t('sections.upload')}
+                                          </div>
+                                        </label>
+                                      </div>
+                                      {documents.length === 0 ? (
+                                        <div className="text-center py-12 text-gray-500 rounded-xl border border-dashed border-gray-200 bg-gray-50/50">
+                                          <FileText size={32} className="mx-auto mb-2 opacity-50" />
+                                          <p className="text-sm">{t('sections.noDocumentsUploaded')}</p>
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-2">
+                                          {documents.map((doc) => (
+                                            <div
+                                              key={doc.id}
+                                              className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200"
+                                            >
+                                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                <FileText className="text-primary-600 flex-shrink-0" size={20} />
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-sm font-medium text-gray-900 truncate">{doc.fileName}</p>
+                                                  <p className="text-xs text-gray-500">
+                                                    {(doc.fileSize / 1024).toFixed(2)} KB
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center gap-1 flex-shrink-0">
+                                                <a
+                                                  href={`${UPLOADS_BASE}/${doc.filePath.replace(/^.*[\\\/]/, '')}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-all duration-200"
+                                                  title={t('sections.viewDownload')}
+                                                >
+                                                  <Eye size={16} />
+                                                </a>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleDeleteDocument(doc.id)}
+                                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
+                                                  title={t('common.delete')}
+                                                >
+                                                  <Trash2 size={16} />
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {editingProfile && <ProcuringEntityAiProfileAssist.Drawer />}
+                          </ProcuringEntityAiProfileAssist.Root>
+                        </div>
                       </div>
                     </div>
+
+                    <aside className="hidden lg:flex flex-col gap-3 w-52 xl:w-56 shrink-0 sticky top-[calc(var(--portal-header-height)+1rem)] self-start">
+                      <ProcuringEntityProfileCompletenessRail completeness={entityCompleteness} />
+                    </aside>
                   </div>
                 )}
               </div>
@@ -1220,10 +1308,12 @@ const ProcuringEntityDashboard = () => {
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('sections.filterByCPV')}</label>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
-                        <CPVSearchSelect
-                          cpvCodes={cpvCodes}
+                        <CpvSearchSelect
+                          cpvCodes={cpvCatalog.cpvCodes}
                           value={supplierCpvFilter}
                           onChange={(id) => { setSupplierCpvFilter(id); fetchSuppliers(1); }}
+                          onSearch={(term) => cpvCatalog.searchDebounced(term, supplierCpvFilter)}
+                          loading={cpvCatalog.loading}
                           placeholder={t('placeholders.allCPVCodes')}
                         />
                       </div>
@@ -1354,7 +1444,9 @@ const ProcuringEntityDashboard = () => {
         <CreateQuestionnaireModal
           questionnaire={newQuestionnaire}
           setQuestionnaire={setNewQuestionnaire}
-          cpvCodes={cpvCodes}
+          cpvCodes={cpvCatalog.cpvCodes}
+          cpvLoading={cpvCatalog.loading}
+          onCpvSearch={(term) => cpvCatalog.searchDebounced(term, newQuestionnaire.cpvCodeId)}
           updateQuestionAttachment={updateQuestionAttachment}
           onClose={() => {
             setShowCreateQuestionnaire(false);
@@ -1390,7 +1482,9 @@ const ProcuringEntityDashboard = () => {
         <EditQuestionnaireModal
           questionnaire={editingQuestionnaire}
           setQuestionnaire={setEditingQuestionnaire}
-          cpvCodes={cpvCodes}
+          cpvCodes={cpvCatalog.cpvCodes}
+          cpvLoading={cpvCatalog.loading}
+          onCpvSearch={(term) => cpvCatalog.searchDebounced(term, editingQuestionnaire.cpvCodeId)}
           updateQuestionAttachment={updateQuestionAttachmentInEdit}
           onClose={() => {
             setEditingQuestionnaire(null);
@@ -1630,99 +1724,7 @@ const QuestionTypeSelect = ({
   );
 };
 
-// Searchable CPV Code selector - themed list with search
-const CPVSearchSelect = ({
-  cpvCodes,
-  value,
-  onChange,
-  placeholder = 'Select CPV Code'
-}: {
-  cpvCodes: CPVCode[];
-  value: string;
-  onChange: (cpvCodeId: string) => void;
-  placeholder?: string;
-}) => {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const selected = cpvCodes.find((c) => c.id === value);
-  const filtered = cpvCodes.filter(
-    (c) =>
-      !search ||
-      c.code.toLowerCase().includes(search.toLowerCase()) ||
-      (c.description && c.description.toLowerCase().includes(search.toLowerCase()))
-  );
-  useEffect(() => {
-    if (!open) return;
-    const handleClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-  return (
-    <div className="relative" ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full px-4 py-3 flex items-center justify-between gap-2 rounded-xl border border-gray-300 bg-white hover:border-primary-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 text-left"
-      >
-        <span className={selected ? 'text-gray-900' : 'text-gray-500'}>
-          {selected ? `${selected.code} – ${selected.description}` : placeholder}
-        </span>
-        <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute z-20 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
-            <div className="p-2 border-b border-gray-100 bg-gray-50/80">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t('placeholders.searchByCodeOrDescription')}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-            </div>
-            <div className="max-h-56 overflow-y-auto py-1">
-              {cpvCodes.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-amber-700 bg-amber-50 rounded">No CPV codes loaded. Ensure the database is seeded (run seed-cpv-from-api) and check the browser console for errors.</p>
-              ) : filtered.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-gray-500">{t('sections.noCPVCodesMatch')}</p>
-              ) : (
-                filtered.map((cpv) => (
-                  <button
-                    key={cpv.id}
-                    type="button"
-                    onClick={() => {
-                      onChange(cpv.id);
-                      setOpen(false);
-                      setSearch('');
-                    }}
-                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
-                      value === cpv.id
-                        ? 'bg-primary-50 text-primary-800 font-medium'
-                        : 'text-gray-700 hover:bg-primary-50/60'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-900">{cpv.code}</span>
-                    <span className="text-gray-600"> – {cpv.description}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-      )}
-    </div>
-  );
-};
-
-// Searchable NUTS Code selector - themed list with search (same style as CPVSearchSelect)
+// Searchable NUTS Code selector - themed list with search (same style as CpvSearchSelect)
 const NUTSSearchSelect = ({
   nutsCodes = [],
   value,
@@ -1823,6 +1825,8 @@ const CreateQuestionnaireModal = ({
   questionnaire,
   setQuestionnaire,
   cpvCodes,
+  cpvLoading = false,
+  onCpvSearch,
   updateQuestionAttachment,
   onClose,
   onSubmit,
@@ -1890,10 +1894,12 @@ const CreateQuestionnaireModal = ({
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('forms.selectCPVCode')} <span className="text-red-500">*</span>
                 </label>
-                <CPVSearchSelect
+                <CpvSearchSelect
                   cpvCodes={cpvCodes}
                   value={questionnaire.cpvCodeId || ''}
                   onChange={(cpvCodeId) => setQuestionnaire({ ...questionnaire, cpvCodeId })}
+                  onSearch={onCpvSearch || (() => {})}
+                  loading={cpvLoading}
                   placeholder={t('forms.selectCPVCode')}
                 />
               </div>
@@ -2202,6 +2208,8 @@ const EditQuestionnaireModal = ({
   questionnaire,
   setQuestionnaire,
   cpvCodes,
+  cpvLoading = false,
+  onCpvSearch,
   updateQuestionAttachment,
   onClose,
   onSubmit,
@@ -2313,10 +2321,12 @@ const EditQuestionnaireModal = ({
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('forms.selectCPVCode')} <span className="text-red-500">*</span>
                 </label>
-                <CPVSearchSelect
+                <CpvSearchSelect
                   cpvCodes={cpvCodes}
                   value={safeQuestionnaire.cpvCodeId}
                   onChange={(cpvCodeId) => setQuestionnaire({ ...safeQuestionnaire, cpvCodeId })}
+                  onSearch={onCpvSearch || (() => {})}
+                  loading={cpvLoading}
                   placeholder={t('forms.selectCPVCode')}
                 />
               </div>
