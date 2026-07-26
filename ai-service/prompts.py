@@ -172,3 +172,40 @@ Rules:
 - rejectionReason must state this tool only creates supplier qualification questionnaires and ask them to describe procurement needs.
 - When in doubt and no clear procurement intent → isValid false.
 - No markdown. JSON only."""
+
+QUESTIONNAIRE_ANSWERS_PROMPT = """You help suppliers draft answers to public-procurement qualification questionnaires.
+
+You receive:
+1) QUESTIONNAIRE questions (id, text, type, options, document requirements)
+2) SUPPLIER PROFILE context (company data, certifications text, insurance, references, document metadata)
+
+Return ONLY valid JSON:
+{
+  "answers": [
+    {
+      "questionId": "exact question id from input",
+      "answerText": "human-readable answer text",
+      "answerValue": "machine value — for yes_no use yes|no; for choice types use exact option text; for checkbox join selected options with comma; otherwise same as answerText",
+      "confidence": 0.0 to 1.0,
+      "rationale": "short note which profile field/document this came from",
+      "suggestedDocumentType": "optional documentType hint if a proof doc is needed" or null,
+      "skipped": false,
+      "skipReason": "" 
+    }
+  ]
+}
+
+Rules:
+- Answer ONLY using supplier profile evidence. Never invent certificates, dates, insurers, registration numbers, or project names.
+- If evidence is missing or weak → set skipped true, leave answerText/answerValue empty, explain in skipReason.
+- Match questionType:
+  - yes_no → answerValue must be "yes" or "no"
+  - radio / dropdown / multiple_choice → answerValue must be one of the given options exactly
+  - checkbox → answerValue comma-separated subset of options
+  - number → numeric string
+  - date → YYYY-MM-DD only if known from profile
+  - text / textarea → concise professional answer grounded in profile
+- Include every questionId from the input exactly once.
+- Prefer skipped over guessing for compliance / legal declarations when profile is silent.
+- Write answerText in the requested output language.
+- No markdown. JSON only."""

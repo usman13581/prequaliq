@@ -742,6 +742,34 @@ const suggestProfileFromDocuments = (req, res) => {
   });
 };
 
+const suggestAnswersForQuestionnaire = async (req, res) => {
+  try {
+    const questionnaireId = req.params.questionnaireId;
+    const language = (req.body?.language || 'en').slice(0, 2);
+    const { suggestAnswersForQuestionnaire: runSuggest } = require('../services/questionnaireAnswerAiService');
+    const result = await runSuggest(req.user.id, questionnaireId, { language });
+    return res.json(result);
+  } catch (error) {
+    console.error('Questionnaire answer AI suggest error:', error);
+    const clientCodes = new Set([
+      'SUPPLIER_NOT_FOUND',
+      'SUPPLIER_NOT_APPROVED',
+      'NO_CPV',
+      'QUESTIONNAIRE_NOT_FOUND',
+      'QUESTIONNAIRE_EXPIRED',
+      'ALREADY_SUBMITTED',
+    ]);
+    if (clientCodes.has(error.code)) {
+      const status = error.code === 'SUPPLIER_NOT_FOUND' || error.code === 'QUESTIONNAIRE_NOT_FOUND' ? 404 : 400;
+      return res.status(status).json({ message: error.message, code: error.code });
+    }
+    if (error.code === 'AI_GPU_OUTDATED') {
+      return res.status(503).json({ message: error.message, code: error.code });
+    }
+    return mapAiErrorResponse(res, error);
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -749,6 +777,7 @@ module.exports = {
   getAiEndpoints,
   suggestInsuranceFromDocument,
   suggestProfileFromDocuments,
+  suggestAnswersForQuestionnaire,
   getCompleteness,
   getDashboard,
   submitProfile,

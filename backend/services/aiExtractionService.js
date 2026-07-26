@@ -265,6 +265,13 @@ function getBackendAiEndpointsCatalog() {
       { method: 'GET', path: `${base}/ai/endpoints`, auth: 'supplier JWT', description: 'This catalog + GPU catalog' },
       { method: 'POST', path: `${base}/insurance/ai-suggest`, auth: 'supplier JWT', body: 'multipart document (PDF)' },
       { method: 'POST', path: `${base}/profile/ai-suggest`, auth: 'supplier JWT', body: 'multipart documents[] (PDFs, max 10)' },
+      {
+        method: 'POST',
+        path: `${base}/questionnaires/:questionnaireId/ai-suggest-answers`,
+        auth: 'supplier JWT',
+        body: '{ language? }',
+        description: 'Suggest questionnaire answers from supplier profile',
+      },
     ],
     gpuServiceUrl: AI_SERVICE_URL || null,
     gpuDocsUrl: AI_SERVICE_URL ? `${AI_SERVICE_URL}/docs` : null,

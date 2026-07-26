@@ -18,6 +18,7 @@ import { SupplierReferencesSection } from '../../components/supplier/SupplierRef
 import { SupplierProfileSubmissionHistory } from '../../components/supplier/SupplierProfileSubmissionHistory';
 import { SupplierDocumentList } from '../../components/supplier/SupplierDocumentList';
 import { SupplierAiProfileAssist } from '../../components/supplier/SupplierAiProfileAssist';
+import { SupplierQuestionnaireAnswerAiAssist } from '../../components/supplier/SupplierQuestionnaireAnswerAiAssist';
 import { SupplierProfileTabsNav, type ProfileTabId } from '../../components/supplier/SupplierProfileTabsNav';
 import { useListPagination } from '../../hooks/useListPagination';
 import { useCpvCatalogSearch } from '../../hooks/useCpvCatalogSearch';
@@ -28,6 +29,7 @@ import {
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
   Search, ChevronDown, LayoutDashboard, Download
 } from 'lucide-react';
+import type { AnswerSuggestion } from '../../components/supplier/SupplierQuestionnaireAnswerAiAssist';
 
 interface Document {
   id: string;
@@ -2720,6 +2722,38 @@ const QuestionnaireResponseModal = ({
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <p className="text-gray-700">{questionnaire.description}</p>
                 </div>
+              )}
+              {!isReadOnly && !loadingResponse && (
+                <SupplierQuestionnaireAnswerAiAssist
+                  questionnaireId={questionnaire.id}
+                  onApply={(suggestions: AnswerSuggestion[]) => {
+                    setResponse((prev: Record<string, any>) => {
+                      const next = { ...prev };
+                      for (const s of suggestions) {
+                        if (s.skipped) continue;
+                        const current = next[s.questionId] || {};
+                        next[s.questionId] = {
+                          ...current,
+                          answerText: s.answerText || s.answerValue || '',
+                          answerValue: s.answerValue || s.answerText || '',
+                          ...(s.suggestedDocumentId
+                            ? {
+                                documentId: s.suggestedDocumentId,
+                                document: s.suggestedDocumentName
+                                  ? {
+                                      ...(current.document || {}),
+                                      fileName: s.suggestedDocumentName,
+                                      id: s.suggestedDocumentId,
+                                    }
+                                  : current.document,
+                              }
+                            : {}),
+                        };
+                      }
+                      return next;
+                    });
+                  }}
+                />
               )}
               {questionnaire.questions?.map((question: Question, index: number) => (
             <div key={question.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">

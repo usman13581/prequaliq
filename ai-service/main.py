@@ -18,6 +18,7 @@ from prompts import (
     SECTION_FOR_TYPE,
     QUESTIONNAIRE_GENERATE_PROMPT,
     QUESTIONNAIRE_UNDERSTAND_PROMPT,
+    QUESTIONNAIRE_ANSWERS_PROMPT,
 )
 
 load_dotenv()
@@ -47,6 +48,7 @@ ENDPOINTS_CATALOG = [
     {"method": "POST", "path": "/extract/auto", "auth": True, "description": "Classify then extract in one call"},
     {"method": "POST", "path": "/generate/questionnaire", "auth": True, "description": "Generate questionnaire draft from procurement description"},
     {"method": "POST", "path": "/generate/questionnaire/understand", "auth": True, "description": "Validate procurement intent and summarize for user confirmation"},
+    {"method": "POST", "path": "/generate/questionnaire/answers", "auth": True, "description": "Suggest supplier answers from profile context"},
 ]
 
 
@@ -106,6 +108,17 @@ class QuestionnaireGenerateResponse(BaseModel):
     cpvCodeHints: list[dict[str, Any]]
     searchKeywords: list[str]
     questions: list[dict[str, Any]]
+    raw: Optional[dict[str, Any]] = None
+
+
+class QuestionnaireAnswersRequest(BaseModel):
+    language: Optional[str] = Field(default="en")
+    questionnaire: dict[str, Any] = Field(default_factory=dict)
+    supplierProfile: dict[str, Any] = Field(default_factory=dict)
+
+
+class QuestionnaireAnswersResponse(BaseModel):
+    answers: list[dict[str, Any]]
     raw: Optional[dict[str, Any]] = None
 
 
@@ -546,3 +559,186 @@ async def generate_questionnaire(
         questions=normalized_questions,
         raw=parsed,
     )
+
+
+def _build_answers_user_text(body: QuestionnaireAnswersRequest) -> str:
+    q = body.questionnaire or {}
+    questions = q.get("questions") if isinstance(q.get("questions"), list) else []
+    parts = [
+        f"QUESTIONNAIRE TITLE: {str(q.get('title') or '').strip()}",
+        f"QUESTIONNAIRE DESCRIPTION: {str(q.get('description') or '').strip()}",
+        "QUESTIONS:",
+    ]
+    for item in questions[:40]:
+        if not isinstance(item, dict):
+            continue
+        qid = str(item.get("id") or "").strip()
+        if not qid:
+            continue
+        opts = item.get("options") if isinstance(item.get("options"), list) else []
+        parts.append(
+            json.dumps(
+                {
+                    "id": qid,
+                    "questionText": str(item.get("questionText") or "")[:500],
+                    "questionType": str(item.get("questionType") or "text"),
+                    "options": [str(o) for o in opts[:12]],
+                    "isRequired": bool(item.get("isRequired", True)),
+                    "requiresDocument": bool(item.get("requiresDocument")),
+                    "documentType": item.get("documentType"),
+                },
+                ensure_ascii=False,
+            )
+        )
+    profile = body.supplierProfile or {}
+    # Keep profile payload bounded for the model context window
+    profile_json = json.dumps(profile, ensure_ascii=False)
+    if len(profile_json) > 10000:
+        profile_json = profile_json[:10000] + "…"
+    parts.append("SUPPLIER PROFILE CONTEXT (JSON):")
+    parts.append(profile_json)
+    return "\n".join(parts)
+
+
+@app.post("/generate/questionnaire/answers", response_model=QuestionnaireAnswersResponse)
+async def generate_questionnaire_answers(
+    body: QuestionnaireAnswersRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    verify_api_key(x_api_key)
+    questions = (body.questionnaire or {}).get("questions")
+    if not isinstance(questions, list) or not questions:
+        raise HTTPException(status_code=400, detail="questionnaire.questions is required")
+
+    lang = (body.language or "en").strip()[:2]
+    lang_label = "Swedish" if lang == "sv" else "English"
+    user_prefix = (
+        f"Output language: {lang_label} ({lang}). "
+        "Draft answers only from supplier evidence. Never invent facts. "
+        "Skip questions without evidence."
+    )
+    parsed = await generate_with_prompt(
+        QUESTIONNAIRE_ANSWERS_PROMPT,
+        _build_answers_user_text(body),
+        lang,
+        user_prefix=user_prefix,
+    )
+
+    known_ids = {
+        str(q.get("id")).strip()
+        for q in questions
+        if isinstance(q, dict) and str(q.get("id") or "").strip()
+    }
+    questions_by_id = {
+        str(q.get("id")).strip(): q
+        for q in questions
+        if isinstance(q, dict) and str(q.get("id") or "").strip()
+    }
+
+    raw_answers = parsed.get("answers") if isinstance(parsed.get("answers"), list) else []
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for item in raw_answers:
+        if not isinstance(item, dict):
+            continue
+        qid = str(item.get("questionId") or "").strip()
+        if not qid or qid not in known_ids or qid in seen:
+            continue
+        seen.add(qid)
+        qmeta = questions_by_id.get(qid) or {}
+        qtype = str(qmeta.get("questionType") or "text")
+        options = qmeta.get("options") if isinstance(qmeta.get("options"), list) else []
+        skipped = bool(item.get("skipped"))
+        answer_text = str(item.get("answerText") or "").strip()
+        answer_value = str(item.get("answerValue") or answer_text).strip()
+
+        if not skipped:
+            if qtype == "yes_no":
+                low = answer_value.lower()
+                if low in ("yes", "y", "true", "1", "ja"):
+                    answer_value = "yes"
+                    answer_text = answer_text or "Yes"
+                elif low in ("no", "n", "false", "0", "nej"):
+                    answer_value = "no"
+                    answer_text = answer_text or "No"
+                else:
+                    skipped = True
+                    answer_text = ""
+                    answer_value = ""
+            elif qtype in ("radio", "dropdown", "multiple_choice") and options:
+                exact = next((str(o) for o in options if str(o).strip() == answer_value), None)
+                if not exact:
+                    # soft match case-insensitive
+                    exact = next(
+                        (str(o) for o in options if str(o).strip().lower() == answer_value.lower()),
+                        None,
+                    )
+                if exact:
+                    answer_value = exact
+                    answer_text = answer_text or exact
+                else:
+                    skipped = True
+                    answer_text = ""
+                    answer_value = ""
+            elif qtype == "checkbox" and options:
+                parts = [p.strip() for p in answer_value.split(",") if p.strip()]
+                allowed = {str(o).strip() for o in options}
+                allowed_l = {a.lower(): a for a in allowed}
+                picked = []
+                for p in parts:
+                    if p in allowed:
+                        picked.append(p)
+                    elif p.lower() in allowed_l:
+                        picked.append(allowed_l[p.lower()])
+                if picked:
+                    answer_value = ",".join(picked)
+                    answer_text = answer_text or answer_value
+                else:
+                    skipped = True
+                    answer_text = ""
+                    answer_value = ""
+            elif not answer_text and not answer_value:
+                skipped = True
+
+        conf = item.get("confidence")
+        try:
+            confidence = max(0.0, min(1.0, float(conf))) if conf is not None else 0.5
+        except (TypeError, ValueError):
+            confidence = 0.5
+
+        out.append(
+            {
+                "questionId": qid,
+                "answerText": "" if skipped else answer_text[:2000],
+                "answerValue": "" if skipped else answer_value[:2000],
+                "confidence": confidence,
+                "rationale": str(item.get("rationale") or "").strip()[:400],
+                "suggestedDocumentType": (
+                    str(item.get("suggestedDocumentType")).strip()[:120]
+                    if item.get("suggestedDocumentType")
+                    else None
+                ),
+                "skipped": skipped,
+                "skipReason": str(item.get("skipReason") or "").strip()[:400] if skipped else "",
+            }
+        )
+
+    # Ensure every question has an entry
+    for qid in known_ids:
+        if qid in seen:
+            continue
+        out.append(
+            {
+                "questionId": qid,
+                "answerText": "",
+                "answerValue": "",
+                "confidence": 0.0,
+                "rationale": "",
+                "suggestedDocumentType": None,
+                "skipped": True,
+                "skipReason": "No suggestion generated",
+            }
+        )
+
+    return QuestionnaireAnswersResponse(answers=out, raw=parsed)
