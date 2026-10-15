@@ -384,9 +384,9 @@ async def understand_questionnaire(
     lang_label = "Swedish" if lang == "sv" else "English"
     user_prefix = (
         f"Output language: {lang_label} ({lang}). "
-        "You are a procurement questionnaire validator ONLY — not a general assistant. "
-        "Reject travel, opinion, trivia, and chat questions. "
-        "Never echo unrelated text as understanding."
+        "Prefer ACCEPT for any note that could describe works, services, or supplies. "
+        "Reject ONLY clear chat, travel, trivia, or jokes. "
+        "Do not require words like procure/contract/supplier."
     )
     user_text = f"User input to validate (procurement questionnaire context only):\n{body.description.strip()}"
     parsed = await generate_with_prompt(
@@ -402,21 +402,25 @@ async def understand_questionnaire(
 
     desc = body.description.strip()
     desc_lower = desc.lower()
-    procurement_hints = (
-        "procure", "construction", "construct", "build", "bridge", "service", "supply",
-        "contract", "tender", "cleaning", "software", "equipment", "maintenance",
-        "upphandl", "leverantör", "bygg", "bro", "tjänst",
-    )
-    has_procurement = any(h in desc_lower for h in procurement_hints)
-    irrelevant = (
-        not has_procurement
-        and (
-            bool(re.search(r"\bwhich\s+(place|city|country)", desc_lower))
-            or "beautiful" in desc_lower
-            or bool(re.search(r"^(what|which|who|where|why|how)\b", desc_lower) and "?" in desc)
+
+    # Hard reject only clearly off-topic patterns (no keyword requirement).
+    clearly_irrelevant = (
+        bool(re.search(r"\bwhich\s+(place|city|country|town|spot)\b", desc_lower))
+        or bool(re.search(r"\b(beautiful|prettier|tourism|vacation|holiday)\b", desc_lower)
+                and not re.search(r"\b(procure|supplier|contract|service|supply|works|build)\b", desc_lower))
+        or bool(re.search(r"^(hi|hello|hey|hej|tja)([\s!.?]|$)", desc_lower) and len(desc) < 24)
+        or bool(re.search(r"\b(tell me a joke|how are you|what'?s up)\b", desc_lower))
+        or (
+            bool(re.search(r"^(what|which|who|where|when|why|how)\b", desc_lower))
+            and "?" in desc
+            and not re.search(
+                r"\b(procure|supplier|contract|tender|service|supply|works|build|construct|office|cleaning|it|equipment)\b",
+                desc_lower,
+            )
         )
     )
-    if irrelevant:
+
+    if clearly_irrelevant:
         is_valid = False
         understanding = ""
         category = ""
@@ -427,32 +431,27 @@ async def understand_questionnaire(
             else "Denna assistent skapar endast kvalificeringsenkäter för upphandling. "
             "Den svarar inte på allmänna eller resefrågor. Beskriv arbeten, tjänster eller varor att upphandla."
         )
-
-    if is_valid and not has_procurement:
-        is_valid = False
-        understanding = ""
-        category = ""
-        if not rejection:
-            rejection = (
-                "Please describe the works, services, or supplies you want to procure."
-                if lang != "sv"
-                else "Beskriv arbeten, tjänster eller varor du vill upphandla."
+    elif not is_valid and len(desc) >= 10:
+        # Prefer accept when model is overly strict on ordinary notes
+        is_valid = True
+        rejection = ""
+        if not understanding:
+            understanding = (
+                f"Du vill kvalificera leverantörer utifrån: {desc[:500]}"
+                if lang == "sv"
+                else f"You want to qualify suppliers based on: {desc[:500]}"
             )
-
-    if is_valid and understanding and desc_lower in understanding.lower():
-        if not has_procurement:
-            is_valid = False
-            understanding = ""
-            category = ""
+        if not category:
+            category = "Upphandling" if lang == "sv" else "Procurement"
 
     if is_valid and not understanding:
         understanding = (
-            f"You want to qualify suppliers for: {desc[:500]}"
-            if has_procurement
-            else ""
+            f"Du vill kvalificera leverantörer utifrån: {desc[:500]}"
+            if lang == "sv"
+            else f"You want to qualify suppliers based on: {desc[:500]}"
         )
     if is_valid and not category:
-        category = "Procurement"
+        category = "Upphandling" if lang == "sv" else "Procurement"
     if not is_valid and not rejection:
         rejection = (
             "Please describe the works, services, or supplies you want to procure so we can create a qualification questionnaire."

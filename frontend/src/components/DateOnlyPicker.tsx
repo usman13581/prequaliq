@@ -1,5 +1,6 @@
 import React from 'react';
 import DatePicker from 'react-datepicker';
+import { useTranslation } from 'react-i18next';
 import 'react-datepicker/dist/react-datepicker.css';
 
 interface DateOnlyPickerProps {
@@ -21,13 +22,15 @@ export const DateOnlyPicker: React.FC<DateOnlyPickerProps> = ({
   value,
   onChange,
   minDate,
-  placeholder = 'Select date',
+  placeholder,
   id,
   className = '',
   error = false,
   required = false,
   disabled = false
 }) => {
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder || t('common.selectDate');
   const selected = value ? new Date(value + 'T12:00:00') : null;
   const min = minDate ? new Date(minDate + 'T12:00:00') : undefined;
 
@@ -51,7 +54,7 @@ export const DateOnlyPicker: React.FC<DateOnlyPickerProps> = ({
       onChange={handleChange}
       minDate={min}
       dateFormat="yyyy-MM-dd"
-      placeholderText={placeholder}
+      placeholderText={resolvedPlaceholder}
       className={baseClass}
       required={required}
       disabled={disabled}
@@ -61,6 +64,8 @@ export const DateOnlyPicker: React.FC<DateOnlyPickerProps> = ({
       dropdownMode="select"
       calendarClassName="date-only-picker-calendar"
       popperClassName="date-only-picker-popper"
+      /* Avoid clipping inside SlideOver / overflow containers */
+      portalId="prequaliq-datepicker-portal"
     />
   );
 };

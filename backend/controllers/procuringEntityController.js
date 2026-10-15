@@ -6,6 +6,85 @@ const { extractTextFromPdf } = require('../services/pdfTextService');
 const { processDocumentsForProfile } = require('../services/procuringEntityProfileAiService');
 const { generateQuestionnaireDraft, understandQuestionnaireDescription } = require('../services/questionnaireAiService');
 const { validateQuestionnaireDescription } = require('../services/questionnaireDescriptionValidation');
+const { getEffectiveEntitlementsForUser } = require('../services/entitlementService');
+
+async function assertEntitlement(userId, key) {
+  const map = await getEffectiveEntitlementsForUser(userId);
+  if (map[key] === false) {
+    return { ok: false, message: `Feature not enabled: ${key}` };
+  }
+  return { ok: true };
+}
+
+/** Collect supplier IDs linked to this buyer via bids, invites, or contracts. */
+async function collectMySupplierIds(entityId) {
+  const related = new Set();
+  const relationBySupplier = {};
+
+  const ensure = (sid) => {
+    if (!sid) return;
+    related.add(sid);
+    if (!relationBySupplier[sid]) {
+      relationBySupplier[sid] = { applied: false, invited: false, contracted: false };
+    }
+  };
+
+  const questionnaires = await db.Questionnaire.findAll({
+    where: { procuringEntityId: entityId },
+    attributes: ['id']
+  });
+  const questionnaireIds = questionnaires.map((q) => q.id);
+  if (questionnaireIds.length) {
+    const responses = await db.QuestionnaireResponse.findAll({
+      where: {
+        questionnaireId: { [Op.in]: questionnaireIds },
+        status: 'submitted'
+      },
+      attributes: ['supplierId'],
+      raw: true
+    });
+    responses.forEach((r) => {
+      ensure(r.supplierId);
+      relationBySupplier[r.supplierId].applied = true;
+    });
+  }
+
+  if (db.Procedure && db.ProcedureInvite) {
+    const procedures = await db.Procedure.findAll({
+      where: { procuringEntityId: entityId },
+      attributes: ['id']
+    });
+    const procedureIds = procedures.map((p) => p.id);
+    if (procedureIds.length) {
+      const invites = await db.ProcedureInvite.findAll({
+        where: { procedureId: { [Op.in]: procedureIds } },
+        attributes: ['supplierId'],
+        raw: true
+      });
+      invites.forEach((inv) => {
+        ensure(inv.supplierId);
+        relationBySupplier[inv.supplierId].invited = true;
+      });
+    }
+  }
+
+  if (db.Contract) {
+    const contracts = await db.Contract.findAll({
+      where: {
+        procuringEntityId: entityId,
+        supplierId: { [Op.ne]: null }
+      },
+      attributes: ['supplierId'],
+      raw: true
+    });
+    contracts.forEach((c) => {
+      ensure(c.supplierId);
+      relationBySupplier[c.supplierId].contracted = true;
+    });
+  }
+
+  return { supplierIds: [...related], relationBySupplier };
+}
 
 // Get procuring entity profile
 const getProfile = async (req, res) => {
@@ -55,6 +134,18 @@ const updateProfile = async (req, res) => {
 
     const { firstName, lastName, email, phone, entityName, address, city, country } = req.body;
 
+    const materialFields = { entityName, address, city, country };
+    const materialChanged = Object.entries(materialFields).some(([key, val]) => {
+      if (val === undefined) return false;
+      const normalized = typeof val === 'string' ? val.trim() : val;
+      const old = entity.getDataValue(key);
+      const oldNorm = old == null ? '' : String(old).trim();
+      const newNorm = normalized == null ? '' : String(normalized);
+      return oldNorm !== newNorm;
+    });
+    const statusUpdates =
+      entity.status === 'approved' && materialChanged ? { status: 'pending' } : {};
+
     // Update User fields (firstName, lastName, email, phone)
     if (entity.user) {
       await entity.user.update({
@@ -71,7 +162,8 @@ const updateProfile = async (req, res) => {
       ...(address !== undefined && { address: address?.trim() || null }),
       ...(city !== undefined && { city: city?.trim() || null }),
       ...(country !== undefined && { country: country?.trim() || null }),
-      ...(phone !== undefined && { phone: phone?.trim() || null })
+      ...(phone !== undefined && { phone: phone?.trim() || null }),
+      ...statusUpdates
     });
 
     const updatedEntity = await db.ProcuringEntity.findByPk(entity.id, {
@@ -119,112 +211,110 @@ const getSuppliers = async (req, res) => {
       maxTurnover,
       cpvCodeId,
       nutsCodeId,
+      scope: scopeRaw = 'discover',
       page = 1,
       limit = 20
     } = req.query;
 
-    // Questionnaire IDs belonging to this entity (optionally filter by CPV)
-    const questionnaireWhere = { procuringEntityId: entity.id };
-    if (cpvCodeId) questionnaireWhere.cpvCodeId = cpvCodeId;
-    const entityQuestionnaires = await db.Questionnaire.findAll({
-      where: questionnaireWhere,
-      attributes: ['id']
-    });
-    const questionnaireIds = entityQuestionnaires.map((q) => q.id);
-    if (questionnaireIds.length === 0) {
-      return res.json({
-        suppliers: [],
-        pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), totalPages: 0 }
-      });
+    const scope = String(scopeRaw).toLowerCase() === 'mine' ? 'mine' : 'discover';
+
+    if (scope === 'discover') {
+      const ent = await assertEntitlement(req.user.id, 'marketplace.supplier_discovery');
+      if (!ent.ok) return res.status(403).json({ message: ent.message });
     }
 
-    // Supplier IDs who submitted to any of these questionnaires
-    const submittedResponses = await db.QuestionnaireResponse.findAll({
-      where: {
-        questionnaireId: { [Op.in]: questionnaireIds },
-        status: 'submitted'
-      },
-      attributes: ['supplierId'],
-      raw: true
-    });
-    const supplierIds = [...new Set(submittedResponses.map((r) => r.supplierId))];
-    if (supplierIds.length === 0) {
-      return res.json({
-        suppliers: [],
-        pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), totalPages: 0 }
-      });
-    }
+    let relationBySupplier = {};
+    const and = [{ status: 'approved' }];
 
-    const where = {
-      [Op.and]: [
-        { id: { [Op.in]: supplierIds } },
-        { status: 'approved' }
+    // Hide expired qualifications (still visible if never set)
+    and.push({
+      [Op.or]: [
+        { qualificationExpiresAt: null },
+        { qualificationExpiresAt: { [Op.gte]: new Date() } }
       ]
-    };
-    if (city) where[Op.and].push({ city });
-    if (country) where[Op.and].push({ country });
+    });
+
+    if (scope === 'mine') {
+      const mine = await collectMySupplierIds(entity.id);
+      if (mine.supplierIds.length === 0) {
+        return res.json({
+          suppliers: [],
+          scope: 'mine',
+          pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), totalPages: 0 }
+        });
+      }
+      and.push({ id: { [Op.in]: mine.supplierIds } });
+      relationBySupplier = mine.relationBySupplier;
+    }
+
+    if (city) and.push({ city });
+    if (country) and.push({ country });
     const minT = minTurnover ? parseFloat(minTurnover) : null;
     const maxT = maxTurnover ? parseFloat(maxTurnover) : null;
-    if (minT != null && !isNaN(minT)) where[Op.and].push({ turnover: { [Op.gte]: minT } });
-    if (maxT != null && !isNaN(maxT)) where[Op.and].push({ turnover: { [Op.lte]: maxT } });
+    if (minT != null && !isNaN(minT)) and.push({ turnover: { [Op.gte]: minT } });
+    if (maxT != null && !isNaN(maxT)) and.push({ turnover: { [Op.lte]: maxT } });
 
     if (search && search.trim()) {
       const term = String(search).trim().replace(/[%_\\]/g, '\\$&');
       const pattern = `%${term}%`;
-      const searchOr = [
-        { companyName: { [Op.iLike]: pattern } },
-        { registrationNumber: { [Op.iLike]: pattern } },
-        { taxId: { [Op.iLike]: pattern } },
-        { address: { [Op.iLike]: pattern } },
-        { city: { [Op.iLike]: pattern } },
-        { country: { [Op.iLike]: pattern } },
-        { website: { [Op.iLike]: pattern } },
-        { phone: { [Op.iLike]: pattern } },
-        { financialStability: { [Op.iLike]: pattern } },
-        { qualityManagementSystem: { [Op.iLike]: pattern } },
-        { environmentalManagementSystem: { [Op.iLike]: pattern } },
-        { socialResponsibilityManagementSystem: { [Op.iLike]: pattern } },
-        { ohsManagementSystem: { [Op.iLike]: pattern } },
-        { groundsForExclusion: { [Op.iLike]: pattern } },
-        { laborLawRegulations: { [Op.iLike]: pattern } },
-        { sanctionsRussiaBelarus: { [Op.iLike]: pattern } },
-        { technicalCapacityProfessionalExperience: { [Op.iLike]: pattern } },
-        { '$user.firstName$': { [Op.iLike]: pattern } },
-        { '$user.lastName$': { [Op.iLike]: pattern } },
-        { '$user.email$': { [Op.iLike]: pattern } }
-      ];
-      where[Op.and].push({ [Op.or]: searchOr });
+      and.push({
+        [Op.or]: [
+          { companyName: { [Op.iLike]: pattern } },
+          { registrationNumber: { [Op.iLike]: pattern } },
+          { taxId: { [Op.iLike]: pattern } },
+          { address: { [Op.iLike]: pattern } },
+          { city: { [Op.iLike]: pattern } },
+          { country: { [Op.iLike]: pattern } },
+          { website: { [Op.iLike]: pattern } },
+          { phone: { [Op.iLike]: pattern } },
+          { financialStability: { [Op.iLike]: pattern } },
+          { qualityManagementSystem: { [Op.iLike]: pattern } },
+          { environmentalManagementSystem: { [Op.iLike]: pattern } },
+          { socialResponsibilityManagementSystem: { [Op.iLike]: pattern } },
+          { ohsManagementSystem: { [Op.iLike]: pattern } },
+          { groundsForExclusion: { [Op.iLike]: pattern } },
+          { laborLawRegulations: { [Op.iLike]: pattern } },
+          { sanctionsRussiaBelarus: { [Op.iLike]: pattern } },
+          { technicalCapacityProfessionalExperience: { [Op.iLike]: pattern } },
+          { '$user.firstName$': { [Op.iLike]: pattern } },
+          { '$user.lastName$': { [Op.iLike]: pattern } },
+          { '$user.email$': { [Op.iLike]: pattern } }
+        ]
+      });
     }
 
     const include = [
       {
         model: db.User,
         as: 'user',
-        attributes: ['id', 'email', 'firstName', 'lastName', 'phone'],
-        required: !!(search && search.trim())
+        attributes: ['id', 'email', 'firstName', 'lastName', 'phone', 'isActive'],
+        required: true,
+        where: { isActive: true }
       },
       {
         model: db.CPVCode,
         as: 'cpvCodes',
-        through: { attributes: [] }
+        through: { attributes: [] },
+        attributes: ['id', 'code', 'description'],
+        required: Boolean(cpvCodeId),
+        ...(cpvCodeId ? { where: { id: cpvCodeId } } : {})
       }
     ];
 
-    // Filter by NUTS code when provided (only if NUTSCode model exists)
-    if (nutsCodeId && db.NUTSCode) {
+    if (db.NUTSCode) {
       include.push({
         model: db.NUTSCode,
         as: 'nutsCodes',
         through: { attributes: [] },
-        required: true,
-        where: { id: nutsCodeId }
+        attributes: ['id', 'code', 'name', 'nameSwedish'],
+        required: Boolean(nutsCodeId),
+        ...(nutsCodeId ? { where: { id: nutsCodeId } } : {})
       });
     }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
-
     const { count, rows: suppliers } = await db.Supplier.findAndCountAll({
-      where,
+      where: { [Op.and]: and },
       include,
       limit: parseInt(limit),
       offset,
@@ -232,49 +322,64 @@ const getSuppliers = async (req, res) => {
       distinct: true
     });
 
-    // Attach submitted questionnaire count per supplier
-    const responsesBySupplier = await db.QuestionnaireResponse.findAll({
-      where: {
-        supplierId: { [Op.in]: supplierIds },
-        questionnaireId: { [Op.in]: questionnaireIds },
-        status: 'submitted'
-      },
-      attributes: ['supplierId', 'questionnaireId'],
-      include: [
-        {
-          model: db.Questionnaire,
-          as: 'questionnaire',
-          attributes: ['id', 'title'],
-          include: [{ model: db.CPVCode, as: 'cpvCode', attributes: ['id', 'code', 'description'] }]
-        }
-      ],
-      raw: false
-    });
-    const submittedCountBySupplier = {};
-    const questionnaireTitlesBySupplier = {};
-    responsesBySupplier.forEach((r) => {
-      const sid = r.supplierId;
-      submittedCountBySupplier[sid] = (submittedCountBySupplier[sid] || 0) + 1;
-      if (!questionnaireTitlesBySupplier[sid]) questionnaireTitlesBySupplier[sid] = [];
-      const title = r.questionnaire?.title || 'Questionnaire';
-      const code = r.questionnaire?.cpvCode?.code;
-      if (!questionnaireTitlesBySupplier[sid].some((t) => t.title === title && t.code === code)) {
-        questionnaireTitlesBySupplier[sid].push({
-          title: r.questionnaire?.title,
-          code: r.questionnaire?.cpvCode?.code,
-          description: r.questionnaire?.cpvCode?.description
+    let submittedCountBySupplier = {};
+    let questionnaireTitlesBySupplier = {};
+    if (scope === 'mine' && suppliers.length) {
+      const entityQuestionnaires = await db.Questionnaire.findAll({
+        where: { procuringEntityId: entity.id },
+        attributes: ['id']
+      });
+      const questionnaireIds = entityQuestionnaires.map((q) => q.id);
+      const pageIds = suppliers.map((s) => s.id);
+      if (questionnaireIds.length && pageIds.length) {
+        const responsesBySupplier = await db.QuestionnaireResponse.findAll({
+          where: {
+            supplierId: { [Op.in]: pageIds },
+            questionnaireId: { [Op.in]: questionnaireIds },
+            status: 'submitted'
+          },
+          attributes: ['supplierId', 'questionnaireId'],
+          include: [
+            {
+              model: db.Questionnaire,
+              as: 'questionnaire',
+              attributes: ['id', 'title'],
+              include: [{ model: db.CPVCode, as: 'cpvCode', attributes: ['id', 'code', 'description'] }]
+            }
+          ]
+        });
+        responsesBySupplier.forEach((r) => {
+          const sid = r.supplierId;
+          submittedCountBySupplier[sid] = (submittedCountBySupplier[sid] || 0) + 1;
+          if (!questionnaireTitlesBySupplier[sid]) questionnaireTitlesBySupplier[sid] = [];
+          const title = r.questionnaire?.title || 'Questionnaire';
+          const code = r.questionnaire?.cpvCode?.code;
+          if (!questionnaireTitlesBySupplier[sid].some((t) => t.title === title && t.code === code)) {
+            questionnaireTitlesBySupplier[sid].push({
+              title: r.questionnaire?.title,
+              code: r.questionnaire?.cpvCode?.code,
+              description: r.questionnaire?.cpvCode?.description
+            });
+          }
         });
       }
+    }
+
+    const suppliersWithMeta = suppliers.map((s) => {
+      const json = s.toJSON();
+      const relation = relationBySupplier[s.id] || null;
+      return {
+        ...json,
+        scope,
+        relation,
+        submittedQuestionnaireCount: submittedCountBySupplier[s.id] || 0,
+        submittedQuestionnaires: questionnaireTitlesBySupplier[s.id] || []
+      };
     });
 
-    const suppliersWithCount = suppliers.map((s) => ({
-      ...s.toJSON(),
-      submittedQuestionnaireCount: submittedCountBySupplier[s.id] || 0,
-      submittedQuestionnaires: questionnaireTitlesBySupplier[s.id] || []
-    }));
-
     res.json({
-      suppliers: suppliersWithCount,
+      suppliers: suppliersWithMeta,
+      scope,
       pagination: {
         total: count,
         page: parseInt(page),
@@ -429,7 +534,6 @@ const getDashboardStats = async (req, res) => {
       }),
       db.Questionnaire.findAll({
         where: questionnaireWhere,
-        limit: 5,
         order: [['createdAt', 'DESC']],
         include: [{ model: db.CPVCode, as: 'cpvCode', attributes: ['code', 'description'] }],
         attributes: ['id', 'title', 'deadline', 'isActive', 'createdAt']
@@ -607,10 +711,67 @@ const suggestQuestionnaireFromDescription = async (req, res) => {
   }
 };
 
+/**
+ * Approved suppliers for tender invite / direct inform.
+ * Optional ?cpvCodeId= filters to suppliers whose profile includes that CPV.
+ */
+const listInviteCandidates = async (req, res) => {
+  try {
+    const entity = await db.ProcuringEntity.findOne({ where: { userId: req.user.id } });
+    if (!entity) return res.status(404).json({ message: 'Procuring entity not found' });
+
+    const cpvCodeId = req.query.cpvCodeId || null;
+    const include = [
+      {
+        model: db.User,
+        as: 'user',
+        attributes: ['id', 'email', 'firstName', 'lastName']
+      },
+      {
+        model: db.CPVCode,
+        as: 'cpvCodes',
+        through: { attributes: [] },
+        attributes: ['id', 'code', 'description'],
+        required: Boolean(cpvCodeId),
+        ...(cpvCodeId ? { where: { id: cpvCodeId } } : {})
+      }
+    ];
+
+    const suppliers = await db.Supplier.findAll({
+      where: { status: 'approved' },
+      include,
+      order: [['companyName', 'ASC']],
+      limit: 200
+    });
+
+    // Also return “all approved” count context when filtering by CPV
+    let allApprovedCount = suppliers.length;
+    if (cpvCodeId) {
+      allApprovedCount = await db.Supplier.count({ where: { status: 'approved' } });
+    }
+
+    res.json({
+      suppliers: suppliers.map((s) => ({
+        id: s.id,
+        companyName: s.companyName,
+        email: s.user?.email || null,
+        cpvCodes: (s.cpvCodes || []).map((c) => ({ id: c.id, code: c.code, description: c.description })),
+        cpvMatched: Boolean(cpvCodeId)
+      })),
+      filter: { cpvCodeId },
+      allApprovedCount
+    });
+  } catch (error) {
+    console.error('List invite candidates error:', error);
+    res.status(500).json({ message: 'Error listing invite candidates', error: error.message });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   getSuppliers,
+  listInviteCandidates,
   getSupplierDetails,
   getDashboardStats,
   suggestProfileFromDocuments,

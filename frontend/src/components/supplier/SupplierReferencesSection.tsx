@@ -177,7 +177,7 @@ export function SupplierReferencesSection({ editing }: { editing: boolean }) {
 
   return (
     <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
-      <h3 className="text-lg font-bold text-gray-900 mb-2">{t('supplierPortal.referencesTitle')}</h3>
+      <h3 className="text-base font-bold text-gray-900 mb-2">{t('supplierPortal.referencesTitle')}</h3>
       <p className="text-sm text-muted mb-4">{t('supplierPortal.referencesSubtitle')}</p>
 
       {references.length === 0 ? (

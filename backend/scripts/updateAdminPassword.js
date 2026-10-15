@@ -28,8 +28,8 @@ async function updateAdminPassword() {
 
     console.log('✓ Admin password updated successfully!');
     console.log('Email:', email);
-    console.log('New password:', newPassword);
-    console.log('\nPlease log in with the new password.');
+    console.log('New password: (not logged)');
+    console.log('\nPlease log in with the password you provided on the CLI.');
 
     await db.sequelize.close();
     process.exit(0);

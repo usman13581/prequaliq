@@ -1,25 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
+const { body } = require('express-validator');
 const authController = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
 const { profilePictureUpload } = require('../controllers/documentController');
-
-// Validation error handler middleware
-const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ 
-      message: errors.array()[0].msg || 'Validation failed',
-      errors: errors.array()
-    });
-  }
-  next();
-};
+const { handleValidationErrors, emailField } = require('../middleware/validate');
 
 // Validation middleware
 const registerValidation = [
-  body('email').isEmail().withMessage('Invalid email address').normalizeEmail(),
+  emailField('email', 'Invalid email address'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('firstName').notEmpty().withMessage('First name is required'),
   body('lastName').notEmpty().withMessage('Last name is required'),
@@ -28,7 +17,7 @@ const registerValidation = [
 ];
 
 const loginValidation = [
-  body('email').isEmail().withMessage('Valid email is required'),
+  emailField('email', 'Valid email is required'),
   body('password').notEmpty().withMessage('Password is required'),
   handleValidationErrors
 ];

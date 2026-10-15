@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const db = require('../models');
+const { getJwtSecret } = require('../utils/jwt');
 
 const authenticate = async (req, res, next) => {
   try {
@@ -9,7 +10,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'No token provided, authorization denied' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
     
     const user = await db.User.findByPk(decoded.userId, {
       attributes: { exclude: ['password'] }

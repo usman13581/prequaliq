@@ -12,7 +12,7 @@ const profileAiUpload = multer({
   limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const isPdf =
-      file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname || '');
+      file.mimetype === 'application/pdf' && /\.pdf$/i.test(file.originalname || '');
     if (isPdf) return cb(null, true);
     cb(new Error('Only PDF files are allowed for AI extraction'));
   },

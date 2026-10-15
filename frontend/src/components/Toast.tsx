@@ -34,7 +34,7 @@ const Toast = ({ message, type, onClose, duration = 4000 }: ToastProps) => {
   };
 
   return (
-    <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[100] animate-fadeIn pointer-events-auto">
+    <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[10050] animate-fadeIn pointer-events-auto">
       <div className={`bg-gradient-to-r ${colors[type]} rounded-2xl shadow-2xl p-6 min-w-[320px] max-w-md border-2 border-white/30 backdrop-blur-xl relative overflow-hidden`}>
         {/* Animated background effect */}
         <div className="absolute inset-0 bg-white/10 animate-pulse"></div>

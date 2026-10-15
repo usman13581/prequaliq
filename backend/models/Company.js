@@ -28,7 +28,13 @@ module.exports = (sequelize, DataTypes) => {
     email: {
       type: DataTypes.STRING,
       validate: {
-        isEmail: true
+        isAllowedEmailOrEmpty(value) {
+          if (value == null || value === '') return;
+          const { isAllowedEmail } = require('../utils/emailValidation');
+          if (!isAllowedEmail(value)) {
+            throw new Error('Invalid email');
+          }
+        }
       }
     },
     website: {

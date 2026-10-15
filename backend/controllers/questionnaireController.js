@@ -2,6 +2,65 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const { sendNewQuestionnaireEmail } = require('../services/emailService');
 
+const PROCEDURE_USES_QUESTIONNAIRE_STATUSES = [
+  'published',
+  'qa_open',
+  'bidding',
+  'evaluation',
+  'awarded',
+  'standstill',
+  'closed'
+];
+
+function isProcedureSealedForLock(procedure, now = new Date()) {
+  if (!procedure?.isSealed) return false;
+  const until = procedure.sealedUntil ? new Date(procedure.sealedUntil) : null;
+  return !until || until > now;
+}
+
+async function getQuestionnaireEditLock(questionnaireId, procuringEntityId) {
+  if (!db.Procedure) return null;
+  const linked = await db.Procedure.findAll({
+    where: { questionnaireId, procuringEntityId },
+    attributes: ['id', 'isSealed', 'sealedUntil', 'title']
+  });
+  const now = new Date();
+  for (const p of linked) {
+    if (isProcedureSealedForLock(p, now)) {
+      return {
+        message:
+          'This questionnaire is locked while a linked procedure has sealed bids. Unseal the procedure to edit.',
+        procedureId: p.id,
+        sealedUntil: p.sealedUntil
+      };
+    }
+  }
+  return null;
+}
+
+async function attachQuestionnaireEditLockedFlags(questionnaires, procuringEntityId) {
+  if (!db.Procedure || !questionnaires?.length) {
+    return questionnaires.map((q) => {
+      const plain = q.toJSON ? q.toJSON() : { ...q };
+      return { ...plain, editLocked: false };
+    });
+  }
+  const ids = questionnaires.map((q) => q.id);
+  const linked = await db.Procedure.findAll({
+    where: { questionnaireId: { [Op.in]: ids }, procuringEntityId },
+    attributes: ['questionnaireId', 'isSealed', 'sealedUntil']
+  });
+  const now = new Date();
+  const lockedIds = new Set();
+  for (const p of linked) {
+    if (isProcedureSealedForLock(p, now)) lockedIds.add(p.questionnaireId);
+  }
+  return questionnaires.map((q) => {
+    const plain = q.toJSON ? q.toJSON() : { ...q };
+    return { ...plain, editLocked: lockedIds.has(q.id) };
+  });
+}
+
 /**
  * Helper function to send email notifications to suppliers matching the questionnaire's CPV code
  */
@@ -145,6 +204,22 @@ const createQuestionnaire = async (req, res) => {
 
     if (!procuringEntity) {
       return res.status(404).json({ message: 'Procuring entity not found' });
+    }
+
+    if (procuringEntity.status && procuringEntity.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your procuring entity account must be approved by an admin before creating questionnaires.'
+      });
+    }
+
+    try {
+      const { getEntitlementsForUser } = require('../services/entitlementService');
+      const entitlements = await getEntitlementsForUser(req.user.id);
+      if (entitlements['tender.requirements'] === false) {
+        return res.status(403).json({ message: 'Feature not enabled for this account: tender.requirements' });
+      }
+    } catch (_entErr) {
+      // If entitlements table missing during deploy race, allow create
     }
 
     const { title, description, deadline, cpvCodeId, questions } = req.body;
@@ -308,21 +383,115 @@ const getQuestionnaires = async (req, res) => {
       });
     }
 
-    res.json({ questionnaires });
+    const withLockFlags = await attachQuestionnaireEditLockedFlags(questionnaires, procuringEntity.id);
+    res.json({ questionnaires: withLockFlags });
   } catch (error) {
     console.error('Get questionnaires error:', error);
     res.status(500).json({ message: 'Error fetching questionnaires', error: error.message });
   }
 };
 
+function responseScopeWhere(questionnaireId, supplierId, procedureId) {
+  const where = { questionnaireId, supplierId };
+  if (procedureId) {
+    where.procedureId = procedureId;
+  } else {
+    where.procedureId = null;
+  }
+  return where;
+}
+
+const OPEN_BID_STATUSES = ['published', 'qa_open', 'bidding'];
+
+function computeBidEditability({ procedure, questionnaire, responseStatus }) {
+  if (responseStatus === 'submitted') {
+    return { editable: false, reason: 'submitted', label: 'submitted' };
+  }
+  if (procedure) {
+    if (!OPEN_BID_STATUSES.includes(procedure.status)) {
+      return {
+        editable: false,
+        reason: 'procedure_closed',
+        label: procedure.status,
+        procedureStatus: procedure.status,
+        bidDeadline: procedure.bidDeadline || null
+      };
+    }
+    if (procedure.bidDeadline && new Date(procedure.bidDeadline) < new Date()) {
+      return {
+        editable: false,
+        reason: 'bid_deadline_passed',
+        label: 'bid_deadline_passed',
+        procedureStatus: procedure.status,
+        bidDeadline: procedure.bidDeadline
+      };
+    }
+    return {
+      editable: true,
+      reason: null,
+      label: 'open',
+      procedureStatus: procedure.status,
+      bidDeadline: procedure.bidDeadline || null
+    };
+  }
+  if (questionnaire?.deadline && new Date(questionnaire.deadline) < new Date()) {
+    return { editable: false, reason: 'questionnaire_deadline_passed', label: 'deadline_passed' };
+  }
+  if (questionnaire && questionnaire.isActive === false) {
+    return { editable: false, reason: 'questionnaire_inactive', label: 'inactive' };
+  }
+  return { editable: true, reason: null, label: 'open' };
+}
+
+async function loadAnswerPrefill(questionnaireId, supplierId, excludeProcedureId) {
+  const where = {
+    questionnaireId,
+    supplierId,
+    status: { [Op.in]: ['submitted', 'draft'] }
+  };
+  if (excludeProcedureId) {
+    where[Op.or] = [
+      { procedureId: null },
+      { procedureId: { [Op.ne]: excludeProcedureId } }
+    ];
+  }
+  const previous = await db.QuestionnaireResponse.findOne({
+    where,
+    include: [
+      {
+        model: db.Answer,
+        as: 'answers',
+        include: [
+          { model: db.Question, as: 'question' },
+          { model: db.Document, as: 'document', required: false }
+        ]
+      }
+    ],
+    order: [['updatedAt', 'DESC']]
+  });
+  if (!previous?.answers?.length) return null;
+  return {
+    fromResponseId: previous.id,
+    fromProcedureId: previous.procedureId || null,
+    status: previous.status,
+    submittedAt: previous.submittedAt,
+    answers: previous.answers
+  };
+}
+
 // Get questionnaire responses
 const getQuestionnaireResponses = async (req, res) => {
   try {
     const { questionnaireId } = req.params;
+    const procedureId = req.query.procedureId || null;
 
     const procuringEntity = await db.ProcuringEntity.findOne({
       where: { userId: req.user.id }
     });
+
+    if (!procuringEntity) {
+      return res.status(404).json({ message: 'Procuring entity not found' });
+    }
 
     const questionnaire = await db.Questionnaire.findOne({
       where: { 
@@ -335,11 +504,45 @@ const getQuestionnaireResponses = async (req, res) => {
       return res.status(404).json({ message: 'Questionnaire not found' });
     }
 
+    // Sealed-bid lock: hide answer content until linked procedure is unsealed
+    if (db.Procedure) {
+      const linkedWhere = { questionnaireId, procuringEntityId: procuringEntity.id };
+      if (procedureId) linkedWhere.id = procedureId;
+      const linked = await db.Procedure.findOne({
+        where: linkedWhere,
+        order: [['updatedAt', 'DESC']]
+      });
+      if (linked?.isSealed) {
+        const now = new Date();
+        const until = linked.sealedUntil ? new Date(linked.sealedUntil) : null;
+        if (!until || until > now) {
+          const sealedCountWhere = { questionnaireId, status: 'submitted' };
+          if (procedureId) sealedCountWhere.procedureId = procedureId;
+          const sealedCount = await db.QuestionnaireResponse.count({
+            where: sealedCountWhere
+          });
+          return res.status(403).json({
+            message: 'Bids are sealed until the deadline. Unseal the procedure to view answers.',
+            sealed: true,
+            sealedUntil: linked.sealedUntil,
+            submittedCount: sealedCount,
+            procedureId: linked.id,
+            responses: []
+          });
+        }
+      }
+    }
+
+    const responseWhere = {
+      questionnaireId,
+      status: 'submitted'
+    };
+    if (procedureId) {
+      responseWhere.procedureId = procedureId;
+    }
+
     const responses = await db.QuestionnaireResponse.findAll({
-      where: {
-        questionnaireId,
-        status: 'submitted'
-      },
+      where: responseWhere,
       include: [
         {
           model: db.Supplier,
@@ -365,12 +568,20 @@ const getQuestionnaireResponses = async (req, res) => {
               as: 'document'
             }
           ]
-        }
-      ],
+        },
+        db.Procedure
+          ? {
+              model: db.Procedure,
+              as: 'procedure',
+              attributes: ['id', 'title', 'referenceNumber', 'status'],
+              required: false
+            }
+          : null
+      ].filter(Boolean),
       order: [['submittedAt', 'DESC']]
     });
 
-    res.json({ responses });
+    res.json({ responses, sealed: false });
   } catch (error) {
     console.error('Get questionnaire responses error:', error);
     res.status(500).json({ message: 'Error fetching responses', error: error.message });
@@ -381,7 +592,8 @@ const getQuestionnaireResponses = async (req, res) => {
 const submitResponse = async (req, res) => {
   try {
     const { questionnaireId } = req.params;
-    const { answers, status } = req.body; // status: 'draft' or 'submitted'
+    const { answers, status, procedureId: bodyProcedureId } = req.body; // status: 'draft' or 'submitted'
+    const procedureId = bodyProcedureId || req.query.procedureId || null;
 
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
     if (!supplier || supplier.status !== 'approved') {
@@ -397,53 +609,91 @@ const submitResponse = async (req, res) => {
       return res.status(404).json({ message: 'Questionnaire not found or inactive' });
     }
 
-    if (new Date(questionnaire.deadline) < new Date()) {
+    let procedure = null;
+    if (procedureId) {
+      try {
+        const { getEntitlementsForUser } = require('../services/entitlementService');
+        const ents = await getEntitlementsForUser(req.user.id);
+        if (ents['tender.bid_submit'] === false) {
+          return res.status(403).json({ message: 'Feature not enabled: tender.bid_submit' });
+        }
+      } catch (_e) {
+        /* ignore if entitlements unavailable */
+      }
+      procedure = await db.Procedure.findByPk(procedureId);
+      if (!procedure || procedure.questionnaireId !== questionnaireId) {
+        return res.status(400).json({ message: 'Procedure is not linked to this questionnaire' });
+      }
+      const openStatuses = ['published', 'qa_open', 'bidding'];
+      if (!openStatuses.includes(procedure.status)) {
+        return res.status(400).json({
+          message: 'This procedure is no longer open for bid answers'
+        });
+      }
+      if (procedure.bidDeadline && new Date(procedure.bidDeadline) < new Date()) {
+        return res.status(400).json({ message: 'Bid deadline has passed for this procedure' });
+      }
+    } else if (new Date(questionnaire.deadline) < new Date()) {
       return res.status(400).json({ message: 'Questionnaire deadline has passed' });
     }
 
-    // Check if supplier has the CPV code
+    // Allow if supplier has matching CPV, or questionnaire is underlag on an open procedure
     const supplierCPV = await db.SupplierCPV.findOne({
       where: {
         supplierId: supplier.id,
         cpvCodeId: questionnaire.cpvCodeId
       }
     });
-
     if (!supplierCPV) {
-      return res.status(403).json({ message: 'This questionnaire is not available for your CPV categories' });
+      const openStatuses = ['published', 'qa_open', 'bidding', 'evaluation', 'awarded', 'standstill', 'closed'];
+      const linkedProcedure = await db.Procedure.findOne({
+        where: {
+          ...(procedureId ? { id: procedureId } : {}),
+          questionnaireId,
+          status: { [Op.in]: openStatuses }
+        },
+        attributes: ['id']
+      });
+      if (!linkedProcedure) {
+        return res.status(403).json({ message: 'This questionnaire is not available for your CPV categories' });
+      }
     }
 
-    // Find or create response
+    // Find or create response (scoped to procedure when bidding on a tender)
     console.log('=== SUBMIT RESPONSE DEBUG ===');
     console.log('Questionnaire ID:', questionnaireId);
     console.log('Supplier ID:', supplier.id);
+    console.log('Procedure ID:', procedureId || '(general)');
     console.log('Status:', status);
     console.log('Answers count:', answers?.length || 0);
     
     let response = await db.QuestionnaireResponse.findOne({
-      where: {
-        questionnaireId,
-        supplierId: supplier.id
-      }
+      where: responseScopeWhere(questionnaireId, supplier.id, procedureId)
     });
 
+    if (response && response.isActive === false) {
+      return res.status(400).json({
+        message: 'This bid is no longer active for this procedure. The tender may have been unpublished.'
+      });
+    }
+
+    const previousStatus = response?.status || 'draft';
+    if (response?.status === 'submitted') {
+      return res.status(400).json({
+        message: procedureId
+          ? 'This bid is already submitted for this procedure and cannot be edited'
+          : 'This questionnaire response is already submitted and cannot be edited'
+      });
+    }
     if (!response) {
       console.log('Creating new response');
       response = await db.QuestionnaireResponse.create({
         questionnaireId,
         supplierId: supplier.id,
-        status: status || 'draft'
+        procedureId: procedureId || null,
+        status: 'draft'
       });
       console.log('Created response ID:', response.id);
-    } else {
-      console.log('Updating existing response ID:', response.id);
-      await response.update({ status: status || 'draft' });
-    }
-
-    if (status === 'submitted') {
-      await response.update({
-        submittedAt: new Date()
-      });
     }
 
     // Save/update answers - update existing or create new, but don't create duplicates
@@ -485,6 +735,48 @@ const submitResponse = async (req, res) => {
       console.log('No answers to save');
     }
 
+    // Bid completeness check before final submit
+    if (status === 'submitted') {
+      try {
+        const { getEntitlementsForUser } = require('../services/entitlementService');
+        const ents = await getEntitlementsForUser(req.user.id);
+        if (ents['ai.completeness_conflict'] !== false) {
+          const questions = await db.Question.findAll({
+            where: { questionnaireId },
+            attributes: ['id', 'isRequired']
+          });
+          const requiredIds = questions.filter((q) => q.isRequired).map((q) => q.id);
+          const savedAnswers = await db.Answer.findAll({
+            where: { responseId: response.id },
+            attributes: ['questionId', 'answerText', 'answerValue', 'documentId']
+          });
+          const answeredMap = new Map(savedAnswers.map((a) => [a.questionId, a]));
+          const missingRequired = requiredIds.filter((qid) => {
+            const a = answeredMap.get(qid);
+            if (!a) return true;
+            const text = (a.answerText || a.answerValue || '').toString().trim();
+            return !text && !a.documentId;
+          });
+          if (missingRequired.length > 0) {
+            await response.update({ status: previousStatus === 'submitted' ? 'draft' : previousStatus });
+            return res.status(400).json({
+              message: `Bid incomplete: ${missingRequired.length} required question(s) unanswered`,
+              completeness: {
+                ready: false,
+                missingRequiredCount: missingRequired.length,
+                missingRequiredIds: missingRequired
+              }
+            });
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Bid completeness check skipped:', checkErr.message);
+      }
+      await response.update({ status: 'submitted', submittedAt: new Date() });
+    } else {
+      await response.update({ status: status || 'draft' });
+    }
+
     const updatedResponse = await db.QuestionnaireResponse.findByPk(response.id, {
       include: [
         {
@@ -517,11 +809,14 @@ const submitResponse = async (req, res) => {
 // Get questionnaire response (Supplier)
 // IMPORTANT: Always returns submitted responses regardless of questionnaire expiration status.
 // Suppliers should be able to view their submitted answers forever, even if questionnaire expired.
+// When procedureId is provided, returns the bid for that procedure only (editable until submitted).
 const getResponse = async (req, res) => {
   try {
     const { questionnaireId } = req.params;
+    const procedureId = req.query.procedureId || null;
     console.log('=== GET RESPONSE DEBUG ===');
     console.log('Questionnaire ID:', questionnaireId);
+    console.log('Procedure ID:', procedureId || '(general)');
     console.log('User ID:', req.user.id);
 
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
@@ -531,12 +826,19 @@ const getResponse = async (req, res) => {
     }
     console.log('Supplier ID:', supplier.id);
 
-    // Find response - no expiration check; suppliers can always view their submitted responses
+    let procedure = null;
+    if (procedureId) {
+      procedure = await db.Procedure.findByPk(procedureId, {
+        attributes: ['id', 'questionnaireId', 'status', 'bidDeadline', 'title', 'referenceNumber']
+      });
+      if (!procedure || procedure.questionnaireId !== questionnaireId) {
+        return res.status(400).json({ message: 'Procedure is not linked to this questionnaire' });
+      }
+    }
+
+    // Find response scoped to procedure (or general when no procedureId)
     const response = await db.QuestionnaireResponse.findOne({
-      where: {
-        questionnaireId,
-        supplierId: supplier.id
-      },
+      where: responseScopeWhere(questionnaireId, supplier.id, procedureId),
       include: [
         {
           model: db.Questionnaire,
@@ -577,28 +879,50 @@ const getResponse = async (req, res) => {
     });
 
     if (!response) {
-      console.log('Response not found for questionnaire:', questionnaireId, 'supplier:', supplier.id);
-      // Check if ANY response exists for this questionnaire
-      const anyResponse = await db.QuestionnaireResponse.findOne({
-        where: { questionnaireId }
-      });
-      console.log('Any response for this questionnaire?', !!anyResponse);
-      if (anyResponse) {
-        console.log('Found response but wrong supplier:', anyResponse.supplierId, 'vs', supplier.id);
+      console.log(
+        'No procedure-scoped response yet for questionnaire:',
+        questionnaireId,
+        'supplier:',
+        supplier.id,
+        'procedure:',
+        procedureId || '(general)'
+      );
+      // For a new procedure bid, offer previous answers as editable prefill
+      if (procedureId) {
+        const questionnaire = await db.Questionnaire.findByPk(questionnaireId, {
+          attributes: ['id', 'deadline', 'isActive']
+        });
+        const bidContext = computeBidEditability({
+          procedure,
+          questionnaire,
+          responseStatus: null
+        });
+        const prefill = bidContext.editable
+          ? await loadAnswerPrefill(questionnaireId, supplier.id, procedureId)
+          : null;
+        return res.json({
+          response: null,
+          prefill,
+          procedureId,
+          bidContext
+        });
       }
       return res.status(404).json({ message: 'Response not found' });
     }
 
-    console.log('Response found! ID:', response.id, 'Status:', response.status);
+    const bidContext = computeBidEditability({
+      procedure,
+      questionnaire: response.questionnaire,
+      responseStatus: response.status
+    });
+
+    console.log('Response found! ID:', response.id, 'Status:', response.status, 'editable:', bidContext.editable);
     console.log('Answers count:', response.answers?.length || 0);
-    if (response.answers && response.answers.length > 0) {
-      console.log('Answers:', response.answers.map(a => ({
-        questionId: a.questionId,
-        answerText: a.answerText,
-        answerValue: a.answerValue
-      })));
-    }
-    res.json({ response });
+    res.json({
+      response,
+      procedureId: response.procedureId || null,
+      bidContext
+    });
   } catch (error) {
     console.error('Get response error:', error);
     res.status(500).json({ message: 'Error fetching response', error: error.message });
@@ -628,6 +952,16 @@ const updateQuestionnaire = async (req, res) => {
 
     if (!questionnaire) {
       return res.status(404).json({ message: 'Questionnaire not found' });
+    }
+
+    const editLock = await getQuestionnaireEditLock(questionnaire.id, procuringEntity.id);
+    if (editLock) {
+      return res.status(403).json({
+        message: editLock.message,
+        editLocked: true,
+        procedureId: editLock.procedureId,
+        sealedUntil: editLock.sealedUntil
+      });
     }
 
     // Store old CPV code ID to check if it changed
@@ -748,6 +1082,16 @@ const deleteQuestionnaire = async (req, res) => {
       return res.status(404).json({ message: 'Questionnaire not found' });
     }
 
+    const editLock = await getQuestionnaireEditLock(questionnaire.id, procuringEntity.id);
+    if (editLock) {
+      return res.status(403).json({
+        message: editLock.message,
+        editLocked: true,
+        procedureId: editLock.procedureId,
+        sealedUntil: editLock.sealedUntil
+      });
+    }
+
     // Check if there are any submitted responses
     const submittedResponses = await db.QuestionnaireResponse.count({
       where: {
@@ -807,6 +1151,16 @@ const updateQuestion = async (req, res) => {
       return res.status(404).json({ message: 'Questionnaire not found' });
     }
 
+    const editLock = await getQuestionnaireEditLock(questionnaire.id, procuringEntity.id);
+    if (editLock) {
+      return res.status(403).json({
+        message: editLock.message,
+        editLocked: true,
+        procedureId: editLock.procedureId,
+        sealedUntil: editLock.sealedUntil
+      });
+    }
+
     const question = await db.Question.findOne({
       where: {
         id: questionId,
@@ -860,6 +1214,16 @@ const deleteQuestion = async (req, res) => {
 
     if (!questionnaire) {
       return res.status(404).json({ message: 'Questionnaire not found' });
+    }
+
+    const editLock = await getQuestionnaireEditLock(questionnaire.id, procuringEntity.id);
+    if (editLock) {
+      return res.status(403).json({
+        message: editLock.message,
+        editLocked: true,
+        procedureId: editLock.procedureId,
+        sealedUntil: editLock.sealedUntil
+      });
     }
 
     const question = await db.Question.findOne({
@@ -923,6 +1287,23 @@ const toggleQuestionnaireStatus = async (req, res) => {
 
     if (!questionnaire) {
       return res.status(404).json({ message: 'Questionnaire not found' });
+    }
+
+    const willDeactivate = questionnaire.isActive;
+    if (willDeactivate && db.Procedure) {
+      const inUseCount = await db.Procedure.count({
+        where: {
+          questionnaireId: questionnaire.id,
+          procuringEntityId: procuringEntity.id,
+          status: { [Op.in]: PROCEDURE_USES_QUESTIONNAIRE_STATUSES }
+        }
+      });
+      if (inUseCount > 0) {
+        return res.status(400).json({
+          message:
+            'Cannot deactivate this questionnaire while it is linked to a published or active procedure. Unpublish or close the procedure first.'
+        });
+      }
     }
 
     await questionnaire.update({ isActive: !questionnaire.isActive });

@@ -67,7 +67,7 @@ export function SupplierExportProfileModal({ open, companyName, onClose }: Suppl
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-border" role="dialog" aria-modal="true" aria-labelledby="export-profile-title">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
-            <h3 id="export-profile-title" className="text-lg font-bold text-gray-900">
+            <h3 id="export-profile-title" className="text-base font-bold text-gray-900">
               {t('supplierPortal.exportTitle')}
             </h3>
             <p className="text-sm text-muted mt-0.5">{t('supplierPortal.exportSubtitle')}</p>

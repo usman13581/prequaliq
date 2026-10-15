@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
+import { SUPPLIER_COMPLEMENT_NAV_KEY } from './SupplierTendersPanel';
 
 type Notification = {
   id: string;
+  type?: string;
   title: string;
   message?: string;
   linkTab?: string;
+  meta?: { procedureId?: string; complementId?: string } | null;
   isRead: boolean;
   createdAt: string;
 };
@@ -48,6 +51,10 @@ export function SupplierNotificationsBell({ onNavigate }: { onNavigate: (tab: st
       await api.put(`/supplier/notifications/${n.id}/read`);
     } catch { /* ignore */ }
     setOpen(false);
+    if (n.type === 'complement_request' && (n.meta?.procedureId || n.meta?.complementId)) {
+      sessionStorage.setItem(SUPPLIER_COMPLEMENT_NAV_KEY, JSON.stringify(n.meta));
+      window.dispatchEvent(new CustomEvent('supplier-complement-nav'));
+    }
     if (n.linkTab) onNavigate(n.linkTab);
     fetchNotifications();
   };

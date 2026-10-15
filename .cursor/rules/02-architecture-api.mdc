@@ -1,0 +1,57 @@
+---
+description: App architecture, folder layout, routing, and API conventions
+alwaysApply: true
+---
+
+# Architecture + API
+
+## Monorepo layout
+
+```
+backend/   server.js, routes/, controllers/, models/, services/, middleware/, migrations/
+frontend/  src/pages/, components/{ui,domain}/, contexts/, hooks/, services/, locales/, lib/, utils/
+```
+
+- New domain UI → `frontend/src/components/<domain>/` (not a second design system).
+- Shared chrome only in `frontend/src/components/ui/`.
+- Business logic in `backend/services/`; controllers stay thin; routes stay declarative.
+- Schema changes → Sequelize migrations in `backend/migrations/` (never hand-edit prod DB).
+
+## Portal pattern
+
+- Public: `/login`, `/register`, invite accept — marketing/auth chrome.
+- Portals: `/admin/*`, `/procuring-entity/*`, `/supplier/*` behind `ProtectedRoute`.
+- Each dashboard: `PortalLayout` + tab state; **fetch data per active tab**, not everything on mount.
+
+## API conventions
+
+| Action | Method / path |
+|--------|----------------|
+| Health | `GET /api/health` |
+| List / detail | `GET /api/[resource]`, `GET /api/[resource]/:id` |
+| Create / update / delete | `POST`, `PUT`/`PATCH`, `DELETE` |
+| Role stats | `GET /api/[role]/dashboard/stats` |
+
+- Mount routes in `server.js` under `/api`.
+- Consistent JSON errors: use `message` (and optional `code`) matching existing controllers.
+- Frontend: `import api from '…/services/api'` — `api.get/post/put/delete`.
+- Surface failures with `error.response?.data?.message` + `showToast(…, 'error')`.
+
+```js
+// ✅ Route shape
+router.use(authenticate);
+router.get('/', authorize('admin'), controller.list);
+router.post('/', authorize('admin'), controller.create);
+```
+
+## Dynamic / maintainable structure
+
+- Prefer data-driven nav (`sidebarItems`), status maps (`utils/procedureStatus.ts`), and shared list/pagination hooks over copy-paste screens.
+- Feature gates: `useEntitlement('key')` in UI **and** entitlement checks on the server.
+- Config/env for URLs and secrets — no hardcoded API hosts in components.
+
+## Anti-patterns
+
+- God-file dashboards that mix every tab’s fetch/UI without extracting reused panels.
+- New top-level nav outside `PortalLayout` / `PortalSidebar`.
+- Ad-hoc API clients bypassing `services/api.ts`.

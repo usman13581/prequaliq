@@ -61,8 +61,17 @@ export function SupplierQuestionnaireAnswerAiAssist({
         }))
       );
       setOpen(true);
-      if (!suggestions.some((s) => !s.skipped)) {
+      const usable = suggestions.filter((s) => !s.skipped);
+      if (!usable.length) {
         showToast(t('supplierPortal.aiAnswersNone'), 'warning');
+      } else {
+        showToast(
+          t('supplierPortal.aiAnswersReady', {
+            defaultValue: '{{count}} draft answer(s) ready — review and apply',
+            count: usable.length
+          }),
+          'success'
+        );
       }
     } catch (error: any) {
       const msg =
@@ -135,7 +144,7 @@ export function SupplierQuestionnaireAnswerAiAssist({
 
       {open && items.length > 0 && (
         <div className="space-y-3 border-t border-violet-100 pt-3">
-          {disclaimer && <p className="text-[11px] text-amber-800">{disclaimer}</p>}
+          {disclaimer && <p className="text-xs text-amber-800">{disclaimer}</p>}
           <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
             {items.map((item, idx) => (
               <li
@@ -153,8 +162,8 @@ export function SupplierQuestionnaireAnswerAiAssist({
                     className="mt-1"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[11px] font-semibold text-gray-500">
-                      {t('sections.questionNumber', { n: idx + 1 })} · {item.questionType}
+                    <span className="block text-xs font-semibold text-gray-500">
+                      {t('sections.questionNumber', { n: idx + 1 })} · {t(`questionTypes.${item.questionType}`, { defaultValue: item.questionType })}
                       {!item.skipped && typeof item.confidence === 'number' && (
                         <span className="ml-1 text-violet-700">
                           · {Math.round(item.confidence * 100)}%
@@ -174,10 +183,10 @@ export function SupplierQuestionnaireAnswerAiAssist({
                           {item.answerText || item.answerValue}
                         </span>
                         {item.rationale && (
-                          <span className="block text-[11px] text-muted mt-1">{item.rationale}</span>
+                          <span className="block text-xs text-muted mt-1">{item.rationale}</span>
                         )}
                         {item.suggestedDocumentName && (
-                          <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-violet-700">
+                          <span className="mt-1 inline-flex items-center gap-1 text-xs text-violet-700">
                             <FileText size={12} />
                             {t('supplierPortal.aiAnswersSuggestedDoc', {
                               name: item.suggestedDocumentName,

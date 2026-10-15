@@ -39,6 +39,24 @@ module.exports = (sequelize, DataTypes) => {
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
+    },
+    status: {
+      type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+      allowNull: false,
+      defaultValue: 'pending'
+    },
+    approvedAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    approvedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: 'users', key: 'id' }
+    },
+    rejectionReason: {
+      type: DataTypes.TEXT,
+      allowNull: true
     }
   }, {
     tableName: 'procuring_entities',
@@ -48,8 +66,12 @@ module.exports = (sequelize, DataTypes) => {
   ProcuringEntity.associate = (models) => {
     ProcuringEntity.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
     ProcuringEntity.belongsTo(models.Company, { foreignKey: 'companyId', as: 'company' });
+    ProcuringEntity.belongsTo(models.User, { foreignKey: 'approvedBy', as: 'approver' });
     ProcuringEntity.hasMany(models.Questionnaire, { foreignKey: 'procuringEntityId', as: 'questionnaires' });
     ProcuringEntity.hasMany(models.Document, { foreignKey: 'procuringEntityId', as: 'documents' });
+    if (models.Procedure) {
+      ProcuringEntity.hasMany(models.Procedure, { foreignKey: 'procuringEntityId', as: 'procedures' });
+    }
   };
 
   return ProcuringEntity;

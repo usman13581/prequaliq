@@ -23,7 +23,7 @@ const insuranceAiUpload = multer({
   limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const isPdf =
-      file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname || '');
+      file.mimetype === 'application/pdf' && /\.pdf$/i.test(file.originalname || '');
     if (isPdf) return cb(null, true);
     cb(new Error('Only PDF files are allowed for AI extraction'));
   }
@@ -40,7 +40,7 @@ const profileAiUpload = multer({
   limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const isPdf =
-      file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname || '');
+      file.mimetype === 'application/pdf' && /\.pdf$/i.test(file.originalname || '');
     if (isPdf) return cb(null, true);
     cb(new Error('Only PDF files are allowed for AI extraction'));
   }
@@ -115,6 +115,43 @@ async function sendSubmissionEmails(supplier, user) {
   }
 }
 
+function valuesDiffer(a, b) {
+  if (a == null && (b === '' || b == null)) return false;
+  if (b == null && (a === '' || a == null)) return false;
+  return String(a ?? '') !== String(b ?? '');
+}
+
+function supplierMaterialFieldsChanged(supplier, updateData) {
+  return Object.entries(updateData).some(([key, val]) => valuesDiffer(supplier.getDataValue(key), val));
+}
+
+/** After material profile change: re-submit for admin review when previously approved. */
+async function reapprovalAfterMaterialChange(supplier) {
+  if (!supplier || supplier.status !== 'approved') return supplier;
+  const user =
+    supplier.user ||
+    (await db.User.findByPk(supplier.userId, { attributes: ['email', 'firstName', 'lastName'] }));
+  const nextVersion = (supplier.profileVersion || 0) + 1;
+  const now = new Date();
+  await supplier.update({
+    status: 'pending',
+    profileSubmittedAt: now,
+    profileVersion: nextVersion,
+    rejectionReason: null
+  });
+  if (db.SupplierProfileSubmission) {
+    await db.SupplierProfileSubmission.create({
+      supplierId: supplier.id,
+      version: nextVersion,
+      status: 'pending',
+      submittedAt: now
+    });
+  }
+  await sendSubmissionEmails(supplier, user);
+  supplier.status = 'pending';
+  return supplier;
+}
+
 function buildSupplierUpdateData(body) {
   const fields = [
     'companyName', 'registrationNumber', 'taxId', 'address', 'city', 'country', 'phone', 'website',
@@ -153,7 +190,11 @@ const updateProfile = async (req, res) => {
 
     const { status, ...body } = req.body;
     const updateData = buildSupplierUpdateData(body);
+    const materialChanged = supplierMaterialFieldsChanged(supplier, updateData);
     await supplier.update(updateData);
+    if (materialChanged) {
+      await reapprovalAfterMaterialChange(supplier);
+    }
 
     if (req.body.firstName || req.body.lastName || req.body.phone) {
       await db.User.update(
@@ -233,7 +274,7 @@ const getDashboard = async (req, res) => {
     } else if (completeness.readyToSubmit && ['pending', 'rejected'].includes(supplier.status)) {
       nextAction = { labelKey: 'submitForQualification', tab: 'profile' };
     } else if (openQuestionnaires > 0) {
-      nextAction = { labelKey: 'respondQuestionnaire', tab: 'questionnaires' };
+      nextAction = { labelKey: 'respondQuestionnaire', tab: 'tenders' };
     } else if (completeness.documents.expiringCount > 0) {
       nextAction = { labelKey: 'reviewDocuments', tab: 'profile' };
     }
@@ -335,6 +376,7 @@ const updateCPVCodes = async (req, res) => {
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
     if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
     await supplier.setCpvCodes(cpvCodeIds);
+    await reapprovalAfterMaterialChange(supplier);
     const updatedSupplier = await loadSupplierForUser(req.user.id);
     res.json({ message: 'CPV codes saved', supplier: updatedSupplier });
   } catch (error) {
@@ -352,6 +394,7 @@ const updateNUTSCodes = async (req, res) => {
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
     if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
     await supplier.setNutsCodes(nutsCodeIds || []);
+    await reapprovalAfterMaterialChange(supplier);
     const updatedSupplier = await loadSupplierForUser(req.user.id);
     res.json({ message: 'NUTS codes saved', supplier: updatedSupplier });
   } catch (error) {
@@ -463,6 +506,55 @@ const markAllNotificationsRead = async (req, res) => {
   }
 };
 
+const questionnaireIncludeForSupplier = (supplierId, procedureId = null) => {
+  const responseWhere = { supplierId };
+  if (procedureId) {
+    responseWhere.procedureId = procedureId;
+  } else {
+    // General questionnaires list: only non-procedure responses
+    responseWhere.procedureId = null;
+  }
+  return [
+    {
+      model: db.ProcuringEntity,
+      as: 'procuringEntity',
+      include: [{ model: db.User, as: 'user', attributes: ['firstName', 'lastName'] }]
+    },
+    { model: db.CPVCode, as: 'cpvCode' },
+    {
+      model: db.Question,
+      as: 'questions',
+      include: [{ model: db.Document, as: 'attachedDocument', required: false }]
+    },
+    {
+      model: db.QuestionnaireResponse,
+      as: 'responses',
+      where: responseWhere,
+      required: false
+    }
+  ];
+};
+
+async function supplierCanAccessQuestionnaire(supplier, questionnaireId) {
+  const meta = await db.Questionnaire.findByPk(questionnaireId, { attributes: ['id', 'cpvCodeId'] });
+  if (!meta) return false;
+
+  const supplierCPV = await db.SupplierCPV.findOne({
+    where: { supplierId: supplier.id, cpvCodeId: meta.cpvCodeId }
+  });
+  if (supplierCPV) return true;
+
+  const openStatuses = ['published', 'qa_open', 'bidding', 'evaluation', 'awarded', 'standstill', 'closed'];
+  const linked = await db.Procedure.findOne({
+    where: {
+      questionnaireId,
+      status: { [Op.in]: openStatuses }
+    },
+    attributes: ['id']
+  });
+  return !!linked;
+}
+
 const getActiveQuestionnaires = async (req, res) => {
   try {
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
@@ -479,25 +571,7 @@ const getActiveQuestionnaires = async (req, res) => {
 
     const questionnaires = await db.Questionnaire.findAll({
       where: { cpvCodeId: { [Op.in]: cpvIds }, isActive: true, deadline: { [Op.gte]: now } },
-      include: [
-        {
-          model: db.ProcuringEntity,
-          as: 'procuringEntity',
-          include: [{ model: db.User, as: 'user', attributes: ['firstName', 'lastName'] }]
-        },
-        { model: db.CPVCode, as: 'cpvCode' },
-        {
-          model: db.Question,
-          as: 'questions',
-          include: [{ model: db.Document, as: 'attachedDocument', required: false }]
-        },
-        {
-          model: db.QuestionnaireResponse,
-          as: 'responses',
-          where: { supplierId: supplier.id },
-          required: false
-        }
-      ],
+      include: questionnaireIncludeForSupplier(supplier.id),
       order: [['deadline', 'ASC'], [{ model: db.Question, as: 'questions' }, 'order', 'ASC']]
     });
 
@@ -505,6 +579,43 @@ const getActiveQuestionnaires = async (req, res) => {
   } catch (error) {
     console.error('Get active questionnaires error:', error);
     res.status(500).json({ message: 'Error fetching questionnaires', error: error.message });
+  }
+};
+
+const getQuestionnaireById = async (req, res) => {
+  try {
+    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
+    if (!supplier || !['approved', 'requalification_required'].includes(supplier.status)) {
+      return res.status(403).json({ message: 'Supplier not approved' });
+    }
+
+    const { questionnaireId } = req.params;
+    const procedureId = req.query.procedureId || null;
+    const allowed = await supplierCanAccessQuestionnaire(supplier, questionnaireId);
+    if (!allowed) {
+      return res.status(403).json({ message: 'This questionnaire is not available for your account' });
+    }
+
+    if (procedureId) {
+      const procedure = await db.Procedure.findByPk(procedureId, { attributes: ['id', 'questionnaireId'] });
+      if (!procedure || procedure.questionnaireId !== questionnaireId) {
+        return res.status(400).json({ message: 'Procedure is not linked to this questionnaire' });
+      }
+    }
+
+    const questionnaire = await db.Questionnaire.findByPk(questionnaireId, {
+      include: questionnaireIncludeForSupplier(supplier.id, procedureId),
+      order: [[{ model: db.Question, as: 'questions' }, 'order', 'ASC']]
+    });
+
+    if (!questionnaire || !questionnaire.isActive) {
+      return res.status(404).json({ message: 'Questionnaire not found or inactive' });
+    }
+
+    res.json({ questionnaire });
+  } catch (error) {
+    console.error('Get questionnaire by id error:', error);
+    res.status(500).json({ message: 'Error fetching questionnaire', error: error.message });
   }
 };
 
@@ -771,6 +882,7 @@ const suggestAnswersForQuestionnaire = async (req, res) => {
 };
 
 module.exports = {
+  reapprovalAfterMaterialChange,
   getProfile,
   updateProfile,
   getAiStatus,
@@ -792,6 +904,7 @@ module.exports = {
   markNotificationRead,
   markAllNotificationsRead,
   getActiveQuestionnaires,
+  getQuestionnaireById,
   getQuestionnaireHistory,
   exportProfile,
   getProfileSubmissions

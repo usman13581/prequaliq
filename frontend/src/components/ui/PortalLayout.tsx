@@ -6,7 +6,7 @@ import { LanguageSwitcher } from '../LanguageSwitcher';
 import { Logo } from './Logo';
 import { PortalSidebar, type PortalSidebarItem } from './PortalSidebar';
 
-const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
+import { uploadsUrl } from '../../utils/uploadsUrl';
 
 type PortalLayoutProps = {
   logoTo: string;
@@ -36,7 +36,7 @@ export function PortalLayout({
   const { t } = useTranslation();
   const { user, logout } = useAuth();
 
-  const profilePictureUrl = user?.profilePicture ? `${UPLOADS_BASE}/${user.profilePicture}` : null;
+  const profilePictureUrl = uploadsUrl(user?.profilePicture);
   const initials = `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`;
 
   const userChip = (

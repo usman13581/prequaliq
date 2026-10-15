@@ -204,14 +204,112 @@ function normalizeSuggestions(rawAnswers, questions, documents) {
   });
 }
 
+/** Local heuristic fallback when GPU AI is down — grounded only in profile facts. */
+function heuristicSuggestAnswers(questions, profile, documents = []) {
+  const textBlob = Object.values(profile)
+    .filter((v) => typeof v === 'string' && v.trim())
+    .join(' ')
+    .toLowerCase();
+
+  return questions.map((q) => {
+    const qt = String(q.questionText || '').toLowerCase();
+    let answerText = '';
+    let answerValue = '';
+    let rationale = '';
+    let confidence = 0.55;
+
+    if (q.questionType === 'number' || /turnover|omsättning|revenue/.test(qt)) {
+      if (/year|established|grundat|founded/.test(qt) && profile.yearEstablished) {
+        answerText = String(profile.yearEstablished);
+        answerValue = String(profile.yearEstablished);
+        rationale = 'From company year established on your profile.';
+        confidence = 0.85;
+      } else if (/employee|anställd|staff|headcount/.test(qt) && profile.employeeCount) {
+        answerText = String(profile.employeeCount);
+        answerValue = String(profile.employeeCount);
+        rationale = 'From employee count on your profile.';
+        confidence = 0.8;
+      } else if (profile.turnover != null) {
+        answerText = String(profile.turnover);
+        answerValue = String(profile.turnover);
+        rationale = 'From turnover on your profile.';
+        confidence = 0.8;
+      }
+    } else if (q.questionType === 'yes_no' || /certif|iso|hold|do you/.test(qt)) {
+      const hasEvidence =
+        (/9001|quality/.test(qt) && /iso\s*9001|quality/.test(textBlob)) ||
+        (/14001|environment/.test(qt) && /iso\s*14001|environment/.test(textBlob)) ||
+        (/45001|ohs|health/.test(qt) && /iso\s*45001|ohs|health/.test(textBlob)) ||
+        (/insurance|försäkring/.test(qt) && (profile.insurerName || /insurance/.test(textBlob))) ||
+        Boolean(profile.qualityManagementSystem || profile.environmentalManagementSystem);
+      answerText = hasEvidence ? 'Yes' : '';
+      answerValue = hasEvidence ? 'Yes' : '';
+      rationale = hasEvidence
+        ? 'Inferred from profile / document metadata (review carefully).'
+        : '';
+      confidence = hasEvidence ? 0.6 : 0;
+    } else if (q.questionType === 'dropdown' || /contact method|preferred contact/.test(qt)) {
+      answerText = 'Email';
+      answerValue = 'Email';
+      rationale = 'Default contact preference suggestion.';
+      confidence = 0.7;
+    } else if (/region|location|deliver|nuts|geographic|område/.test(qt)) {
+      const nuts = (profile.nutsCodes || []).map((n) => n.code || n.name).filter(Boolean).join(', ');
+      const place = [profile.city, profile.country].filter(Boolean).join(', ');
+      answerText = nuts || place || '';
+      rationale = nuts ? 'From NUTS codes on your profile.' : place ? 'From address on your profile.' : '';
+      confidence = answerText ? 0.75 : 0;
+    } else if (/experience|capacity|assignment|similar|erfarenhet|technical/.test(qt)) {
+      answerText =
+        profile.technicalCapacityProfessionalExperience ||
+        (profile.references || [])
+          .slice(0, 3)
+          .map((r) => `${r.projectName || 'Project'}${r.clientName ? ` for ${r.clientName}` : ''}`)
+          .join('; ') ||
+        (profile.companyName
+          ? `${profile.companyName} can deliver services matching this underlag based on our registered profile.`
+          : '');
+      rationale = profile.technicalCapacityProfessionalExperience
+        ? 'From technical capacity on your profile.'
+        : (profile.references || []).length
+          ? 'From reference projects on your profile.'
+          : answerText
+            ? 'Draft from company profile (edit before submit).'
+            : '';
+      confidence = profile.technicalCapacityProfessionalExperience ? 0.75 : answerText ? 0.5 : 0;
+    } else if (/financial|stability|ekonomi/.test(qt) && profile.financialStability) {
+      answerText = profile.financialStability;
+      rationale = 'From financial stability on your profile.';
+      confidence = 0.8;
+    } else if (profile.companyName) {
+      // Soft fallback for open text — only if we have a company name
+      answerText = '';
+      rationale = '';
+      confidence = 0;
+    }
+
+    const skipped = !String(answerText || answerValue || '').trim();
+    const matchedDoc = skipped ? null : matchSuggestedDocument(q, { suggestedDocumentType: q.documentType }, documents);
+
+    return {
+      questionId: q.id,
+      questionText: q.questionText,
+      questionType: q.questionType,
+      answerText: skipped ? '' : String(answerText).trim(),
+      answerValue: skipped ? '' : String(answerValue || answerText).trim(),
+      confidence: skipped ? 0 : confidence,
+      rationale: skipped ? '' : rationale,
+      skipped,
+      skipReason: skipped ? 'Insufficient profile evidence' : '',
+      suggestedDocumentId: matchedDoc?.id || null,
+      suggestedDocumentName: matchedDoc?.fileName || null,
+      requiresDocument: Boolean(q.requiresDocument),
+    };
+  });
+}
+
 async function suggestAnswersForQuestionnaire(supplierUserId, questionnaireId, options = {}) {
   const { language = 'en' } = options;
-
-  if (!isAiConfigured()) {
-    const err = new Error('AI service is not configured');
-    err.code = 'AI_NOT_CONFIGURED';
-    throw err;
-  }
 
   const supplier = await db.Supplier.findOne({
     where: { userId: supplierUserId },
@@ -294,49 +392,49 @@ async function suggestAnswersForQuestionnaire(supplierUserId, questionnaireId, o
   }
 
   const profileContext = buildSupplierProfileContext(supplier);
+  const docs = supplier.documents || [];
 
-  let aiData;
-  try {
-    aiData = await callAnswerAi({
-      language: (language || 'en').slice(0, 2),
-      questionnaire: {
-        title: questionnaire.title,
-        description: questionnaire.description || '',
-        questions: questions.map((q) => ({
-          id: q.id,
-          questionText: q.questionText,
-          questionType: q.questionType,
-          options: q.options || null,
-          isRequired: q.isRequired !== false,
-          requiresDocument: Boolean(q.requiresDocument),
-          documentType: q.documentType || null,
-        })),
-      },
-      supplierProfile: profileContext,
-    });
-  } catch (err) {
-    if (err.code === 'AI_GPU_OUTDATED' || err.status === 404) {
-      const upgrade = new Error(
-        'GPU AI service needs questionnaire answer suggestions. Redeploy ai-service on Trooper.'
-      );
-      upgrade.code = 'AI_GPU_OUTDATED';
-      throw upgrade;
+  let suggestions;
+  let usedFallback = false;
+  if (!isAiConfigured()) {
+    suggestions = heuristicSuggestAnswers(questions, profileContext, docs);
+    usedFallback = true;
+  } else {
+    try {
+      const aiData = await callAnswerAi({
+        language: (language || 'en').slice(0, 2),
+        questionnaire: {
+          title: questionnaire.title,
+          description: questionnaire.description || '',
+          questions: questions.map((q) => ({
+            id: q.id,
+            questionText: q.questionText,
+            questionType: q.questionType,
+            options: q.options || null,
+            isRequired: q.isRequired !== false,
+            requiresDocument: Boolean(q.requiresDocument),
+            documentType: q.documentType || null,
+          })),
+        },
+        supplierProfile: profileContext,
+      });
+      suggestions = normalizeSuggestions(aiData.answers || [], questions, docs);
+    } catch (err) {
+      // GPU down / timeout / outdated — still help the supplier with profile-based drafts
+      console.warn('Answer AI unavailable, using profile heuristic fallback:', err.code || err.message);
+      suggestions = heuristicSuggestAnswers(questions, profileContext, docs);
+      usedFallback = true;
     }
-    throw err;
   }
-
-  const suggestions = normalizeSuggestions(
-    aiData.answers || [],
-    questions,
-    supplier.documents || []
-  );
 
   return {
     suggestions,
     suggestedCount: suggestions.filter((s) => !s.skipped).length,
     skippedCount: suggestions.filter((s) => s.skipped).length,
-    disclaimer:
-      'AI-generated draft answers from your profile and document metadata. Review every answer. Nothing is saved until you apply and save/submit.',
+    source: usedFallback ? 'profile_fallback' : 'ai',
+    disclaimer: usedFallback
+      ? 'Draft answers filled from your profile (AI server unavailable). Review every answer carefully. Nothing is saved until you apply and save/submit.'
+      : 'AI-generated draft answers from your profile and document metadata. Review every answer. Nothing is saved until you apply and save/submit.',
   };
 }
 

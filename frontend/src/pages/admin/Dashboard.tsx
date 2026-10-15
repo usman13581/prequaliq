@@ -1,11 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, ChevronLeft, ChevronRight, User, Lock, Eye, EyeOff, Key, Camera, Upload, LayoutDashboard } from 'lucide-react';
+import { uploadsUrl } from '../../utils/uploadsUrl';
+import { Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, User, Lock, Eye, EyeOff, Key, Camera, Upload, LayoutDashboard, SlidersHorizontal, BookMarked, Sparkles } from 'lucide-react';
+import { SearchField } from '../../components/ui/SearchField';
+import { BrandSelect } from '../../components/ui/BrandSelect';
+import { AdminLookupsPanel } from '../../components/admin/AdminLookupsPanel';
+import { AdminAiGlobalPanel } from '../../components/admin/AdminAiGlobalPanel';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { PortalLayout } from '../../components/ui/PortalLayout';
+import { ListPagination } from '../../components/ui/ListPagination';
+import { useListPagination } from '../../hooks/useListPagination';
 import { AdminHomeTab, AdminSupplierStatsStrip, AdminEntityStatsStrip } from '../../components/admin/AdminHomeTab';
+import { AdminEntitlementsModal } from '../../components/admin/AdminEntitlementsModal';
 import type { AdminDashboardStats } from '../../lib/adminStats';
 import { statsFromSuppliers, statsFromEntities } from '../../lib/adminStats';
 
@@ -15,6 +23,7 @@ interface Supplier {
   status: 'pending' | 'approved' | 'rejected' | 'requalification_required';
   isActive?: boolean;
   user: {
+    id?: string;
     email: string;
     firstName: string;
     lastName: string;
@@ -26,8 +35,10 @@ interface Supplier {
 interface ProcuringEntity {
   id: string;
   entityName: string;
+  status?: 'pending' | 'approved' | 'rejected';
   isActive?: boolean;
   user: {
+    id?: string;
     email: string;
     firstName: string;
     lastName: string;
@@ -69,14 +80,45 @@ const AdminDashboard = () => {
   const [showCreateEntity, setShowCreateEntity] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [editingEntity, setEditingEntity] = useState<ProcuringEntity | null>(null);
-  const [supplierPage, setSupplierPage] = useState(1);
-  const [entityPage, setEntityPage] = useState(1);
-  const itemsPerPage = 5;
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [resetPasswordSupplier, setResetPasswordSupplier] = useState<Supplier | null>(null);
   const [resetPasswordEntity, setResetPasswordEntity] = useState<ProcuringEntity | null>(null);
   const [deleteSupplierConfirm, setDeleteSupplierConfirm] = useState<Supplier | null>(null);
   const [deleteEntityConfirm, setDeleteEntityConfirm] = useState<ProcuringEntity | null>(null);
+  const [entitlementsTarget, setEntitlementsTarget] = useState<{ userId: string; label: string } | null>(null);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierStatusFilter, setSupplierStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'requalification_required'>('all');
+  const [supplierActiveFilter, setSupplierActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [entitySearch, setEntitySearch] = useState('');
+  const [entityStatusFilter, setEntityStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [entityActiveFilter, setEntityActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+
+  const filteredSuppliers = useMemo(() => {
+    const q = supplierSearch.trim().toLowerCase();
+    return suppliers.filter((s) => {
+      if (supplierStatusFilter !== 'all' && s.status !== supplierStatusFilter) return false;
+      if (supplierActiveFilter === 'active' && !s.user?.isActive) return false;
+      if (supplierActiveFilter === 'inactive' && s.user?.isActive) return false;
+      if (!q) return true;
+      const hay = `${s.companyName || ''} ${s.user?.firstName || ''} ${s.user?.lastName || ''} ${s.user?.email || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [suppliers, supplierSearch, supplierStatusFilter, supplierActiveFilter]);
+
+  const filteredEntities = useMemo(() => {
+    const q = entitySearch.trim().toLowerCase();
+    return procuringEntities.filter((e) => {
+      if (entityStatusFilter !== 'all' && (e.status || 'pending') !== entityStatusFilter) return false;
+      if (entityActiveFilter === 'active' && !e.user?.isActive) return false;
+      if (entityActiveFilter === 'inactive' && e.user?.isActive) return false;
+      if (!q) return true;
+      const hay = `${e.entityName || ''} ${e.user?.firstName || ''} ${e.user?.lastName || ''} ${e.user?.email || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [procuringEntities, entitySearch, entityStatusFilter, entityActiveFilter]);
+
+  const supplierPager = useListPagination(filteredSuppliers);
+  const entityPager = useListPagination(filteredEntities);
 
   // Fetch suppliers
   const fetchSuppliers = async (showLoading = true) => {
@@ -131,18 +173,13 @@ const AdminDashboard = () => {
   const reviewSupplier = async (supplierId: string, action: 'approve' | 'reject') => {
     try {
       const rejectionReason = action === 'reject' 
-        ? prompt('Enter rejection reason:') || 'No reason provided'
+        ? prompt(t('adminPortal.rejectionReasonPrompt')) || t('adminPortal.noRejectionReason')
         : '';
       
       await api.put(`/admin/suppliers/${supplierId}/review`, { action, rejectionReason });
       showToast(action === 'approve' ? t('msg.supplierApproved') : t('msg.supplierRejected'), 'success');
       fetchSuppliers(false);
       fetchDashboardStats(false);
-      // Reset to first page if current page becomes empty
-      const currentPageStart = (supplierPage - 1) * itemsPerPage;
-      if (currentPageStart >= suppliers.length - 1 && supplierPage > 1) {
-        setSupplierPage(prev => Math.max(1, prev - 1));
-      }
     } catch (error: any) {
       console.error('Error reviewing supplier:', error);
       showToast(error.response?.data?.message || t('msg.failedReviewSupplier'), 'error');
@@ -173,6 +210,20 @@ const AdminDashboard = () => {
     }
   };
 
+  const reviewEntity = async (entityId: string, action: 'approve' | 'reject') => {
+    try {
+      const rejectionReason =
+        action === 'reject' ? prompt(t('adminPortal.rejectionReasonPrompt')) || t('adminPortal.noRejectionReason') : '';
+      await api.put(`/admin/procuring-entities/${entityId}/review`, { action, rejectionReason });
+      showToast(action === 'approve' ? t('msg.entityApproved') : t('msg.entityRejected'), 'success');
+      fetchProcuringEntities(false);
+      fetchDashboardStats(false);
+    } catch (error: any) {
+      console.error('Error reviewing entity:', error);
+      showToast(error.response?.data?.message || t('msg.failedReviewEntity'), 'error');
+    }
+  };
+
   // Delete supplier
   const handleDeleteSupplier = async () => {
     if (!deleteSupplierConfirm) return;
@@ -182,11 +233,6 @@ const AdminDashboard = () => {
       showToast(t('msg.supplierDeleted'), 'success');
       setDeleteSupplierConfirm(null);
       fetchSuppliers(false);
-      // Reset to first page if current page becomes empty
-      const currentPageStart = (supplierPage - 1) * itemsPerPage;
-      if (currentPageStart >= suppliers.length - 1 && supplierPage > 1) {
-        setSupplierPage(prev => Math.max(1, prev - 1));
-      }
     } catch (error: any) {
       console.error('Error deleting supplier:', error);
       showToast(error.response?.data?.message || t('msg.failedDeleteSupplier'), 'error');
@@ -202,11 +248,6 @@ const AdminDashboard = () => {
       showToast(t('msg.entityDeleted'), 'success');
       setDeleteEntityConfirm(null);
       fetchProcuringEntities(false);
-      // Reset to first page if current page becomes empty
-      const currentPageStart = (entityPage - 1) * itemsPerPage;
-      if (currentPageStart >= procuringEntities.length - 1 && entityPage > 1) {
-        setEntityPage(prev => Math.max(1, prev - 1));
-      }
     } catch (error: any) {
       console.error('Error deleting procuring entity:', error);
       showToast(error.response?.data?.message || t('msg.failedDeleteEntity'), 'error');
@@ -226,10 +267,8 @@ const AdminDashboard = () => {
       fetchDashboardStats();
     } else if (activeTab === 'suppliers') {
       fetchSuppliers();
-      setSupplierPage(1);
     } else if (activeTab === 'entities') {
       fetchProcuringEntities();
-      setEntityPage(1);
     }
   }, [activeTab]);
 
@@ -237,6 +276,8 @@ const AdminDashboard = () => {
     { id: 'home', label: t('adminPortal.navHome'), icon: LayoutDashboard },
     { id: 'suppliers', label: t('nav.suppliers'), icon: Users },
     { id: 'entities', label: t('nav.entities'), icon: Building2 },
+    { id: 'ai-controls', label: t('adminPortal.aiControls'), icon: Sparkles },
+    { id: 'lookups', label: t('nav.lookups'), icon: BookMarked },
     { id: 'profile', label: t('nav.profile'), icon: User },
   ];
 
@@ -268,6 +309,14 @@ const AdminDashboard = () => {
           />
         )}
 
+        {activeTab === 'lookups' && <AdminLookupsPanel />}
+
+        {activeTab === 'ai-controls' && (
+          <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 p-4 sm:p-6">
+            <AdminAiGlobalPanel />
+          </div>
+        )}
+
         {(activeTab === 'suppliers' || activeTab === 'entities') && (
         <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 overflow-hidden">
           <div className="px-3 sm:px-4 py-4">
@@ -291,7 +340,7 @@ const AdminDashboard = () => {
               <div className="px-0 sm:px-1">
                 <div className="flex justify-between items-center mb-6">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{t('sections.supplierManagement')}</h2>
+                    <h2 className="text-base font-bold text-gray-900">{t('sections.supplierManagement')}</h2>
                     <p className="text-sm text-gray-500 mt-1">{t('sections.manageSuppliers')}</p>
                   </div>
                   <button
@@ -303,6 +352,35 @@ const AdminDashboard = () => {
                   </button>
                 </div>
 
+                <div className="mb-4 flex flex-col sm:flex-row gap-3">
+                  <SearchField
+                    wrapperClassName="flex-1"
+                    placeholder={t('adminPortal.listSearchPlaceholder')}
+                    value={supplierSearch}
+                    onChange={(e) => setSupplierSearch(e.target.value)}
+                  />
+                  <BrandSelect
+                    wrapperClassName="sm:w-44"
+                    value={supplierStatusFilter}
+                    onChange={(e) => setSupplierStatusFilter(e.target.value as typeof supplierStatusFilter)}
+                  >
+                    <option value="all">{t('adminPortal.filterStatusAll')}</option>
+                    <option value="pending">{t('common.pending')}</option>
+                    <option value="approved">{t('common.approved')}</option>
+                    <option value="rejected">{t('common.rejected')}</option>
+                    <option value="requalification_required">{t('supplierPortal.requalificationTitle')}</option>
+                  </BrandSelect>
+                  <BrandSelect
+                    wrapperClassName="sm:w-40"
+                    value={supplierActiveFilter}
+                    onChange={(e) => setSupplierActiveFilter(e.target.value as typeof supplierActiveFilter)}
+                  >
+                    <option value="all">{t('adminPortal.filterActiveAll')}</option>
+                    <option value="active">{t('common.active')}</option>
+                    <option value="inactive">{t('common.inactive')}</option>
+                  </BrandSelect>
+                </div>
+
                 {suppliers.length === 0 ? (
                   <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -310,6 +388,10 @@ const AdminDashboard = () => {
                     </div>
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noSuppliersFound')}</p>
                     <p className="text-sm text-gray-500 mt-2">{t('sections.createSupplierOrWait')}</p>
+                  </div>
+                ) : filteredSuppliers.length === 0 ? (
+                  <div className="text-center py-12 rounded-xl border border-dashed border-gray-300 bg-gray-50">
+                    <p className="text-sm font-medium text-gray-700">{t('adminPortal.noFilterMatches')}</p>
                   </div>
                 ) : (
                   <>
@@ -324,9 +406,7 @@ const AdminDashboard = () => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200/50">
-                          {suppliers
-                            .slice((supplierPage - 1) * itemsPerPage, supplierPage * itemsPerPage)
-                            .map((supplier) => (
+                          {supplierPager.paginatedItems.map((supplier) => (
                           <tr key={supplier.id} className="hover:bg-gradient-to-r hover:from-primary-50/50 hover:to-transparent transition-all duration-150">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-3">
@@ -374,7 +454,7 @@ const AdminDashboard = () => {
                                     }
                                   }}
                                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title="Edit Supplier"
+                                  title={t('adminPortal.editSupplierTitle')}
                                 >
                                   <Edit2 size={14} />
                                   {t('buttons.edit')}
@@ -397,6 +477,22 @@ const AdminDashboard = () => {
                                     </button>
                                   </>
                                 )}
+                                {supplier.user?.id && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEntitlementsTarget({
+                                        userId: supplier.user.id!,
+                                        label: `${supplier.companyName} (${supplier.user.email})`
+                                      })
+                                    }
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                    title={t('adminPortal.featureControl')}
+                                  >
+                                    <SlidersHorizontal size={14} />
+                                    {t('adminPortal.features')}
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => toggleSupplierStatus(supplier.id, supplier.user?.isActive || false)}
                                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow ${
@@ -404,7 +500,7 @@ const AdminDashboard = () => {
                                       ? 'btn-reject'
                                       : 'btn-approve'
                                   }`}
-                                  title={supplier.user?.isActive ? 'Deactivate Supplier' : 'Activate Supplier'}
+                                  title={supplier.user?.isActive ? t('adminPortal.deactivateSupplierTitle') : t('adminPortal.activateSupplierTitle')}
                                 >
                                   {supplier.user?.isActive ? (
                                     <>
@@ -421,7 +517,7 @@ const AdminDashboard = () => {
                                 <button
                                   onClick={() => setResetPasswordSupplier(supplier)}
                                   className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title="Reset Password"
+                                  title={t('actions.resetPassword')}
                                 >
                                   <Key size={14} />
                                   {t('buttons.resetPassword')}
@@ -429,7 +525,7 @@ const AdminDashboard = () => {
                                 <button
                                   onClick={() => setDeleteSupplierConfirm(supplier)}
                                   className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title="Delete Supplier"
+                                  title={t('adminPortal.deleteSupplierTitle')}
                                 >
                                   <Trash2 size={14} />
                                   {t('common.delete')}
@@ -442,49 +538,16 @@ const AdminDashboard = () => {
                       </table>
                     </div>
 
-                    {/* Pagination */}
-                    {suppliers.length > itemsPerPage && (
-                      <div className="mt-6 flex items-center justify-between border-t border-gray-200 pt-4">
-                        <div className="text-sm text-gray-700">
-                          Showing <span className="font-semibold">{(supplierPage - 1) * itemsPerPage + 1}</span> to{' '}
-                          <span className="font-semibold">{Math.min(supplierPage * itemsPerPage, suppliers.length)}</span> of{' '}
-                          <span className="font-semibold">{suppliers.length}</span> suppliers
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setSupplierPage(prev => Math.max(1, prev - 1))}
-                            disabled={supplierPage === 1}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-1"
-                          >
-                            <ChevronLeft size={16} />
-                            {t('buttons.previous')}
-                          </button>
-                          <div className="flex gap-1">
-                            {Array.from({ length: Math.ceil(suppliers.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
-                              <button
-                                key={page}
-                                onClick={() => setSupplierPage(page)}
-                                className={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                                  supplierPage === page
-                                    ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-lg'
-                                    : 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-                                }`}
-                              >
-                                {page}
-                              </button>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => setSupplierPage(prev => Math.min(Math.ceil(suppliers.length / itemsPerPage), prev + 1))}
-                            disabled={supplierPage >= Math.ceil(suppliers.length / itemsPerPage)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-1"
-                          >
-                            {t('buttons.next')}
-                            <ChevronRight size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    <div className="mt-6">
+                      <ListPagination
+                        page={supplierPager.page}
+                        pageSize={supplierPager.pageSize}
+                        total={supplierPager.total}
+                        onPageChange={supplierPager.setPage}
+                        onPageSizeChange={supplierPager.setPageSize}
+                        itemLabel={t('nav.suppliers').toLowerCase()}
+                      />
+                    </div>
                   </>
                 )}
               </div>
@@ -497,7 +560,7 @@ const AdminDashboard = () => {
               <div className="px-0 sm:px-1">
                 <div className="flex justify-between items-center mb-6">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{t('sections.entityManagement')}</h2>
+                    <h2 className="text-base font-bold text-gray-900">{t('sections.entityManagement')}</h2>
                     <p className="text-sm text-gray-500 mt-1">{t('sections.manageEntities')}</p>
                   </div>
                   <button
@@ -509,6 +572,34 @@ const AdminDashboard = () => {
                   </button>
                 </div>
 
+                <div className="mb-4 flex flex-col sm:flex-row gap-3">
+                  <SearchField
+                    wrapperClassName="flex-1"
+                    placeholder={t('adminPortal.listSearchPlaceholder')}
+                    value={entitySearch}
+                    onChange={(e) => setEntitySearch(e.target.value)}
+                  />
+                  <BrandSelect
+                    wrapperClassName="sm:w-44"
+                    value={entityStatusFilter}
+                    onChange={(e) => setEntityStatusFilter(e.target.value as typeof entityStatusFilter)}
+                  >
+                    <option value="all">{t('adminPortal.filterStatusAll')}</option>
+                    <option value="pending">{t('common.pending')}</option>
+                    <option value="approved">{t('common.approved')}</option>
+                    <option value="rejected">{t('common.rejected')}</option>
+                  </BrandSelect>
+                  <BrandSelect
+                    wrapperClassName="sm:w-40"
+                    value={entityActiveFilter}
+                    onChange={(e) => setEntityActiveFilter(e.target.value as typeof entityActiveFilter)}
+                  >
+                    <option value="all">{t('adminPortal.filterActiveAll')}</option>
+                    <option value="active">{t('common.active')}</option>
+                    <option value="inactive">{t('common.inactive')}</option>
+                  </BrandSelect>
+                </div>
+
                 {procuringEntities.length === 0 ? (
                   <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <div className="w-20 h-20 bg-gradient-to-br from-purple-200 to-purple-300 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -516,6 +607,10 @@ const AdminDashboard = () => {
                     </div>
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noEntitiesFound')}</p>
                     <p className="text-sm text-gray-500 mt-2">{t('sections.createFirstEntity')}</p>
+                  </div>
+                ) : filteredEntities.length === 0 ? (
+                  <div className="text-center py-12 rounded-xl border border-dashed border-gray-300 bg-gray-50">
+                    <p className="text-sm font-medium text-gray-700">{t('adminPortal.noFilterMatches')}</p>
                   </div>
                 ) : (
                   <>
@@ -530,9 +625,7 @@ const AdminDashboard = () => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200/50">
-                          {procuringEntities
-                            .slice((entityPage - 1) * itemsPerPage, entityPage * itemsPerPage)
-                            .map((entity) => (
+                          {entityPager.paginatedItems.map((entity) => (
                           <tr key={entity.id} className="hover:bg-gradient-to-r hover:from-primary-50/50 hover:to-transparent transition-all duration-150">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-3">
@@ -548,6 +641,15 @@ const AdminDashboard = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex flex-col gap-2">
+                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
+                                  entity.status === 'approved' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
+                                  entity.status === 'rejected' ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' :
+                                  'bg-gradient-to-r from-amber-400 to-amber-600 text-white'
+                                }`}>
+                                  {entity.status === 'approved' ? t('common.approved') :
+                                    entity.status === 'rejected' ? t('common.rejected') :
+                                    t('common.pending')}
+                                </span>
                                 <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
                                   entity.user?.isActive 
                                     ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white' 
@@ -569,11 +671,49 @@ const AdminDashboard = () => {
                                     }
                                   }}
                                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title="Edit Entity"
+                                  title={t('adminPortal.editEntityTitle')}
                                 >
                                   <Edit2 size={14} />
                                   {t('buttons.edit')}
                                 </button>
+                                {entity.status !== 'approved' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => reviewEntity(entity.id, 'approve')}
+                                      className="btn-approve flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                    >
+                                      <CheckCircle size={14} />
+                                      {t('buttons.approve')}
+                                    </button>
+                                    {entity.status !== 'rejected' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => reviewEntity(entity.id, 'reject')}
+                                        className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                      >
+                                        <XCircle size={14} />
+                                        {t('buttons.reject')}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                                {entity.user?.id && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEntitlementsTarget({
+                                        userId: entity.user.id!,
+                                        label: `${entity.entityName} (${entity.user.email})`
+                                      })
+                                    }
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
+                                    title={t('adminPortal.featureControl')}
+                                  >
+                                    <SlidersHorizontal size={14} />
+                                    {t('adminPortal.features')}
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => toggleEntityStatus(entity.id, entity.user?.isActive || false)}
                                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow ${
@@ -581,7 +721,7 @@ const AdminDashboard = () => {
                                       ? 'btn-reject'
                                       : 'btn-approve'
                                   }`}
-                                  title={entity.user?.isActive ? 'Deactivate Entity' : 'Activate Entity'}
+                                  title={entity.user?.isActive ? t('adminPortal.deactivateEntityTitle') : t('adminPortal.activateEntityTitle')}
                                 >
                                   {entity.user?.isActive ? (
                                     <>
@@ -598,7 +738,7 @@ const AdminDashboard = () => {
                                 <button
                                   onClick={() => setResetPasswordEntity(entity)}
                                   className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title="Reset Password"
+                                  title={t('actions.resetPassword')}
                                 >
                                   <Key size={14} />
                                   {t('buttons.resetPassword')}
@@ -606,7 +746,7 @@ const AdminDashboard = () => {
                                 <button
                                   onClick={() => setDeleteEntityConfirm(entity)}
                                   className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title="Delete Entity"
+                                  title={t('adminPortal.deleteEntityTitle')}
                                 >
                                   <Trash2 size={14} />
                                   {t('common.delete')}
@@ -619,49 +759,16 @@ const AdminDashboard = () => {
                       </table>
                     </div>
 
-                    {/* Pagination */}
-                    {procuringEntities.length > itemsPerPage && (
-                      <div className="mt-6 flex items-center justify-between border-t border-gray-200 pt-4">
-                        <div className="text-sm text-gray-700">
-                          Showing <span className="font-semibold">{(entityPage - 1) * itemsPerPage + 1}</span> to{' '}
-                          <span className="font-semibold">{Math.min(entityPage * itemsPerPage, procuringEntities.length)}</span> of{' '}
-                          <span className="font-semibold">{procuringEntities.length}</span> entities
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setEntityPage(prev => Math.max(1, prev - 1))}
-                            disabled={entityPage === 1}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-1"
-                          >
-                            <ChevronLeft size={16} />
-                            {t('buttons.previous')}
-                          </button>
-                          <div className="flex gap-1">
-                            {Array.from({ length: Math.ceil(procuringEntities.length / itemsPerPage) }, (_, i) => i + 1).map((page) => (
-                              <button
-                                key={page}
-                                onClick={() => setEntityPage(page)}
-                                className={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                                  entityPage === page
-                                    ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-lg'
-                                    : 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-                                }`}
-                              >
-                                {page}
-                              </button>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => setEntityPage(prev => Math.min(Math.ceil(procuringEntities.length / itemsPerPage), prev + 1))}
-                            disabled={entityPage >= Math.ceil(procuringEntities.length / itemsPerPage)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-1"
-                          >
-                            {t('buttons.next')}
-                            <ChevronRight size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    <div className="mt-6">
+                      <ListPagination
+                        page={entityPager.page}
+                        pageSize={entityPager.pageSize}
+                        total={entityPager.total}
+                        onPageChange={entityPager.setPage}
+                        onPageSizeChange={entityPager.setPageSize}
+                        itemLabel={t('nav.entities').toLowerCase()}
+                      />
+                    </div>
                   </>
                 )}
               </div>
@@ -680,9 +787,6 @@ const AdminDashboard = () => {
           onSuccess={() => {
             setShowCreateSupplier(false);
             fetchSuppliers(false);
-            // Go to last page to see the new supplier
-            const totalPages = Math.ceil((suppliers.length + 1) / itemsPerPage);
-            setSupplierPage(totalPages);
           }}
         />
       )}
@@ -706,9 +810,6 @@ const AdminDashboard = () => {
           onSuccess={() => {
             setShowCreateEntity(false);
             fetchProcuringEntities(false);
-            // Go to last page to see the new entity
-            const totalPages = Math.ceil((procuringEntities.length + 1) / itemsPerPage);
-            setEntityPage(totalPages);
           }}
         />
       )}
@@ -779,11 +880,17 @@ const AdminDashboard = () => {
           onConfirm={handleDeleteEntity}
         />
       )}
+
+      {entitlementsTarget && (
+        <AdminEntitlementsModal
+          userId={entitlementsTarget.userId}
+          userLabel={entitlementsTarget.label}
+          onClose={() => setEntitlementsTarget(null)}
+        />
+      )}
     </>
   );
 };
-
-const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
 
 // Admin Profile Modal Component
 const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
@@ -814,19 +921,19 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
     const newErrors: Record<string, string> = {};
     
     if (!passwordData.currentPassword || passwordData.currentPassword.trim() === '') {
-      newErrors.currentPassword = 'Current password is required';
+      newErrors.currentPassword = t('validation.currentPasswordRequired');
     }
     
     if (!passwordData.newPassword || passwordData.newPassword.trim() === '') {
-      newErrors.newPassword = 'New password is required';
+      newErrors.newPassword = t('validation.newPasswordRequired');
     } else if (passwordData.newPassword.length < 6) {
-      newErrors.newPassword = 'Password must be at least 6 characters';
+      newErrors.newPassword = t('validation.passwordMinLength');
     }
     
     if (!passwordData.confirmPassword || passwordData.confirmPassword.trim() === '') {
-      newErrors.confirmPassword = 'Please confirm your new password';
+      newErrors.confirmPassword = t('validation.confirmPasswordRequired');
     } else if (passwordData.newPassword !== passwordData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = t('validation.passwordsDoNotMatch');
     }
     
     console.log('Validation errors:', newErrors);
@@ -840,7 +947,7 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      showToast('Please select a valid image (JPEG, PNG)', 'error');
+      showToast(t('msg.invalidProfileImage'), 'error');
       return;
     }
     setUploadingPicture(true);
@@ -851,10 +958,10 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       await refreshUser();
-      showToast('Profile picture updated successfully', 'success');
+      showToast(t('msg.profilePictureUpdated'), 'success');
       if (profilePictureRef.current) profilePictureRef.current.value = '';
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Failed to upload profile picture', 'error');
+      showToast(error.response?.data?.message || t('msg.failedUploadProfilePicture'), 'error');
     } finally {
       setUploadingPicture(false);
     }
@@ -864,9 +971,9 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
     try {
       await api.delete('/auth/profile-picture');
       await refreshUser();
-      showToast('Profile picture removed', 'success');
+      showToast(t('msg.profilePictureRemoved'), 'success');
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Failed to remove profile picture', 'error');
+      showToast(error.response?.data?.message || t('msg.failedRemoveProfilePicture'), 'error');
     }
   };
 
@@ -921,11 +1028,11 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
       console.error('Error data:', error.response?.data);
       
       // Handle different error scenarios
-      let errorMessage = 'Failed to reset password';
+      let errorMessage = t('msg.failedResetPassword');
       
       if (error.response?.status === 401) {
         // Wrong current password
-        errorMessage = error.response.data?.message || 'Current password is incorrect';
+        errorMessage = error.response.data?.message || t('msg.currentPasswordIncorrect');
         // Set error on current password field
         setErrors({ ...errors, currentPassword: errorMessage });
       } else if (error.response?.data?.message) {
@@ -948,8 +1055,8 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">Admin Profile</h3>
-              <p className="text-sm text-gray-500 mt-1">Manage your profile and security settings</p>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('common.adminProfile')}</h3>
+              <p className="text-sm text-gray-500 mt-1">{t('sections.manageProfileAdmin')}</p>
             </div>
             <button
               onClick={onClose}
@@ -971,7 +1078,7 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
             >
               <div className="flex items-center gap-2">
                 <User size={18} />
-                Profile Information
+                {t('sections.profileInformation')}
               </div>
               {activeTab === 'profile' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800"></div>
@@ -987,7 +1094,7 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
             >
               <div className="flex items-center gap-2">
                 <Lock size={18} />
-                Reset Password
+                {t('actions.resetPassword')}
               </div>
               {activeTab === 'password' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 to-primary-800"></div>
@@ -1004,8 +1111,8 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
                   <div className="w-24 h-24 rounded-2xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
                     {user?.profilePicture ? (
                       <img
-                        src={`${UPLOADS_BASE}/${user.profilePicture}`}
-                        alt="Profile"
+                        src={uploadsUrl(user.profilePicture) || undefined}
+                        alt={t('common.profilePhotoAlt')}
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -1025,7 +1132,7 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
                       onClick={() => profilePictureRef.current?.click()}
                       disabled={uploadingPicture}
                       className="p-2 bg-white/90 rounded-lg hover:bg-white transition-colors disabled:opacity-50"
-                      title="Upload photo"
+                      title={t('supplierPortal.uploadPhoto')}
                     >
                       <Camera size={20} className="text-gray-800" />
                     </button>
@@ -1035,7 +1142,7 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
                         onClick={handleRemoveProfilePicture}
                         className="text-xs text-white hover:underline"
                       >
-                        Remove
+                        {t('supplierPortal.removePhoto')}
                       </button>
                     )}
                   </div>
@@ -1046,11 +1153,11 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
                     className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
                   >
                     <Upload size={14} />
-                    {uploadingPicture ? 'Uploading...' : (user?.profilePicture ? 'Change photo' : 'Upload photo')}
+                    {uploadingPicture ? t('common.uploading') : (user?.profilePicture ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto'))}
                   </button>
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-2xl font-bold text-gray-900">{user?.firstName} {user?.lastName}</h4>
+                  <h4 className="text-base font-bold text-gray-900">{user?.firstName} {user?.lastName}</h4>
                   <p className="text-gray-600 mt-1">{user?.email}</p>
                   <span className="inline-block mt-3 px-4 py-1.5 bg-gradient-to-r from-primary-100 to-blue-100 text-primary-700 text-sm font-semibold rounded-lg">
                     {t('nav.administrator')}
@@ -1062,19 +1169,19 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
                   <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                    {user?.firstName || 'N/A'}
+                    {user?.firstName || t('common.na')}
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.lastName')}</label>
                   <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                    {user?.lastName || 'N/A'}
+                    {user?.lastName || t('common.na')}
                   </div>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.emailAddress')}</label>
                   <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                    {user?.email || 'N/A'}
+                    {user?.email || t('common.na')}
                   </div>
                 </div>
                 {user?.phone && (
@@ -1208,7 +1315,7 @@ const AdminProfileModal = ({ onClose }: { onClose: () => void }) => {
                   ) : (
                     <>
                       <Lock size={18} />
-                      Reset Password
+                      {t('actions.resetPassword')}
                     </>
                   )}
                 </button>
@@ -1245,23 +1352,23 @@ const CreateSupplierModal = ({ onClose, onSuccess }: { onClose: () => void; onSu
     const newErrors: Record<string, string> = {};
     
     if (!formData.email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = t('validation.emailRequired');
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = t('validation.invalidEmail');
     }
     
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = t('validation.passwordRequired');
     } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = t('validation.passwordMinLength');
     }
     
     if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required';
+      newErrors.firstName = t('validation.firstNameRequired');
     }
     
     if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
+      newErrors.lastName = t('validation.lastNameRequired');
     }
     
     setErrors(newErrors);
@@ -1293,7 +1400,7 @@ const CreateSupplierModal = ({ onClose, onSuccess }: { onClose: () => void; onSu
         <div className="sticky top-0 bg-gradient-to-r from-white to-blue-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('actions.createNewSupplier')}</h3>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('actions.createNewSupplier')}</h3>
               <p className="text-sm text-gray-500 mt-1">{t('actions.fillSupplierInfo')}</p>
             </div>
             <button
@@ -1475,27 +1582,27 @@ const CreateEntityModal = ({ onClose, onSuccess }: { onClose: () => void; onSucc
     const newErrors: Record<string, string> = {};
     
     if (!formData.entityName.trim()) {
-      newErrors.entityName = 'Entity name is required';
+      newErrors.entityName = t('validation.entityNameRequired');
     }
     
     if (!formData.email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = t('validation.emailRequired');
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = t('validation.invalidEmail');
     }
     
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = t('validation.passwordRequired');
     } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = t('validation.passwordMinLength');
     }
     
     if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required';
+      newErrors.firstName = t('validation.firstNameRequired');
     }
     
     if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
+      newErrors.lastName = t('validation.lastNameRequired');
     }
     
     setErrors(newErrors);
@@ -1526,7 +1633,7 @@ const CreateEntityModal = ({ onClose, onSuccess }: { onClose: () => void; onSucc
       <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto transform">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-gray-900">{t('actions.createEntity')}</h3>
+            <h3 className="text-base font-bold text-gray-900">{t('actions.createEntity')}</h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -1822,7 +1929,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
       onSuccess();
     } catch (error: any) {
       console.error('Update supplier error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to update supplier';
+      const errorMessage = error.response?.data?.message || error.message || t('msg.failedUpdateSupplier');
       showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
@@ -1834,7 +1941,7 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transform">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-gray-900">{t('actions.updateSupplier')}</h3>
+            <h3 className="text-base font-bold text-gray-900">{t('actions.updateSupplier')}</h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2221,21 +2328,21 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
     const newErrors: Record<string, string> = {};
     
     if (!formData.email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = t('validation.emailRequired');
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = t('validation.invalidEmail');
     }
     
     if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required';
+      newErrors.firstName = t('validation.firstNameRequired');
     }
     
     if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
+      newErrors.lastName = t('validation.lastNameRequired');
     }
     
     if (!formData.entityName.trim()) {
-      newErrors.entityName = 'Entity name is required';
+      newErrors.entityName = t('validation.entityNameRequired');
     }
     
     setErrors(newErrors);
@@ -2273,7 +2380,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
       onSuccess();
     } catch (error: any) {
       console.error('Update entity error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to update procuring entity';
+      const errorMessage = error.response?.data?.message || error.message || t('msg.failedUpdateEntity');
       showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
@@ -2285,7 +2392,7 @@ const EditEntityModal = ({ entity, onClose, onSuccess }: { entity: ProcuringEnti
       <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto transform">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-gray-900">{t('actions.updateEntity')}</h3>
+            <h3 className="text-base font-bold text-gray-900">{t('actions.updateEntity')}</h3>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2505,15 +2612,15 @@ const ResetPasswordModal = ({
     const newErrors: Record<string, string> = {};
     
     if (!newPassword || newPassword.trim() === '') {
-      newErrors.newPassword = 'New password is required';
+      newErrors.newPassword = t('validation.newPasswordRequired');
     } else if (newPassword.length < 6) {
-      newErrors.newPassword = 'Password must be at least 6 characters';
+      newErrors.newPassword = t('validation.passwordMinLength');
     }
     
     if (!confirmPassword || confirmPassword.trim() === '') {
-      newErrors.confirmPassword = 'Please confirm the new password';
+      newErrors.confirmPassword = t('validation.confirmPasswordRequired');
     } else if (newPassword !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = t('validation.passwordsDoNotMatch');
     }
     
     setErrors(newErrors);
@@ -2552,8 +2659,8 @@ const ResetPasswordModal = ({
         <div className="sticky top-0 bg-gradient-to-r from-white to-purple-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">Reset Password</h3>
-              <p className="text-sm text-gray-500 mt-1">Reset password for {name}</p>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('actions.resetPassword')}</h3>
+              <p className="text-sm text-gray-500 mt-1">{t('common.resetPasswordFor', { name })}</p>
             </div>
             <button
               onClick={onClose}
@@ -2567,7 +2674,7 @@ const ResetPasswordModal = ({
         <form onSubmit={handleResetPassword} className="p-6 space-y-5">
           <div>
             <label htmlFor="reset-newPassword" className="block text-sm font-semibold text-gray-700 mb-2">
-              New Password <span className="text-red-500">*</span>
+              {t('forms.newPassword')} <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <input
@@ -2582,7 +2689,7 @@ const ResetPasswordModal = ({
                 className={`w-full px-4 py-3 pr-12 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 ${
                   errors.newPassword ? 'border-red-400 bg-red-50/50' : 'border-gray-300 hover:border-gray-400'
                 }`}
-                placeholder="Enter new password (min. 6 characters)"
+                placeholder={t('placeholders.enterNewPassword')}
               />
               <button
                 type="button"
@@ -2599,7 +2706,7 @@ const ResetPasswordModal = ({
           
           <div>
             <label htmlFor="reset-confirmPassword" className="block text-sm font-semibold text-gray-700 mb-2">
-              Confirm New Password <span className="text-red-500">*</span>
+              {t('common.confirmNewPassword')} <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <input
@@ -2614,7 +2721,7 @@ const ResetPasswordModal = ({
                 className={`w-full px-4 py-3 pr-12 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 ${
                   errors.confirmPassword ? 'border-red-400 bg-red-50/50' : 'border-gray-300 hover:border-gray-400'
                 }`}
-                placeholder="Confirm new password"
+                placeholder={t('placeholders.confirmNewPassword')}
               />
               <button
                 type="button"
@@ -2635,7 +2742,7 @@ const ResetPasswordModal = ({
               onClick={onClose}
               className="btn-cancel px-6 py-2.5 rounded-xl font-semibold transition-all duration-200"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -2645,12 +2752,12 @@ const ResetPasswordModal = ({
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Resetting...
+                  {t('common.resetting')}
                 </>
               ) : (
                 <>
                   <Key size={18} />
-                  Reset Password
+                  {t('actions.resetPassword')}
                 </>
               )}
             </button>
@@ -2697,7 +2804,7 @@ const DeleteConfirmationModal = ({
         <div className="sticky top-0 bg-gradient-to-r from-white to-red-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-red-600 to-red-800 bg-clip-text text-transparent flex items-center gap-2">
+              <h3 className="text-base font-bold bg-gradient-to-r from-red-600 to-red-800 bg-clip-text text-transparent flex items-center gap-2">
                 <Trash2 size={24} />
                 {t('common.delete')} {type === 'supplier' ? t('nav.suppliers') : t('nav.entities')}
               </h3>

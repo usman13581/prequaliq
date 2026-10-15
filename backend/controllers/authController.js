@@ -1,6 +1,7 @@
 const db = require('../models');
 const { hashPassword, comparePassword } = require('../utils/password');
 const { generateToken } = require('../utils/jwt');
+const { ensureDefaultsForUser } = require('../services/entitlementService');
 
 const register = async (req, res) => {
   try {
@@ -13,6 +14,11 @@ const register = async (req, res) => {
       return res.status(400).json({ message: 'This email is already associated with another account. Please use a different email address.' });
     }
 
+    const selectedRole = role || 'supplier';
+    if (!['supplier', 'procuring_entity'].includes(selectedRole)) {
+      return res.status(400).json({ message: 'Invalid role. Register as supplier or procuring entity.' });
+    }
+
     // Hash password
     const hashedPassword = await hashPassword(password);
 
@@ -23,33 +29,54 @@ const register = async (req, res) => {
       firstName,
       lastName,
       phone,
-      role: role || 'supplier'
+      role: selectedRole
     });
 
-    // Create role-specific records
-    if (role === 'supplier') {
-      await db.Supplier.create({
+    // Create role-specific records — both start pending admin approval
+    if (selectedRole === 'supplier') {
+      const supplier = await db.Supplier.create({
         userId: user.id,
-        companyName: `${firstName} ${lastName} Company`
+        companyName: `${firstName} ${lastName} Company`,
+        status: 'pending'
       });
-    } else if (role === 'procuring_entity') {
-      await db.ProcuringEntity.create({
+      if (db.OrgMembership) {
+        await db.OrgMembership.create({
+          userId: user.id,
+          ownerType: 'supplier',
+          ownerId: supplier.id,
+          membershipRole: 'owner'
+        });
+      }
+    } else if (selectedRole === 'procuring_entity') {
+      const entity = await db.ProcuringEntity.create({
         userId: user.id,
-        entityName: `${firstName} ${lastName} Entity`
+        entityName: `${firstName} ${lastName} Entity`,
+        status: 'pending'
       });
+      if (db.OrgMembership) {
+        await db.OrgMembership.create({
+          userId: user.id,
+          ownerType: 'procuring_entity',
+          ownerId: entity.id,
+          membershipRole: 'owner'
+        });
+      }
     }
+
+    await ensureDefaultsForUser(user.id);
 
     const token = generateToken(user.id);
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'User registered successfully. Complete your profile — an admin must approve your account before full access.',
       token,
       user: {
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        role: user.role
+        role: user.role,
+        accountStatus: 'pending'
       }
     });
   } catch (error) {

@@ -13,6 +13,7 @@ router.post('/profile/ai-suggest', procuringEntityController.suggestProfileFromD
 router.post('/questionnaires/ai-understand', procuringEntityController.suggestQuestionnaireUnderstand);
 router.post('/questionnaires/ai-suggest', procuringEntityController.suggestQuestionnaireFromDescription);
 router.get('/suppliers', procuringEntityController.getSuppliers);
+router.get('/suppliers-invite-candidates', procuringEntityController.listInviteCandidates);
 router.get('/suppliers/:supplierId', procuringEntityController.getSupplierDetails);
 
 module.exports = router;

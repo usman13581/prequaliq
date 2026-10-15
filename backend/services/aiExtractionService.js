@@ -289,6 +289,7 @@ module.exports = {
   extractAutoOrchestrated,
   checkAiHealth,
   isAiConfigured,
+  callAi,
   getGpuEndpointsCatalog,
   getBackendAiEndpointsCatalog,
   SECTION_TEXT_FIELD,

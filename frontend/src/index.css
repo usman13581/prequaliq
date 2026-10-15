@@ -161,7 +161,11 @@ a,
   overflow: hidden;
 }
 .date-only-picker-popper {
-  z-index: 50;
+  /* Above SlideOver / portaled filters (dropdowns use ~10050) */
+  z-index: 10060;
+}
+.react-datepicker-popper {
+  z-index: 10060 !important;
 }
 .react-datepicker__header {
   background: linear-gradient(135deg, var(--primary-mid) 0%, var(--primary) 100%);
@@ -413,12 +417,31 @@ a,
   }
 }
 
-/* Portal left sidebar — icon + label (HR-style rail) */
+/* Portal left sidebar — icon + label (HR-style rail). Expand pushes page body. */
 .portal-sidebar {
+  width: 4rem; /* collapsed compact rail */
+  z-index: 30;
+  overflow: hidden;
   background: linear-gradient(180deg, var(--primary) 0%, #0a1f38 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0;
   box-shadow: 2px 0 16px rgba(15, 39, 68, 0.08);
+  transition: width 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Expanded via JS class (hover); width change pushes flex siblings */
+.portal-sidebar--expanded {
+  width: 12rem; /* w-48 */
+  overflow: visible;
+  box-shadow: 4px 0 24px rgba(15, 39, 68, 0.2);
+}
+
+.portal-sidebar--wide {
+  width: 5.75rem;
+}
+
+.portal-sidebar--wide.portal-sidebar--expanded {
+  width: 13rem;
 }
 
 .portal-sidebar-item {
@@ -435,8 +458,14 @@ a,
   background: transparent;
   color: rgba(255, 255, 255, 0.72);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, align-items 0.15s ease, padding 0.15s ease;
   -webkit-tap-highlight-color: transparent;
+}
+
+.portal-sidebar--expanded .portal-sidebar-item {
+  align-items: flex-start;
+  padding-left: 0.55rem;
+  padding-right: 0.45rem;
 }
 
 .portal-sidebar-item:hover {
@@ -466,7 +495,17 @@ a,
   padding: 0 1px;
 }
 
-/* Procuring entity — slightly wider rail, labels may wrap */
+.portal-sidebar--expanded .portal-sidebar-label {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  max-width: none;
+  text-align: left;
+  font-size: 0.6875rem;
+  line-height: 1.25;
+}
+
+/* Procuring entity — slightly wider rail, labels may wrap when collapsed */
 .portal-sidebar--wide .portal-sidebar-label {
   white-space: normal;
   word-break: break-word;
@@ -476,6 +515,20 @@ a,
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   text-overflow: unset;
+}
+
+.portal-sidebar--wide.portal-sidebar--expanded .portal-sidebar-label {
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  word-break: normal;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  text-align: left;
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  max-width: none;
 }
 
 .portal-sidebar-mobile--wide .portal-sidebar-label {
@@ -492,6 +545,11 @@ a,
 @media (min-width: 1024px) {
   .portal-sidebar-label {
     font-size: 0.625rem;
+  }
+
+  .portal-sidebar--expanded .portal-sidebar-label,
+  .portal-sidebar--wide.portal-sidebar--expanded .portal-sidebar-label {
+    font-size: 0.75rem;
   }
 }
 

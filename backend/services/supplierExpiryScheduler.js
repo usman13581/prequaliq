@@ -24,6 +24,21 @@ async function checkSupplierDocumentExpiry(supplier) {
   });
   if (!recent) {
     await notifyDocumentExpiring(supplier, expiringCount);
+    try {
+      const { sendDocumentExpiringEmail } = require('./emailService');
+      const withUser = await db.Supplier.findByPk(supplier.id, {
+        include: [{ model: db.User, as: 'user', attributes: ['email', 'firstName'] }]
+      });
+      if (withUser?.user?.email) {
+        sendDocumentExpiringEmail(
+          withUser.user.email,
+          withUser.user.firstName,
+          expiringCount
+        ).catch((err) => console.error('Doc expiry email failed:', err.message));
+      }
+    } catch (emailErr) {
+      console.warn('Doc expiry email skipped:', emailErr.message);
+    }
   }
 }
 

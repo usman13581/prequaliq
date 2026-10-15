@@ -30,6 +30,7 @@ const Register = () => {
 
     try {
       await register(formData);
+      showToast(t('register.pendingApprovalToast'), 'success');
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       
       if (user.role === 'supplier') {
@@ -38,7 +39,7 @@ const Register = () => {
         navigate('/procuring-entity');
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Registration failed';
+      const errorMessage = err.response?.data?.message || t('msg.registrationFailed');
       setError(errorMessage);
       showToast(errorMessage, 'error');
     } finally {
@@ -64,12 +65,16 @@ const Register = () => {
             </div>
           )}
 
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+            {t('register.pendingApprovalNote')}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('register.role')}</label>
             <select
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+              className="input-brand w-full"
             >
               <option value="supplier">{t('register.supplier')}</option>
               <option value="procuring_entity">{t('register.procuringEntity')}</option>
@@ -84,7 +89,7 @@ const Register = () => {
                 value={formData.firstName}
                 onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                 required
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+                className="input-brand w-full"
               />
             </div>
             <div>
@@ -94,7 +99,7 @@ const Register = () => {
                 value={formData.lastName}
                 onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                 required
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+                className="input-brand w-full"
               />
             </div>
           </div>
@@ -106,7 +111,7 @@ const Register = () => {
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+              className="input-brand w-full"
             />
           </div>
 
@@ -116,7 +121,7 @@ const Register = () => {
               type="tel"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+              className="input-brand w-full"
             />
           </div>
 
@@ -128,7 +133,7 @@ const Register = () => {
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               required
               minLength={6}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400"
+              className="input-brand w-full"
             />
           </div>
 

@@ -3,29 +3,72 @@ import type { ReactNode } from 'react';
 type QuestionnaireSlimRowProps = {
   title: string;
   description?: string;
-  meta: ReactNode;
-  trailing: ReactNode;
+  meta?: ReactNode;
+  trailing?: ReactNode;
+  /** Dense row for nested pickers / admin tables. Default is Open-tenders-style card. */
+  compact?: boolean;
+  badges?: ReactNode;
 };
 
+/** List row used across portal management lists (questionnaires, procedures, contracts, …). */
 export function QuestionnaireSlimRow({
   title,
   description,
   meta,
-  trailing
+  trailing,
+  compact = false,
+  badges
 }: QuestionnaireSlimRowProps) {
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-4 py-3 bg-white rounded-xl border border-border hover:shadow-sm transition-shadow">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-foreground truncate">{title}</p>
-        {description ? (
-          <p className="text-xs text-muted truncate mt-0.5">{description}</p>
-        ) : null}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted mt-1">
-          {meta}
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2 sm:gap-3 px-3 py-1.5 bg-white rounded-lg border border-border hover:bg-surface/60 hover:shadow-sm transition-all min-h-[2.5rem]">
+        <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground truncate leading-snug">{title}</p>
+            {description ? (
+              <p className="text-xs text-muted truncate leading-snug sm:hidden">{description}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted min-w-0 sm:justify-end sm:max-w-[55%]">
+            {description ? (
+              <span className="hidden sm:inline truncate max-w-[14rem]" title={description}>
+                {description}
+              </span>
+            ) : null}
+            {meta}
+          </div>
         </div>
+        {trailing ? (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {trailing}
+          </div>
+        ) : null}
       </div>
-      <div className="flex items-center gap-2 shrink-0 flex-wrap sm:justify-end">
-        {trailing}
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-white hover:border-primary-300 hover:shadow-md transition-all p-4 sm:p-5">
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0 space-y-2">
+          {badges ? (
+            <div className="flex flex-wrap items-center gap-2">{badges}</div>
+          ) : null}
+          <h3 className="text-base sm:text-lg font-bold text-foreground leading-snug">{title}</h3>
+          {description ? (
+            <p className="text-sm text-muted line-clamp-2 leading-snug">{description}</p>
+          ) : null}
+          {meta ? (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted">
+              {meta}
+            </div>
+          ) : null}
+        </div>
+        {trailing ? (
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-end gap-1.5 shrink-0 max-w-full sm:max-w-[40%]">
+            {trailing}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -49,7 +92,7 @@ export function StatusBadge({
   }[tone];
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 text-[11px] font-semibold rounded-full uppercase tracking-wide ${toneClass}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-md uppercase tracking-wide leading-5 ${toneClass}`}>
       {children}
     </span>
   );

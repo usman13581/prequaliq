@@ -136,7 +136,7 @@ export function AdminHomeTab({
                   <p className="text-sm font-semibold text-foreground truncate">{s.companyName}</p>
                   <p className="text-xs text-muted">{s.user?.email}</p>
                 </div>
-                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
                   s.status === 'approved' ? 'bg-green-100 text-green-800' :
                   s.status === 'rejected' ? 'bg-red-100 text-red-800' :
                   s.status === 'requalification_required' ? 'bg-orange-100 text-orange-800' :
@@ -166,7 +166,7 @@ export function AdminHomeTab({
                   <p className="text-sm font-semibold text-foreground truncate">{e.entityName}</p>
                   <p className="text-xs text-muted">{e.user?.email}</p>
                 </div>
-                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
                   e.user?.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
                 }`}>
                   {e.user?.isActive !== false ? t('common.active') : t('common.inactive')}

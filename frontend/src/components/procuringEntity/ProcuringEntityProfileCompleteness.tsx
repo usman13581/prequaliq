@@ -132,7 +132,7 @@ export function ProcuringEntityProfileCompletenessMobile({
       </div>
       <div className="text-right shrink-0">
         <p className="text-sm font-bold text-accent tabular-nums">{completeness.percent}%</p>
-        <p className="text-[10px] text-muted">
+        <p className="text-xs text-muted">
           {incomplete === 0
             ? t('entityPortal.profileComplete')
             : `${incomplete} ${t('entityPortal.profileIncomplete')}`}

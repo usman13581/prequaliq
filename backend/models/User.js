@@ -10,7 +10,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       unique: true,
       validate: {
-        isEmail: true
+        isAllowedEmail(value) {
+          const { isAllowedEmail } = require('../utils/emailValidation');
+          if (!isAllowedEmail(value)) {
+            throw new Error('Valid email is required');
+          }
+        }
       }
     },
     password: {
@@ -51,6 +56,9 @@ module.exports = (sequelize, DataTypes) => {
   User.associate = (models) => {
     User.hasOne(models.ProcuringEntity, { foreignKey: 'userId', as: 'procuringEntity' });
     User.hasOne(models.Supplier, { foreignKey: 'userId', as: 'supplier' });
+    if (models.SavedSearch) {
+      User.hasMany(models.SavedSearch, { foreignKey: 'userId', as: 'savedSearches' });
+    }
   };
 
   return User;

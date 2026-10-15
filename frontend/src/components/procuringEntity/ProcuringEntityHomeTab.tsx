@@ -5,6 +5,8 @@ import {
 import {
   AdminStatCard, AdminStatsGrid, AdminSectionTitle, AdminRecentList
 } from '../admin/AdminStatCards';
+import { useListPagination } from '../../hooks/useListPagination';
+import { ListPagination } from '../ui/ListPagination';
 
 export type EntityDashboardStats = {
   entityName?: string;
@@ -62,6 +64,7 @@ export function ProcuringEntityHomeTab({
   onNavigate: (tab: string) => void;
 }) {
   const { t } = useTranslation();
+  const homeQuestionnairePager = useListPagination(stats?.recentQuestionnaires || []);
 
   if (loading || !stats) {
     return <HomeTabSkeleton />;
@@ -188,7 +191,7 @@ export function ProcuringEntityHomeTab({
         <AdminRecentList
           title={t('entityPortal.recentQuestionnaires')}
           emptyLabel={t('dashboard.noQuestionnaires')}
-          items={stats.recentQuestionnaires}
+          items={homeQuestionnairePager.paginatedItems}
           renderItem={(item) => {
             const q = item as EntityDashboardStats['recentQuestionnaires'][0];
             const overdue = new Date(q.deadline) < new Date();
@@ -201,7 +204,7 @@ export function ProcuringEntityHomeTab({
                     {q.cpvCode?.description ? ` · ${q.cpvCode.description}` : ''}
                   </p>
                 </div>
-                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
                   !q.isActive ? 'bg-gray-100 text-gray-600' :
                   overdue ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                 }`}>
@@ -210,6 +213,14 @@ export function ProcuringEntityHomeTab({
               </div>
             );
           }}
+        />
+        <ListPagination
+          page={homeQuestionnairePager.page}
+          pageSize={homeQuestionnairePager.pageSize}
+          total={homeQuestionnairePager.total}
+          onPageChange={homeQuestionnairePager.setPage}
+          onPageSizeChange={homeQuestionnairePager.setPageSize}
+          itemLabel={t('nav.questionnaires').toLowerCase()}
         />
       </div>
     </div>

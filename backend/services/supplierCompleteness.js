@@ -143,5 +143,6 @@ function evaluateSupplierCompleteness(supplier) {
 module.exports = {
   REQUIRED_DOC_TYPES,
   getDocumentStatus,
+  getActiveDocuments,
   evaluateSupplierCompleteness
 };

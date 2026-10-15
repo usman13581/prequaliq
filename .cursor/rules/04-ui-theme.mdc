@@ -1,0 +1,136 @@
+---
+description: UI objects, theme tokens, and UX patterns matching the current app
+globs: "frontend/**/*.{tsx,ts,css}"
+alwaysApply: false
+---
+
+# UI + Theme
+
+**Unify rule:** New UI = existing shell + objects + tokens. No second design system. No competitor skins.
+
+Sources: `frontend/src/index.css`, `tailwind.config.js`, `components/ui/*`, `plans/00-ui-objects.md`.
+
+## Tokens (frozen)
+
+| Role | Value / class |
+|------|----------------|
+| App bg | `#fafbfc` + `.app-page-bg` |
+| Text | `#0b1220` (`foreground`), muted `#5c6b7a` |
+| Card | white, `rounded-2xl`, `border-border`, `shadow-sm` |
+| Accent | `#2563eb` (`.btn-save`) |
+| Navy | `#0f2744` / `#1a3a5c` (sidebar / primary) |
+| AI only | violet-50 / violet-600 + Sparkles |
+| Portal font | Inter (`.font-app`) |
+| Auth font | Plus Jakarta Sans (`.font-website`) |
+
+Do not invent new palettes, fonts, or radii. Prefer theme Tailwind classes (`text-foreground`, `bg-surface`, `border-border`, `text-accent`) over raw hex in components.
+
+## Typography & chrome
+
+- Portals: `PortalLayout` + `PortalSidebar` + `.font-app`.
+- Auth/marketing: `.login-page-bg` + `.auth-card` + `.font-website` — never for in-app workflows.
+- Icons: `lucide-react` (14–20px rows, 20–22px headers).
+
+### Slim management lists (min 12px)
+
+For questionnaire / procedure / contract / tender / department / invite / supplier-search style pages using `QuestionnaireSlimRow`, `StatusBadge`, `RowActionButton`, or compact search cards:
+
+| Element | Min size | Tailwind |
+|---------|----------|----------|
+| Row title | 14px | `text-sm` |
+| Description, meta, actions, badges, card secondary text | **12px** | `text-xs` |
+
+```tsx
+// ❌ BAD — too small to read in dense lists
+<span className="text-[10px]">…</span>
+<p className="text-[11px] text-muted">…</p>
+
+// ✅ GOOD
+<p className="text-sm font-semibold">Title</p>
+<span className="text-xs text-muted">Meta</span>
+<StatusBadge>…</StatusBadge> // text-xs inside
+```
+
+Do not use `text-[10px]` / `text-[11px]` on these list UIs. Compact padding is fine; font size stays ≥ 12px.
+
+### Dashboards & popups (headings 16 / body 14)
+
+Portal tab pages, home dashboards, `SlideOver`, `CenterModal`, and other modals:
+
+| Element | Size | Tailwind |
+|---------|------|----------|
+| Page / modal / slide-over title (`h2`/`h3`) | **16px** | `text-base font-bold` |
+| Normal body / subtitle / form labels | **14px** | `text-sm` |
+| Dense list meta on those pages | **12px** | `text-xs` (still min) |
+
+```tsx
+// ❌ BAD
+<h2 className="text-2xl font-bold">…</h2>
+<h2 className="text-xl font-bold">…</h2>
+<p className="text-[11px]">…</p>
+
+// ✅ GOOD
+<h2 className="text-base font-bold text-foreground">…</h2>
+<p className="text-sm text-muted">…</p>
+```
+
+KPI / stat **numbers** may stay larger (`text-2xl` etc.). Avatar initials and logo markups are exempt.
+
+## UI object catalog
+
+| Object | Use | Implement with |
+|--------|-----|----------------|
+| **PortalShell** | All portal screens | `PortalLayout` |
+| **SidebarItem** | Top-level tabs | `PortalSidebar` items `{ id, label, icon }` |
+| **ContentCard** | Sections / detail panels | `bg-white rounded-2xl border border-border shadow-sm` |
+| **StatCard** | Home KPIs | `AdminStatCards` pattern |
+| **SlimListRow** | Lists (tenders, bids, contracts, questionnaires) | `QuestionnaireSlimRow`: compact padding; title `text-sm`, meta ≥ `text-xs` (12px) |
+| **StatusBadge** | Lifecycle pills | Tone badges; label ≥ `text-xs` (12px) |
+| **RowActionButton** | Compact list actions | primary / secondary / danger / muted; label ≥ `text-xs` (12px) |
+| **PrimaryButton** | Save, Publish, Submit | `.btn-save` |
+| **ApproveButton** | Approve | `.btn-approve` |
+| **RejectButton** | Reject / send back | `.btn-reject` |
+| **CancelButton** | Dismiss | `.btn-cancel` |
+| **DeleteButton** | Destructive | `.btn-delete` |
+| **TextField** | Text inputs | `.input-brand` `rounded-xl` |
+| **DateField** | Deadlines / validity | `DateOnlyPicker` (`YYYY-MM-DD`) |
+| **SearchSelect** | CPV / similar pickers | `CpvSearchSelect`-style |
+| **ProfileTabs** | Multi-section wizards | `*ProfileTabsNav` |
+| **CompletenessRail** | Readiness checklist | `*ProfileCompleteness` |
+| **Modal** | Short confirms / forms | `CenterModal` or `bg-black/50–60` + white `rounded-2xl` |
+| **SlideOver** | Longer edit/detail | `SlideOver` (`open`, `onClose`, `title`, `footer?`) |
+| **Toast** | Brief feedback | `useToast().showToast` |
+| **Pagination** | Long lists | `ListPagination` + `useListPagination` |
+| **EmptyState** | Empty / gated features | dashed `rounded-xl border-2 border-border` + hint/CTA |
+| **AlertBanner** | Account / conflict notices | `AccountStatusBanner` or tinted `rounded-xl` |
+| **AiAssistBar / AiDrawer / AiInlinePanel** | AI entry / review / suggestions | Violet `*AiAssist` compounds only |
+
+## Composition defaults
+
+| Screen type | Objects |
+|-------------|---------|
+| Role home | PortalShell, StatCard, SlimListRow, StatusBadge |
+| Searchable list | SearchSelect/filters, SlimListRow, RowActionButton, Pagination, EmptyState |
+| Create/edit long | SlideOver or ContentCard + TextField/DateField + PrimaryButton |
+| Admin review | SlimListRow, Approve/Reject, Modal, Toast |
+| AI assist | AiAssistBar / AiDrawer / AiInlinePanel (violet only) |
+
+Every async view must support **loading**, **empty**, and **error** (toast or inline).
+
+## Anti-patterns
+
+```tsx
+// ❌ BAD — new chrome / raw control / non-violet AI
+<button className="bg-purple-600 rounded-full">Save</button>
+<input className="border p-2" />
+<div className="bg-indigo-50">AI tip</div>
+
+// ✅ GOOD
+<button className="btn-save rounded-xl px-4 py-2">{t('buttons.save')}</button>
+<input className="input-brand w-full" />
+// AI: reuse *AiAssist violet patterns only
+```
+
+- No second sidebar/nav outside PortalShell.
+- No one-off modal styles when `SlideOver` / `CenterModal` fit.
+- No auth page classes inside portals.

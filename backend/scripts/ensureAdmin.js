@@ -32,7 +32,7 @@ async function ensureAdmin() {
 
     console.log('✓ Admin user created successfully!');
     console.log('Email:', email);
-    console.log('Password:', password);
+    console.log('Password: (set from script — not logged; change after first login)');
 
     await db.sequelize.close();
   } catch (error) {

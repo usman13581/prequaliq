@@ -37,7 +37,7 @@ export function SupplierProfileCompletenessRail({ completeness }: { completeness
             style={{ width: `${completeness.percent}%` }}
           />
         </div>
-        <p className="mt-2 text-[10px] font-medium leading-tight">
+        <p className="mt-2 text-xs font-medium leading-tight">
           {completeness.readyToSubmit ? (
             <span className="text-green-700 inline-flex items-center gap-1">
               <CheckCircle size={11} /> {t('supplierPortal.readyToSubmit')}
@@ -90,7 +90,7 @@ export function SupplierProfileCompletenessMobile({ completeness }: { completene
       </div>
       <div className="text-right shrink-0">
         <p className="text-sm font-bold text-accent tabular-nums">{completeness.percent}%</p>
-        <p className="text-[10px] text-muted">
+        <p className="text-xs text-muted">
           {incomplete === 0 ? t('supplierPortal.readyToSubmit') : `${incomplete} ${t('supplierPortal.incomplete')}`}
         </p>
       </div>
@@ -123,7 +123,13 @@ export function SupplierQualificationStatusBar({ profile }: { profile: ProfileSt
   const statusLabel =
     status === 'requalification_required'
       ? t('supplierPortal.requalificationTitle')
-      : status.charAt(0).toUpperCase() + status.slice(1);
+      : status === 'approved'
+        ? t('common.approved')
+        : status === 'rejected'
+          ? t('common.rejected')
+          : status === 'pending'
+            ? t('common.pending')
+            : status;
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 min-w-0">
@@ -172,7 +178,7 @@ export function SupplierSubmitModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-5 border-b border-border">
-          <h3 className="text-xl font-bold text-gray-900">{t('supplierPortal.submitTitle')}</h3>
+          <h3 className="text-base font-bold text-gray-900">{t('supplierPortal.submitTitle')}</h3>
           <p className="text-sm text-muted mt-1">{t('supplierPortal.submitSubtitle')}</p>
         </div>
         <div className="p-6 space-y-4">

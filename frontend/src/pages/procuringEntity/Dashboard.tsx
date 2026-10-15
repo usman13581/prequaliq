@@ -1,10 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useEntitlement } from '../../contexts/EntitlementContext';
+import { uploadsUrl } from '../../utils/uploadsUrl';
 import api from '../../services/api';
 import { PortalLayout } from '../../components/ui/PortalLayout';
+import { AccountStatusBanner } from '../../components/ui/AccountStatusBanner';
+import { ProceduresPanel } from '../../components/procuringEntity/ProceduresPanel';
+import { ContractsPanel } from '../../components/procuringEntity/ContractsPanel';
 import {
   ProcuringEntityHomeTab,
   EntityQuestionnaireStatsStrip,
@@ -24,17 +29,45 @@ import {
   ProcuringEntityQuestionnaireAiAssist,
   type AppliedQuestionnaireDraft,
 } from '../../components/procuringEntity/ProcuringEntityQuestionnaireAiAssist';
+import { AiPreferencesPanel } from '../../components/ai/AiPreferencesPanel';
 import { CpvSearchSelect } from '../../components/cpv/CpvSearchSelect';
+import { NutsSearchSelect } from '../../components/nuts/NutsSearchSelect';
 import { useCpvCatalogSearch } from '../../hooks/useCpvCatalogSearch';
-import { useListPagination } from '../../hooks/useListPagination';
+import { useNutsCatalogSearch } from '../../hooks/useNutsCatalogSearch';
+import { useListPagination, useServerListPagination } from '../../hooks/useListPagination';
 import { ListPagination } from '../../components/ui/ListPagination';
+import { PortaledDropdown } from '../../components/ui/PortaledDropdown';
+import { SearchField } from '../../components/ui/SearchField';
+import { BrandSelect } from '../../components/ui/BrandSelect';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
+import { DynamicFilterBar } from '../../components/search/DynamicFilterBar';
+import { emptyFilters, filterValueAsString, type FilterFieldDef, type FilterValues } from '../../components/search/filterTypes';
 import { 
   FileText, Search, User, Plus, Edit2, Trash2, Eye, 
   Upload, X, Calendar, Building2, Save, XCircle, Camera,
-  CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Users, Power, PowerOff,
-  LayoutDashboard
+  CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Users, Power, PowerOff,
+  LayoutDashboard, Briefcase, ScrollText, Sparkles, Wallet, Award, Shield
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+const BUYER_QUESTIONNAIRE_FILTER_FIELDS: FilterFieldDef[] = [
+  {
+    key: 'keyword',
+    type: 'keyword',
+    labelKey: 'common.search',
+    placeholderKey: 'savedSearch.questionnairePlaceholder'
+  },
+  { key: 'cpvCodeId', type: 'cpv', labelKey: 'savedSearch.cpv' },
+  {
+    key: 'status',
+    type: 'select',
+    labelKey: 'common.status',
+    options: [
+      { value: 'active', labelKey: 'common.active' },
+      { value: 'inactive', labelKey: 'common.inactive' }
+    ]
+  }
+];
 
 interface Document {
   id: string;
@@ -50,14 +83,6 @@ interface CPVCode {
   id: string;
   code: string;
   description: string;
-}
-
-interface NUTSCode {
-  id: string;
-  code: string;
-  name: string;
-  nameSwedish?: string;
-  level: number;
 }
 
 interface Question {
@@ -84,9 +109,8 @@ interface Questionnaire {
   responses?: any[];
   createdAt: string;
   isActive?: boolean;
+  editLocked?: boolean;
 }
-
-const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
 
 // Turnover range options for supplier search: { value, minTurnover, maxTurnover }
 // Use inclusive ranges to match both legacy values (e.g. 100000) and new dropdown values (e.g. 1000000)
@@ -100,6 +124,16 @@ const TURNOVER_SEARCH_OPTIONS = [
   { value: '75M_100M', labelKey: 'commonQuestions.turnover75M_100M', min: 75000000, max: 100000000 },
   { value: '100MPlus', labelKey: 'commonQuestions.turnover100MPlus', min: 100000000, max: 999999999999 }
 ];
+
+function formatSupplierTurnoverLabel(raw: unknown, t: (key: string) => string): string {
+  if (raw == null || raw === '') return '';
+  const num = typeof raw === 'number' ? raw : parseFloat(String(raw));
+  if (!Number.isNaN(num)) {
+    const match = TURNOVER_SEARCH_OPTIONS.find((o) => o.value && num >= o.min && num <= o.max);
+    if (match) return t(match.labelKey);
+  }
+  return String(raw);
+}
 
 const ProcuringEntityDashboard = () => {
   const { t } = useTranslation();
@@ -132,6 +166,9 @@ const ProcuringEntityDashboard = () => {
   
   // Questionnaire state
   const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([]);
+  const [questionnaireFilters, setQuestionnaireFilters] = useState<FilterValues>(() =>
+    emptyFilters(BUYER_QUESTIONNAIRE_FILTER_FIELDS)
+  );
   const [showCreateQuestionnaire, setShowCreateQuestionnaire] = useState(false);
   const [newQuestionnaire, setNewQuestionnaire] = useState({
     title: '',
@@ -141,22 +178,60 @@ const ProcuringEntityDashboard = () => {
     questions: [] as Question[]
   });
   const cpvCatalog = useCpvCatalogSearch();
+  const nutsCatalog = useNutsCatalogSearch();
   const [selectedQuestionnaire, setSelectedQuestionnaire] = useState<Questionnaire | null>(null);
   const [editingQuestionnaire, setEditingQuestionnaire] = useState<Questionnaire | null>(null);
   const [viewingResponses, setViewingResponses] = useState<Questionnaire | null>(null);
   const [questionnaireResponses, setQuestionnaireResponses] = useState<any[]>([]);
 
   // Search Suppliers state
+  const { enabled: canDiscoverSuppliers } = useEntitlement('marketplace.supplier_discovery');
+  const [supplierScope, setSupplierScope] = useState<'discover' | 'mine'>('discover');
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [supplierSearch, setSupplierSearch] = useState('');
+  const [appliedSupplierSearch, setAppliedSupplierSearch] = useState('');
   const [supplierTurnoverFilter, setSupplierTurnoverFilter] = useState('');
   const [supplierCpvFilter, setSupplierCpvFilter] = useState('');
   const [supplierNutsFilter, setSupplierNutsFilter] = useState('');
-  const [nutsCodesForSearch, setNutsCodesForSearch] = useState<NUTSCode[]>([]);
-  const [suppliersPagination, setSuppliersPagination] = useState({ page: 1, limit: 12, total: 0, totalPages: 0 });
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [selectedSupplierDetail, setSelectedSupplierDetail] = useState<any>(null);
   const [supplierDetailLoading, setSupplierDetailLoading] = useState(false);
+
+  const activeSupplierScope: 'discover' | 'mine' =
+    canDiscoverSuppliers && supplierScope === 'discover' ? 'discover' : 'mine';
+
+  const supplierPager = useServerListPagination({
+    resetKey: [
+      activeSupplierScope,
+      appliedSupplierSearch,
+      supplierTurnoverFilter,
+      supplierCpvFilter,
+      supplierNutsFilter
+    ].join('|')
+  });
+
+  // Keep selected CPV ids in refs so search callbacks stay stable (avoids CPV dropdown refetch loop).
+  const newCpvIdRef = useRef(newQuestionnaire.cpvCodeId);
+  const editCpvIdRef = useRef(editingQuestionnaire?.cpvCodeId || '');
+  const supplierCpvFilterRef = useRef(supplierCpvFilter);
+  const supplierNutsFilterRef = useRef(supplierNutsFilter);
+  newCpvIdRef.current = newQuestionnaire.cpvCodeId;
+  editCpvIdRef.current = editingQuestionnaire?.cpvCodeId || '';
+  supplierCpvFilterRef.current = supplierCpvFilter;
+  supplierNutsFilterRef.current = supplierNutsFilter;
+
+  const handleNewQuestionnaireCpvSearch = useCallback(
+    (term: string) => cpvCatalog.searchDebounced(term, newCpvIdRef.current),
+    [cpvCatalog.searchDebounced]
+  );
+  const handleEditQuestionnaireCpvSearch = useCallback(
+    (term: string) => cpvCatalog.searchDebounced(term, editCpvIdRef.current),
+    [cpvCatalog.searchDebounced]
+  );
+  const handleSupplierCpvSearch = useCallback(
+    (term: string) => cpvCatalog.searchDebounced(term, supplierCpvFilterRef.current),
+    [cpvCatalog.searchDebounced]
+  );
 
   const fetchDashboardStats = async (showLoading = true) => {
     try {
@@ -174,9 +249,9 @@ const ProcuringEntityDashboard = () => {
   };
 
   // Fetch profile and documents
-  const fetchProfile = async () => {
+  const fetchProfile = async (opts?: { silent?: boolean }) => {
     try {
-      setLoading(true);
+      if (!opts?.silent) setLoading(true);
       const response = await api.get('/procuring-entity/profile');
       const entity = response.data.procuringEntity;
       setProfile(entity);
@@ -192,9 +267,11 @@ const ProcuringEntityDashboard = () => {
       });
       setDocuments(entity.documents || []);
     } catch (error: any) {
-      showToast(error.response?.data?.message || t('msg.failedFetchProfile'), 'error');
+      if (!opts?.silent) {
+        showToast(error.response?.data?.message || t('msg.failedFetchProfile'), 'error');
+      }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   };
 
@@ -212,24 +289,16 @@ const ProcuringEntityDashboard = () => {
     }
   };
 
-  // Fetch NUTS codes for supplier search filter
-  const fetchNUTSCodesForSearch = async () => {
-    try {
-      const response = await api.get('/nuts');
-      const list = response.data.nutsCodes || [];
-      setNutsCodesForSearch(Array.isArray(list) ? list : []);
-    } catch (error) {
-      console.error('Failed to fetch NUTS codes:', error);
-      setNutsCodesForSearch([]);
-    }
-  };
-
-  // Fetch suppliers (approved who submitted to this entity's questionnaires)
-  const fetchSuppliers = async (page = 1) => {
+  // Fetch suppliers: discover (marketplace) or mine (applied / invited / contracted)
+  const fetchSuppliers = useCallback(async () => {
     try {
       setLoading(true);
-      const params: any = { page, limit: 12 };
-      if (supplierSearch.trim()) params.search = supplierSearch.trim();
+      const params: Record<string, string | number> = {
+        page: supplierPager.page,
+        limit: supplierPager.pageSize,
+        scope: activeSupplierScope
+      };
+      if (appliedSupplierSearch) params.search = appliedSupplierSearch;
       const turnoverOpt = TURNOVER_SEARCH_OPTIONS.find((o) => o.value === supplierTurnoverFilter);
       if (turnoverOpt && turnoverOpt.value && turnoverOpt.min !== undefined && turnoverOpt.max !== undefined && turnoverOpt.max > 0) {
         params.minTurnover = turnoverOpt.min;
@@ -239,14 +308,26 @@ const ProcuringEntityDashboard = () => {
       if (supplierNutsFilter) params.nutsCodeId = supplierNutsFilter;
       const response = await api.get('/procuring-entity/suppliers', { params });
       setSuppliers(response.data.suppliers || []);
-      setSuppliersPagination(response.data.pagination || { page: 1, limit: 12, total: 0, totalPages: 0 });
+      supplierPager.setTotal(response.data.pagination?.total ?? 0);
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedFetchSuppliers'), 'error');
       setSuppliers([]);
+      supplierPager.setTotal(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    activeSupplierScope,
+    supplierPager.page,
+    supplierPager.pageSize,
+    supplierPager.setTotal,
+    appliedSupplierSearch,
+    supplierTurnoverFilter,
+    supplierCpvFilter,
+    supplierNutsFilter,
+    showToast,
+    t
+  ]);
 
   // Fetch single supplier detail (profile + responses with answers and documents)
   const fetchSupplierDetail = async (supplierId: string) => {
@@ -270,21 +351,35 @@ const ProcuringEntityDashboard = () => {
     }
   }, [selectedSupplierId]);
 
+  // Always load entity status on mount — needed for Procedures/Contracts action gates
+  useEffect(() => {
+    if (!user?.id) return;
+    fetchProfile({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user?.id) return;
     if (activeTab === 'home') {
       fetchDashboardStats();
     } else if (activeTab === 'profile') {
       fetchProfile();
+    } else if (activeTab === 'procedures' || activeTab === 'contracts') {
+      if (!profile) fetchProfile({ silent: true });
     } else if (activeTab === 'questionnaires') {
       fetchQuestionnaires();
       cpvCatalog.fetchCodes();
     } else if (activeTab === 'suppliers') {
-      fetchSuppliers(1);
       cpvCatalog.fetchCodes();
-      fetchNUTSCodesForSearch();
+      nutsCatalog.fetchCodes('', supplierNutsFilterRef.current);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || activeTab !== 'suppliers') return;
+    fetchSuppliers();
+  }, [user?.id, activeTab, fetchSuppliers]);
 
   const handleAiProfileApply = (fields: Record<string, string>) => {
     setProfileData((prev) => {
@@ -346,7 +441,7 @@ const ProcuringEntityDashboard = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      showToast('Please select a valid image (JPEG, PNG)', 'error');
+      showToast(t('msg.invalidProfileImage'), 'error');
       return;
     }
     setUploadingPicture(true);
@@ -358,10 +453,10 @@ const ProcuringEntityDashboard = () => {
       });
       await refreshUser();
       fetchProfile();
-      showToast('Profile picture updated successfully', 'success');
+      showToast(t('msg.profilePictureUpdated'), 'success');
       if (profilePictureRef.current) profilePictureRef.current.value = '';
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Failed to upload profile picture', 'error');
+      showToast(error.response?.data?.message || t('msg.failedUploadProfilePicture'), 'error');
     } finally {
       setUploadingPicture(false);
     }
@@ -372,9 +467,9 @@ const ProcuringEntityDashboard = () => {
       await api.delete('/auth/profile-picture');
       await refreshUser();
       fetchProfile();
-      showToast('Profile picture removed', 'success');
+      showToast(t('msg.profilePictureRemoved'), 'success');
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Failed to remove profile picture', 'error');
+      showToast(error.response?.data?.message || t('msg.failedRemoveProfilePicture'), 'error');
     }
   };
 
@@ -554,13 +649,22 @@ const ProcuringEntityDashboard = () => {
 
   // Create questionnaire
   const handleCreateQuestionnaire = async () => {
-    if (!newQuestionnaire.title || !newQuestionnaire.deadline || !newQuestionnaire.cpvCodeId) {
-      showToast(t('msg.fillRequiredFields'), 'error');
+    const missing: string[] = [];
+    if (!newQuestionnaire.title?.trim()) missing.push(t('columns.title'));
+    if (!newQuestionnaire.cpvCodeId) missing.push(t('forms.selectCPVCode'));
+    if (!newQuestionnaire.deadline) missing.push(t('forms.deadlineDateOnly'));
+    if (missing.length > 0) {
+      showToast(t('msg.fillRequiredFieldsNamed', { fields: missing.join(', ') }), 'error');
       return;
     }
 
     if (newQuestionnaire.questions.length === 0) {
       showToast(t('msg.addAtLeastOneQuestion'), 'error');
+      return;
+    }
+
+    if (newQuestionnaire.questions.some((q) => !String(q.questionText || '').trim())) {
+      showToast(t('msg.questionTextRequired'), 'error');
       return;
     }
 
@@ -612,14 +716,23 @@ const ProcuringEntityDashboard = () => {
   // Update questionnaire
   const handleUpdateQuestionnaire = async () => {
     if (!editingQuestionnaire) return;
-    
-    if (!editingQuestionnaire.title || !editingQuestionnaire.deadline || !editingQuestionnaire.cpvCodeId) {
-      showToast(t('msg.fillRequiredFields'), 'error');
+
+    const missing: string[] = [];
+    if (!editingQuestionnaire.title?.trim()) missing.push(t('columns.title'));
+    if (!editingQuestionnaire.cpvCodeId) missing.push(t('forms.selectCPVCode'));
+    if (!editingQuestionnaire.deadline) missing.push(t('forms.deadlineDateOnly'));
+    if (missing.length > 0) {
+      showToast(t('msg.fillRequiredFieldsNamed', { fields: missing.join(', ') }), 'error');
       return;
     }
 
     if (editingQuestionnaire.questions.length === 0) {
       showToast(t('msg.addAtLeastOneQuestion'), 'error');
+      return;
+    }
+
+    if (editingQuestionnaire.questions.some((q) => !String(q.questionText || '').trim())) {
+      showToast(t('msg.questionTextRequired'), 'error');
       return;
     }
 
@@ -703,7 +816,7 @@ const ProcuringEntityDashboard = () => {
     }
   };
 
-  // Fetch questionnaire responses
+  // Fetch questionnaire responses (respect sealed-bid lock)
   const fetchQuestionnaireResponses = async (questionnaireId: string) => {
     try {
       setLoading(true);
@@ -711,19 +824,55 @@ const ProcuringEntityDashboard = () => {
       setQuestionnaireResponses(response.data.responses || []);
       setViewingResponses(questionnaires.find(q => q.id === questionnaireId) || null);
     } catch (error: any) {
-      showToast(error.response?.data?.message || t('msg.failedFetchResponses'), 'error');
+      if (error.response?.data?.sealed) {
+        const until = error.response.data.sealedUntil
+          ? new Date(error.response.data.sealedUntil).toLocaleString()
+          : '';
+        showToast(
+          t('procedures.sealedResponses', {
+            count: error.response.data.submittedCount ?? 0,
+            until: until || t('procedures.bidDeadline')
+          }),
+          'warning'
+        );
+        setQuestionnaireResponses([]);
+        setViewingResponses(null);
+      } else {
+        showToast(error.response?.data?.message || t('msg.failedFetchResponses'), 'error');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const filteredEntityQuestionnaires = useMemo(() => {
+    const q = filterValueAsString(questionnaireFilters, 'keyword').trim().toLowerCase();
+    const cpvCodeId = filterValueAsString(questionnaireFilters, 'cpvCodeId').trim();
+    const status = filterValueAsString(questionnaireFilters, 'status').trim();
+    return questionnaires.filter((item) => {
+      if (cpvCodeId && item.cpvCode?.id !== cpvCodeId && (item as { cpvCodeId?: string }).cpvCodeId !== cpvCodeId) {
+        return false;
+      }
+      if (status === 'active' && item.isActive === false) return false;
+      if (status === 'inactive' && item.isActive !== false) return false;
+      if (!q) return true;
+      return (
+        (item.title || '').toLowerCase().includes(q) ||
+        (item.description || '').toLowerCase().includes(q) ||
+        (item.cpvCode?.code || '').toLowerCase().includes(q) ||
+        (item.cpvCode?.description || '').toLowerCase().includes(q)
+      );
+    });
+  }, [questionnaires, questionnaireFilters]);
 
   const {
     page: questionnaireListPage,
     setPage: setQuestionnaireListPage,
     paginatedItems: paginatedEntityQuestionnaires,
     total: entityQuestionnaireTotal,
-    pageSize: entityQuestionnairePageSize
-  } = useListPagination(questionnaires);
+    pageSize: entityQuestionnairePageSize,
+    setPageSize: setEntityQuestionnairePageSize
+  } = useListPagination(filteredEntityQuestionnaires);
 
   const openQuestionnaireEditor = (questionnaire: Questionnaire) => {
     try {
@@ -766,7 +915,8 @@ const ProcuringEntityDashboard = () => {
         cpvCode: questionnaire.cpvCode || { id: '', code: '', description: '' },
         questions: questionsForEdit,
         createdAt: questionnaire.createdAt || new Date().toISOString(),
-        isActive: questionnaire.isActive !== undefined ? questionnaire.isActive : true
+        isActive: questionnaire.isActive !== undefined ? questionnaire.isActive : true,
+        editLocked: questionnaire.editLocked === true
       };
       setEditingQuestionnaire(qToEdit);
       cpvCatalog.fetchCodes('', qToEdit.cpvCodeId);
@@ -778,9 +928,12 @@ const ProcuringEntityDashboard = () => {
 
   const sidebarItems = [
     { id: 'home', label: t('entityPortal.navHome'), icon: LayoutDashboard },
+    { id: 'procedures', label: t('procedures.nav'), icon: Briefcase },
+    { id: 'contracts', label: t('contracts.nav'), icon: ScrollText },
     { id: 'questionnaires', label: t('nav.questionnaires'), icon: FileText },
     { id: 'suppliers', label: t('nav.searchSuppliers'), icon: Search },
     { id: 'profile', label: t('nav.profile'), icon: User },
+    { id: 'ai-preferences', label: t('common.aiPreferences'), icon: Sparkles },
   ];
 
   return (
@@ -795,6 +948,12 @@ const ProcuringEntityDashboard = () => {
         onProfileClick={() => setActiveTab('profile')}
         sidebarVariant="wide"
       >
+            <AccountStatusBanner
+              status={profile?.status}
+              rejectionReason={profile?.rejectionReason}
+              roleLabel={t('nav.procuringEntity')}
+            />
+
             {activeTab === 'home' && (
               <ProcuringEntityHomeTab
                 stats={dashboardStats}
@@ -802,6 +961,12 @@ const ProcuringEntityDashboard = () => {
                 onNavigate={setActiveTab}
               />
             )}
+
+            {activeTab === 'procedures' && (
+              <ProceduresPanel accountApproved={profile?.status === 'approved'} />
+            )}
+
+            {activeTab === 'contracts' && <ContractsPanel />}
 
             {/* Questionnaires Tab */}
             {activeTab === 'questionnaires' && (
@@ -813,7 +978,7 @@ const ProcuringEntityDashboard = () => {
                 )}
                 <div className="flex justify-between items-center">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{t('sections.questionnaireManagement')}</h2>
+                    <h2 className="text-base font-bold text-gray-900">{t('sections.questionnaireManagement')}</h2>
                     <p className="text-sm text-gray-500 mt-1">{t('dashboard.createAndManageQuestionnaires')}</p>
                   </div>
                   <button
@@ -828,46 +993,63 @@ const ProcuringEntityDashboard = () => {
                   </button>
                 </div>
 
+                {questionnaires.length > 0 ? (
+                  <DynamicFilterBar
+                    scope="buyer.questionnaires"
+                    fields={BUYER_QUESTIONNAIRE_FILTER_FIELDS}
+                    values={questionnaireFilters}
+                    onChange={setQuestionnaireFilters}
+                  />
+                ) : null}
+
                 {questionnaires.length === 0 ? (
                   <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
                     <FileText className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noQuestionnairesFound')}</p>
                     <p className="text-sm text-gray-500 mt-2">{t('sections.createFirstQuestionnaire')}</p>
                   </div>
+                ) : filteredEntityQuestionnaires.length === 0 ? (
+                  <div className="text-center py-10 rounded-xl border-2 border-dashed border-border text-sm text-muted">
+                    {t('common.noResults')}
+                  </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {paginatedEntityQuestionnaires.map((questionnaire) => (
                       <QuestionnaireSlimRow
                         key={questionnaire.id}
                         title={questionnaire.title}
                         description={questionnaire.description}
+                        badges={
+                          <StatusBadge tone={questionnaire.isActive !== false ? 'green' : 'gray'}>
+                            {questionnaire.isActive !== false ? t('nav.active') : t('common.inactive')}
+                          </StatusBadge>
+                        }
                         meta={
                           <>
-                            <span className="inline-flex items-center gap-1">
-                              <Building2 size={14} />
-                              {questionnaire.cpvCode?.code} - {questionnaire.cpvCode?.description}
+                            <span className="inline-flex items-center gap-1.5 min-w-0">
+                              <Building2 size={14} className="shrink-0" />
+                              <span className="truncate">
+                                {questionnaire.cpvCode?.code} - {questionnaire.cpvCode?.description}
+                              </span>
                             </span>
-                            <span className="inline-flex items-center gap-1">
-                              <Calendar size={14} />
+                            <span className="inline-flex items-center gap-1.5">
+                              <Calendar size={14} className="shrink-0" />
                               {t('columns.deadline')}: {new Date(questionnaire.deadline).toLocaleDateString()}
                             </span>
-                            <span className="inline-flex items-center gap-1">
-                              <FileText size={14} />
+                            <span className="inline-flex items-center gap-1.5">
+                              <FileText size={14} className="shrink-0" />
                               {questionnaire.questions?.length || 0} {t('sections.questionsCount')}
                             </span>
-                            {questionnaire.responses && questionnaire.responses.length > 0 && (
-                              <span className="inline-flex items-center gap-1">
-                                <CheckCircle size={14} />
+                            {questionnaire.responses && questionnaire.responses.length > 0 ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <CheckCircle size={14} className="shrink-0" />
                                 {questionnaire.responses.length} {t('entityPortal.responsesLabel')}
                               </span>
-                            )}
+                            ) : null}
                           </>
                         }
                         trailing={
                           <>
-                            <StatusBadge tone={questionnaire.isActive !== false ? 'green' : 'gray'}>
-                              {questionnaire.isActive !== false ? t('nav.active') : t('common.inactive')}
-                            </StatusBadge>
                             <RowActionButton
                               variant="secondary"
                               onClick={() => setSelectedQuestionnaire(questionnaire)}
@@ -882,7 +1064,7 @@ const ProcuringEntityDashboard = () => {
                               <Edit2 size={14} />
                               {t('buttons.editQuestionnaire')}
                             </RowActionButton>
-                            {questionnaire.responses && questionnaire.responses.length > 0 && (
+                            {questionnaire.responses && questionnaire.responses.length > 0 ? (
                               <RowActionButton
                                 variant="muted"
                                 onClick={() => fetchQuestionnaireResponses(questionnaire.id)}
@@ -890,7 +1072,7 @@ const ProcuringEntityDashboard = () => {
                                 <Users size={14} />
                                 {t('buttons.viewResponses')} ({questionnaire.responses.length})
                               </RowActionButton>
-                            )}
+                            ) : null}
                             <RowActionButton
                               variant="muted"
                               onClick={() => handleToggleQuestionnaireStatus(questionnaire.id, questionnaire.isActive ?? false)}
@@ -898,7 +1080,7 @@ const ProcuringEntityDashboard = () => {
                               {questionnaire.isActive ? <PowerOff size={14} /> : <Power size={14} />}
                               {questionnaire.isActive ? t('buttons.deactivate') : t('buttons.activate')}
                             </RowActionButton>
-                            {(!questionnaire.responses || questionnaire.responses.length === 0 || questionnaire.responses.every((r: any) => r.status === 'draft')) && (
+                            {(!questionnaire.responses || questionnaire.responses.length === 0 || questionnaire.responses.every((r: any) => r.status === 'draft')) ? (
                               <RowActionButton
                                 variant="danger"
                                 onClick={() => handleDeleteQuestionnaire(questionnaire.id)}
@@ -906,7 +1088,7 @@ const ProcuringEntityDashboard = () => {
                                 <Trash2 size={14} />
                                 {t('common.delete')}
                               </RowActionButton>
-                            )}
+                            ) : null}
                           </>
                         }
                       />
@@ -916,6 +1098,7 @@ const ProcuringEntityDashboard = () => {
                       pageSize={entityQuestionnairePageSize}
                       total={entityQuestionnaireTotal}
                       onPageChange={setQuestionnaireListPage}
+                      onPageSizeChange={setEntityQuestionnairePageSize}
                       itemLabel={t('nav.questionnaires').toLowerCase()}
                     />
                   </div>
@@ -923,6 +1106,12 @@ const ProcuringEntityDashboard = () => {
               </div>
               <ProcuringEntityQuestionnaireAiAssist.Drawer />
               </ProcuringEntityQuestionnaireAiAssist.Root>
+            )}
+
+            {activeTab === 'ai-preferences' && (
+              <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 p-4 sm:p-6">
+                <AiPreferencesPanel />
+              </div>
             )}
 
             {/* Profile Tab */}
@@ -942,15 +1131,15 @@ const ProcuringEntityDashboard = () => {
                     <div className="flex-1 min-w-0 space-y-6">
                       <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl border border-gray-200/50 flex flex-col max-h-[calc(100vh-var(--portal-header-height)-5.5rem)] lg:max-h-[calc(100vh-var(--portal-header-height)-4rem)] min-h-[280px]">
                         <div className="shrink-0 px-3 sm:px-4 pt-3 pb-2 border-b border-gray-200 bg-white/95 backdrop-blur-sm rounded-t-2xl z-10">
-                          <h3 className="text-lg font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
+                          <h3 className="text-base font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                               <div className="relative group shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-gray-200">
                                 <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
                                   {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
                                     <img
-                                      src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
-                                      alt="Profile"
+                                      src={uploadsUrl(profile?.user?.profilePicture ?? user?.profilePicture) || undefined}
+                                      alt={t('common.profilePhotoAlt')}
                                       className="w-full h-full object-cover"
                                     />
                                   ) : (
@@ -1067,7 +1256,7 @@ const ProcuringEntityDashboard = () => {
                                           />
                                         ) : (
                                           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                            {profileData.firstName || 'N/A'}
+                                            {profileData.firstName || t('common.na')}
                                           </div>
                                         )}
                                       </div>
@@ -1082,14 +1271,14 @@ const ProcuringEntityDashboard = () => {
                                           />
                                         ) : (
                                           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                            {profileData.lastName || 'N/A'}
+                                            {profileData.lastName || t('common.na')}
                                           </div>
                                         )}
                                       </div>
                                       <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.email')}</label>
                                         <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                          {profileData.email || 'N/A'}
+                                          {profileData.email || t('common.na')}
                                         </div>
                                       </div>
                                       <div>
@@ -1103,7 +1292,7 @@ const ProcuringEntityDashboard = () => {
                                           />
                                         ) : (
                                           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                            {profileData.phone || 'N/A'}
+                                            {profileData.phone || t('common.na')}
                                           </div>
                                         )}
                                       </div>
@@ -1123,7 +1312,7 @@ const ProcuringEntityDashboard = () => {
                                           />
                                         ) : (
                                           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                            {profileData.entityName || 'N/A'}
+                                            {profileData.entityName || t('common.na')}
                                           </div>
                                         )}
                                       </div>
@@ -1138,7 +1327,7 @@ const ProcuringEntityDashboard = () => {
                                           />
                                         ) : (
                                           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                            {profileData.address || 'N/A'}
+                                            {profileData.address || t('common.na')}
                                           </div>
                                         )}
                                       </div>
@@ -1153,7 +1342,7 @@ const ProcuringEntityDashboard = () => {
                                           />
                                         ) : (
                                           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                            {profileData.city || 'N/A'}
+                                            {profileData.city || t('common.na')}
                                           </div>
                                         )}
                                       </div>
@@ -1168,7 +1357,7 @@ const ProcuringEntityDashboard = () => {
                                           />
                                         ) : (
                                           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                            {profileData.country || 'N/A'}
+                                            {profileData.country || t('common.na')}
                                           </div>
                                         )}
                                       </div>
@@ -1216,7 +1405,7 @@ const ProcuringEntityDashboard = () => {
                                               </div>
                                               <div className="flex items-center gap-1 flex-shrink-0">
                                                 <a
-                                                  href={`${UPLOADS_BASE}/${doc.filePath.replace(/^.*[\\\/]/, '')}`}
+                                                  href={uploadsUrl(doc.filePath.replace(/^.*[\\\/]/, '')) || '#'}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
                                                   className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-all duration-200"
@@ -1260,43 +1449,80 @@ const ProcuringEntityDashboard = () => {
             {activeTab === 'suppliers' && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{t('sections.searchSuppliers')}</h2>
-                  <p className="text-sm text-gray-500 mt-1">{t('sections.searchSuppliersSubtitle')}</p>
+                  <h2 className="text-base font-bold text-gray-900">{t('sections.searchSuppliers')}</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {activeSupplierScope === 'mine'
+                      ? t('sections.mySuppliersSubtitle')
+                      : t('sections.discoverSuppliersSubtitle')}
+                  </p>
+                </div>
+                <div
+                  className="flex gap-1 overflow-x-auto overscroll-x-contain scrollbar-thin pb-0.5"
+                  role="tablist"
+                  aria-label={t('sections.searchSuppliers')}
+                >
+                  {canDiscoverSuppliers ? (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSupplierScope === 'discover'}
+                      onClick={() => setSupplierScope('discover')}
+                      className={`inline-flex items-center gap-1.5 shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors border ${
+                        activeSupplierScope === 'discover'
+                          ? 'bg-primary-50 text-primary-800 border-primary-200 shadow-sm'
+                          : 'bg-white text-gray-600 border-transparent hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <Search size={15} className="shrink-0" aria-hidden />
+                      <span>{t('sections.discoverSuppliers')}</span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeSupplierScope === 'mine'}
+                    onClick={() => setSupplierScope('mine')}
+                    className={`inline-flex items-center gap-1.5 shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors border ${
+                      activeSupplierScope === 'mine'
+                        ? 'bg-primary-50 text-primary-800 border-primary-200 shadow-sm'
+                        : 'bg-white text-gray-600 border-transparent hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    <Users size={15} className="shrink-0" aria-hidden />
+                    <span>{t('sections.mySuppliers')}</span>
+                  </button>
                 </div>
                 <div className="flex flex-wrap gap-4 items-end">
-                  <div className="relative flex-1 min-w-[200px] max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                      type="text"
+                  <div className="flex-1 min-w-[200px] max-w-md">
+                    <SearchField
                       value={supplierSearch}
                       onChange={(e) => setSupplierSearch(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && fetchSuppliers(1)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setAppliedSupplierSearch(supplierSearch.trim());
+                        }
+                      }}
                       placeholder={t('placeholders.searchByNameEmailCompany')}
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   </div>
                   <div className="w-full sm:w-72 min-w-0">
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('sections.filterByTurnover')}</label>
                     <div className="flex items-center gap-2">
-                      <div className="relative flex-1 min-w-0">
-                        <select
-                          value={supplierTurnoverFilter}
-                          onChange={(e) => { setSupplierTurnoverFilter(e.target.value); fetchSuppliers(1); }}
-                          className="w-full pl-4 pr-10 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white appearance-none cursor-pointer text-gray-900 hover:border-primary-400"
-                          style={{ minHeight: '42px' }}
-                        >
-                          {TURNOVER_SEARCH_OPTIONS.map((opt) => (
-                            <option key={opt.value || 'all'} value={opt.value}>
-                              {t(opt.labelKey)}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" aria-hidden />
-                      </div>
+                      <BrandSelect
+                        wrapperClassName="flex-1 min-w-0"
+                        value={supplierTurnoverFilter}
+                        onChange={(e) => setSupplierTurnoverFilter(e.target.value)}
+                      >
+                        {TURNOVER_SEARCH_OPTIONS.map((opt) => (
+                          <option key={opt.value || 'all'} value={opt.value}>
+                            {t(opt.labelKey)}
+                          </option>
+                        ))}
+                      </BrandSelect>
                       {supplierTurnoverFilter && (
                         <button
                           type="button"
-                          onClick={() => { setSupplierTurnoverFilter(''); fetchSuppliers(1); }}
+                          onClick={() => setSupplierTurnoverFilter('')}
                           className="text-sm text-gray-500 hover:text-primary-600 whitespace-nowrap"
                         >
                           {t('buttons.clear')}
@@ -1311,8 +1537,8 @@ const ProcuringEntityDashboard = () => {
                         <CpvSearchSelect
                           cpvCodes={cpvCatalog.cpvCodes}
                           value={supplierCpvFilter}
-                          onChange={(id) => { setSupplierCpvFilter(id); fetchSuppliers(1); }}
-                          onSearch={(term) => cpvCatalog.searchDebounced(term, supplierCpvFilter)}
+                          onChange={(id) => setSupplierCpvFilter(id)}
+                          onSearch={handleSupplierCpvSearch}
                           loading={cpvCatalog.loading}
                           placeholder={t('placeholders.allCPVCodes')}
                         />
@@ -1320,7 +1546,7 @@ const ProcuringEntityDashboard = () => {
                       {supplierCpvFilter && (
                         <button
                           type="button"
-                          onClick={() => { setSupplierCpvFilter(''); fetchSuppliers(1); }}
+                          onClick={() => setSupplierCpvFilter('')}
                           className="text-sm text-gray-500 hover:text-primary-600 whitespace-nowrap"
                         >
                           {t('buttons.clear')}
@@ -1332,17 +1558,19 @@ const ProcuringEntityDashboard = () => {
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('sections.filterByNUTS')}</label>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
-                        <NUTSSearchSelect
-                          nutsCodes={nutsCodesForSearch || []}
+                        <NutsSearchSelect
+                          nutsCodes={nutsCatalog.nutsCodes}
                           value={supplierNutsFilter}
-                          onChange={(id) => { setSupplierNutsFilter(id); fetchSuppliers(1); }}
+                          loading={nutsCatalog.loading}
+                          onSearch={(term) => nutsCatalog.searchDebounced(term, supplierNutsFilter)}
+                          onChange={(id) => setSupplierNutsFilter(id)}
                           placeholder={t('placeholders.allNUTSCodes')}
                         />
                       </div>
                       {supplierNutsFilter && (
                         <button
                           type="button"
-                          onClick={() => { setSupplierNutsFilter(''); fetchSuppliers(1); }}
+                          onClick={() => setSupplierNutsFilter('')}
                           className="text-sm text-gray-500 hover:text-primary-600 whitespace-nowrap"
                         >
                           {t('buttons.clear')}
@@ -1351,7 +1579,8 @@ const ProcuringEntityDashboard = () => {
                     </div>
                   </div>
                   <button
-                    onClick={() => fetchSuppliers(1)}
+                    type="button"
+                    onClick={() => setAppliedSupplierSearch(supplierSearch.trim())}
                     className="btn-save px-5 py-2.5 font-medium rounded-xl transition-colors shrink-0"
                   >
                     {t('buttons.search')}
@@ -1366,73 +1595,100 @@ const ProcuringEntityDashboard = () => {
                   <div className="text-center py-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
                     <Users className="text-gray-400 mx-auto mb-4" size={48} />
                     <p className="text-lg font-semibold text-gray-700">{t('sections.noSuppliersFoundSearch')}</p>
-                    <p className="text-sm text-gray-500 mt-2">{t('sections.suppliersWillAppear')}</p>
+                    <p className="text-sm text-gray-500 mt-2">
+                      {activeSupplierScope === 'mine'
+                        ? t('sections.mySuppliersWillAppear')
+                        : t('sections.discoverSuppliersWillAppear')}
+                    </p>
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                       {suppliers.map((supplier) => (
                         <button
                           key={supplier.id}
                           type="button"
                           onClick={() => setSelectedSupplierId(supplier.id)}
-                          className="text-left bg-white rounded-xl border border-gray-200 p-5 hover:border-primary-400 hover:shadow-lg transition-all duration-200"
+                          className="text-left bg-white rounded-lg border border-border p-2.5 hover:border-primary-400 hover:shadow-sm transition-all duration-150"
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start justify-between gap-1.5">
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-bold text-gray-900 truncate">{supplier.companyName}</h3>
-                              <p className="text-sm text-gray-600 mt-0.5">
-                                {supplier.user?.firstName} {supplier.user?.lastName}
+                              <h3 className="text-sm font-semibold text-foreground truncate leading-snug">{supplier.companyName}</h3>
+                              <p className="text-xs text-muted truncate">
+                                {[supplier.user?.firstName, supplier.user?.lastName].filter(Boolean).join(' ')}
+                                {supplier.user?.email ? ` · ${supplier.user.email}` : ''}
                               </p>
-                              <p className="text-sm text-gray-500 truncate">{supplier.user?.email}</p>
                               {supplier.city || supplier.country ? (
-                                <p className="text-xs text-gray-400 mt-1">{[supplier.city, supplier.country].filter(Boolean).join(', ')}</p>
+                                <p className="text-xs text-muted/80 truncate">{[supplier.city, supplier.country].filter(Boolean).join(', ')}</p>
                               ) : null}
                             </div>
-                            <span className="flex-shrink-0 px-2.5 py-1 bg-primary-100 text-primary-700 text-xs font-semibold rounded-full">
-                              {supplier.submittedQuestionnaireCount || 0} submitted
-                            </span>
+                            {activeSupplierScope === 'mine' && (supplier.submittedQuestionnaireCount || 0) > 0 ? (
+                              <StatusBadge tone="blue">
+                                {supplier.submittedQuestionnaireCount} {t('common.submitted')}
+                              </StatusBadge>
+                            ) : null}
                           </div>
-                          {supplier.submittedQuestionnaires?.length > 0 && (
-                            <div className="mt-3 pt-3 border-t border-gray-100">
-                              <p className="text-xs text-gray-500 font-medium mb-1.5">{t('sections.submittedForCPV')}</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {supplier.submittedQuestionnaires.map((q: any, idx: number) => (
-                                  <span
-                                    key={idx}
-                                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-primary-50 text-primary-800 text-xs font-medium"
-                                    title={q.description || q.code}
-                                  >
-                                    {q.code}
-                                  </span>
-                                ))}
-                              </div>
+                          {activeSupplierScope === 'mine' && supplier.relation ? (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {supplier.relation.applied ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 text-primary-800 text-xs font-medium">
+                                  {t('sections.supplierRelationApplied')}
+                                </span>
+                              ) : null}
+                              {supplier.relation.invited ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-xs font-medium">
+                                  {t('sections.supplierRelationInvited')}
+                                </span>
+                              ) : null}
+                              {supplier.relation.contracted ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 text-xs font-medium">
+                                  {t('sections.supplierRelationContracted')}
+                                </span>
+                              ) : null}
                             </div>
-                          )}
+                          ) : null}
+                          {(() => {
+                            const turnoverLabel = formatSupplierTurnoverLabel(supplier.turnover, t);
+                            const nutsLabel = (supplier.nutsCodes || [])
+                              .slice(0, 2)
+                              .map((n: any) => n.nameSwedish || n.name || n.code)
+                              .filter(Boolean)
+                              .join(', ');
+                            const nutsExtra = (supplier.nutsCodes?.length || 0) > 2
+                              ? ` +${supplier.nutsCodes.length - 2}`
+                              : '';
+                            const metaBits = [
+                              turnoverLabel
+                                ? `${t('forms.turnover')}: ${turnoverLabel}`
+                                : null,
+                              supplier.employeeCount
+                                ? `${t('forms.employeeCount')}: ${supplier.employeeCount}`
+                                : null,
+                              supplier.registrationNumber
+                                ? `${t('columns.registrationNumber')}: ${supplier.registrationNumber}`
+                                : null,
+                              nutsLabel ? `${nutsLabel}${nutsExtra}` : null
+                            ].filter(Boolean);
+                            if (!metaBits.length) return null;
+                            return (
+                              <div className="mt-1.5 pt-1.5 border-t border-border/60">
+                                <p className="text-xs text-muted leading-snug line-clamp-2">
+                                  {metaBits.join(' · ')}
+                                </p>
+                              </div>
+                            );
+                          })()}
                         </button>
                       ))}
                     </div>
-                    {suppliersPagination.totalPages > 1 && (
-                      <div className="flex justify-center gap-2 pt-4">
-                        <button
-                          disabled={suppliersPagination.page <= 1}
-                          onClick={() => fetchSuppliers(suppliersPagination.page - 1)}
-                          className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                          Previous
-                        </button>
-                        <span className="px-4 py-2 text-gray-600">
-                          Page {suppliersPagination.page} of {suppliersPagination.totalPages}
-                        </span>
-                        <button
-                          disabled={suppliersPagination.page >= suppliersPagination.totalPages}
-                          onClick={() => fetchSuppliers(suppliersPagination.page + 1)}
-                          className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    )}
+                    <ListPagination
+                      page={supplierPager.page}
+                      pageSize={supplierPager.pageSize}
+                      total={supplierPager.total}
+                      onPageChange={supplierPager.setPage}
+                      onPageSizeChange={supplierPager.setPageSize}
+                      itemLabel={t('nav.suppliers').toLowerCase()}
+                    />
                   </>
                 )}
               </div>
@@ -1446,7 +1702,7 @@ const ProcuringEntityDashboard = () => {
           setQuestionnaire={setNewQuestionnaire}
           cpvCodes={cpvCatalog.cpvCodes}
           cpvLoading={cpvCatalog.loading}
-          onCpvSearch={(term: string) => cpvCatalog.searchDebounced(term, newQuestionnaire.cpvCodeId)}
+          onCpvSearch={handleNewQuestionnaireCpvSearch}
           updateQuestionAttachment={updateQuestionAttachment}
           onClose={() => {
             setShowCreateQuestionnaire(false);
@@ -1481,10 +1737,11 @@ const ProcuringEntityDashboard = () => {
       {editingQuestionnaire && (
         <EditQuestionnaireModal
           questionnaire={editingQuestionnaire}
+          editLocked={editingQuestionnaire.editLocked === true}
           setQuestionnaire={setEditingQuestionnaire}
           cpvCodes={cpvCatalog.cpvCodes}
           cpvLoading={cpvCatalog.loading}
-          onCpvSearch={(term: string) => cpvCatalog.searchDebounced(term, editingQuestionnaire.cpvCodeId)}
+          onCpvSearch={handleEditQuestionnaireCpvSearch}
           updateQuestionAttachment={updateQuestionAttachmentInEdit}
           onClose={() => {
             setEditingQuestionnaire(null);
@@ -1518,7 +1775,6 @@ const ProcuringEntityDashboard = () => {
         <SupplierDetailModal
           supplierId={selectedSupplierId}
           supplier={selectedSupplierDetail?.supplier}
-          responses={selectedSupplierDetail?.responses}
           loading={supplierDetailLoading}
           onClose={() => {
             setSelectedSupplierId(null);
@@ -1534,13 +1790,14 @@ const ProcuringEntityDashboard = () => {
 const DateOnlyPicker = ({
   value,
   onChange,
-  placeholder = 'Select date'
+  placeholder
 }: {
   value: string;
   onChange: (dateStr: string) => void;
   placeholder?: string;
 }) => {
   const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder || t('common.selectDate');
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentMonth, setCurrentMonth] = useState(() =>
@@ -1553,7 +1810,10 @@ const DateOnlyPicker = ({
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if ((e.target as HTMLElement)?.closest?.('[data-portaled-dropdown="true"]')) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -1573,7 +1833,7 @@ const DateOnlyPicker = ({
     }));
   }
 
-  const displayLabel = value ? format(new Date(value + 'T12:00:00'), 'EEEE, d MMM yyyy') : placeholder;
+  const displayLabel = value ? format(new Date(value + 'T12:00:00'), 'EEEE, d MMM yyyy') : resolvedPlaceholder;
 
   return (
     <div className="relative" ref={containerRef}>
@@ -1586,71 +1846,73 @@ const DateOnlyPicker = ({
         <span className={value ? 'text-gray-900 font-medium' : 'text-gray-500'}>{displayLabel}</span>
         <ChevronDown className={`w-5 h-5 text-gray-400 ml-auto flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
-        <div className="absolute z-20 mt-2 left-0 right-0 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden p-4 min-w-[320px]">
-          <div className="flex items-center justify-between mb-4">
-            <button
-              type="button"
-              onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-              aria-label="Previous month"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <span className="text-base font-semibold text-gray-900">
-              {format(currentMonth, 'MMMM yyyy')}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-              aria-label="Next month"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-          <table className="w-full text-center">
-            <thead>
-              <tr className="text-gray-500 text-xs font-medium uppercase">
-                {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map((d) => (
-                  <th key={d} className="py-2">{t(`weekdays.${d}`)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((week, wi) => (
-                <tr key={wi}>
-                  {week.map((d) => {
-                    const sameMonth = isSameMonth(d, currentMonth);
-                    const selected = value && isSameDay(d, new Date(value + 'T12:00:00'));
-                    const today = isToday(d);
-                    return (
-                      <td key={d.toISOString()} className="p-0.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onChange(format(d, 'yyyy-MM-dd'));
-                            setOpen(false);
-                          }}
-                          className={`w-10 h-10 rounded-xl text-sm font-medium transition-colors ${
-                            !sameMonth ? 'text-gray-300' : selected
-                              ? 'bg-primary-600 text-white hover:bg-primary-700'
-                              : today
-                                ? 'bg-primary-100 text-primary-800 hover:bg-primary-200'
-                                : 'text-gray-700 hover:bg-gray-100'
-                          }`}
-                        >
-                          {format(d, 'd')}
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <PortaledDropdown
+        open={open}
+        anchorRef={containerRef}
+        className="rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden p-4 min-w-[280px]"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <button
+            type="button"
+            onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            aria-label={t('datePicker.previousMonth')}
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <span className="text-base font-semibold text-gray-900">
+            {format(currentMonth, 'MMMM yyyy')}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            aria-label={t('datePicker.nextMonth')}
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
-      )}
+        <table className="w-full text-center">
+          <thead>
+            <tr className="text-gray-500 text-xs font-medium uppercase">
+              {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map((d) => (
+                <th key={d} className="py-2">{t(`weekdays.${d}`)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((week, wi) => (
+              <tr key={wi}>
+                {week.map((d) => {
+                  const sameMonth = isSameMonth(d, currentMonth);
+                  const selected = value && isSameDay(d, new Date(value + 'T12:00:00'));
+                  const today = isToday(d);
+                  return (
+                    <td key={d.toISOString()} className="p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onChange(format(d, 'yyyy-MM-dd'));
+                          setOpen(false);
+                        }}
+                        className={`w-10 h-10 rounded-xl text-sm font-medium transition-colors ${
+                          !sameMonth ? 'text-gray-300' : selected
+                            ? 'bg-primary-600 text-white hover:bg-primary-700'
+                            : today
+                              ? 'bg-primary-100 text-primary-800 hover:bg-primary-200'
+                              : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        {format(d, 'd')}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PortaledDropdown>
     </div>
   );
 };
@@ -1683,7 +1945,10 @@ const QuestionTypeSelect = ({
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if ((e.target as HTMLElement)?.closest?.('[data-portaled-dropdown="true"]')) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -1699,123 +1964,29 @@ const QuestionTypeSelect = ({
         <span className="text-gray-900 font-medium">{t(`questionTypes.${selected.value}`)}</span>
         <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
-        <div className="absolute z-20 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden py-1 max-h-64 overflow-y-auto">
-          {QUESTION_TYPE_OPTIONS.map((type) => (
-            <button
-              key={type.value}
-              type="button"
-              onClick={() => {
-                onChange(type.value);
-                setOpen(false);
-              }}
-              className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
-                value === type.value
-                  ? 'bg-primary-50 text-primary-800 font-medium'
-                  : 'text-gray-700 hover:bg-primary-50/60'
-              }`}
-            >
-              {t(`questionTypes.${type.value}`)}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Searchable NUTS Code selector - themed list with search (same style as CpvSearchSelect)
-const NUTSSearchSelect = ({
-  nutsCodes = [],
-  value,
-  onChange,
-  placeholder = 'Select NUTS Code'
-}: {
-  nutsCodes?: NUTSCode[];
-  value: string;
-  onChange: (nutsCodeId: string) => void;
-  placeholder?: string;
-}) => {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const list = Array.isArray(nutsCodes) ? nutsCodes : [];
-  const selected = list.find((n) => n && n.id === value);
-  const searchLower = (search || '').toLowerCase();
-  const filtered = list.filter(
-    (n) =>
-      n &&
-      (!searchLower ||
-        (n.code && n.code.toLowerCase().includes(searchLower)) ||
-        (n.name && n.name.toLowerCase().includes(searchLower)) ||
-        (n.nameSwedish && n.nameSwedish.toLowerCase().includes(searchLower)))
-  );
-  useEffect(() => {
-    if (!open) return;
-    const handleClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-  return (
-    <div className="relative" ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full px-4 py-3 flex items-center justify-between gap-2 rounded-xl border border-gray-300 bg-white hover:border-primary-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 text-left"
+      <PortaledDropdown
+        open={open}
+        anchorRef={containerRef}
+        className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden py-1 max-h-64 overflow-y-auto"
       >
-        <span className={selected ? 'text-gray-900' : 'text-gray-500'}>
-          {selected ? `${selected.code || ''} – ${selected.nameSwedish || selected.name || ''}` : placeholder}
-        </span>
-        <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute z-20 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
-            <div className="p-2 border-b border-gray-100 bg-gray-50/80">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t('placeholders.searchByCodeOrDescription')}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-            </div>
-            <div className="max-h-56 overflow-y-auto py-1">
-              {list.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-amber-700 bg-amber-50 rounded">No NUTS codes loaded. Ensure the database is seeded and check the browser console for errors.</p>
-              ) : filtered.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-gray-500">{t('sections.noNUTSCodesMatch')}</p>
-              ) : (
-                filtered.map((nuts) => (
-                  <button
-                    key={nuts.id}
-                    type="button"
-                    onClick={() => {
-                      onChange(nuts.id);
-                      setOpen(false);
-                      setSearch('');
-                    }}
-                    className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
-                      value === nuts.id
-                        ? 'bg-primary-50 text-primary-800 font-medium'
-                        : 'text-gray-700 hover:bg-primary-50/60'
-                    }`}
-                  >
-                    <span className="font-medium text-gray-900">{nuts.code || ''}</span>
-                    <span className="text-gray-600"> – {nuts.nameSwedish || nuts.name || ''}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-      )}
+        {QUESTION_TYPE_OPTIONS.map((type) => (
+          <button
+            key={type.value}
+            type="button"
+            onClick={() => {
+              onChange(type.value);
+              setOpen(false);
+            }}
+            className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
+              value === type.value
+                ? 'bg-primary-50 text-primary-800 font-medium'
+                : 'text-gray-700 hover:bg-primary-50/60'
+            }`}
+          >
+            {t(`questionTypes.${type.value}`)}
+          </button>
+        ))}
+      </PortaledDropdown>
     </div>
   );
 };
@@ -1851,7 +2022,7 @@ const CreateQuestionnaireModal = ({
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('actions.createQuestionnaire')}</h3>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('actions.createQuestionnaire')}</h3>
               <p className="text-sm text-gray-500 mt-1">{t('sections.createQuestionnaireSubtitle')}</p>
             </div>
             <button
@@ -1866,7 +2037,7 @@ const CreateQuestionnaireModal = ({
         <div className="p-6 space-y-6">
           {/* Basic Information */}
           <div className="space-y-4">
-            <h4 className="text-lg font-bold text-gray-900">{t('sections.basicInformation')}</h4>
+            <h4 className="text-base font-bold text-gray-900">{t('sections.basicInformation')}</h4>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('columns.title')} <span className="text-red-500">*</span>
@@ -1898,7 +2069,7 @@ const CreateQuestionnaireModal = ({
                   cpvCodes={cpvCodes}
                   value={questionnaire.cpvCodeId || ''}
                   onChange={(cpvCodeId) => setQuestionnaire({ ...questionnaire, cpvCodeId })}
-                  onSearch={onCpvSearch || (() => {})}
+                  onSearch={onCpvSearch}
                   loading={cpvLoading}
                   placeholder={t('forms.selectCPVCode')}
                 />
@@ -1919,7 +2090,7 @@ const CreateQuestionnaireModal = ({
           {/* Questions */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h4 className="text-lg font-bold text-gray-900">{t('sections.questionsSection')}</h4>
+              <h4 className="text-base font-bold text-gray-900">{t('sections.questionsSection')}</h4>
               <button
                 onClick={addQuestion}
                 className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm"
@@ -1944,7 +2115,7 @@ const CreateQuestionnaireModal = ({
                           {t('sections.questionNumber', { n: index + 1 })}
                         </span>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span>Sort no.</span>
+                          <span>{t('sections.sortNo')}</span>
                           <input
                             type="number"
                             min={1}
@@ -2023,7 +2194,7 @@ const CreateQuestionnaireModal = ({
                               <FileText size={18} />
                               <span className="text-sm font-medium truncate">{question.attachedDocument.fileName}</span>
                               <a
-                                href={`${UPLOADS_BASE}/${question.attachedDocument.filePath.replace(/^.*[\\/]/, '')}`}
+                                href={uploadsUrl(question.attachedDocument.filePath.replace(/^.*[\\/]/, '')) || '#'}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-primary-600 hover:underline text-sm"
@@ -2153,7 +2324,7 @@ const ViewQuestionnaireModal = ({ questionnaire, onClose }: { questionnaire: Que
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{questionnaire.title}</h3>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{questionnaire.title}</h3>
               <p className="text-sm text-gray-500 mt-1">{questionnaire.cpvCode?.code} - {questionnaire.cpvCode?.description}</p>
             </div>
             <button
@@ -2178,7 +2349,7 @@ const ViewQuestionnaireModal = ({ questionnaire, onClose }: { questionnaire: Que
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900 mb-2">{question.questionText}</p>
                     <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">{question.questionType}</span>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">{t(`questionTypes.${question.questionType}`, { defaultValue: question.questionType })}</span>
                       {question.isRequired && <span className="px-2 py-1 bg-red-100 text-red-700 rounded">{t('forms.required')}</span>}
                       {question.requiresDocument && <span className="px-2 py-1 bg-green-100 text-green-700 rounded">{t('forms.requiresDocument')}</span>}
                     </div>
@@ -2206,6 +2377,7 @@ const ViewQuestionnaireModal = ({ questionnaire, onClose }: { questionnaire: Que
 // Edit Questionnaire Modal Component
 const EditQuestionnaireModal = ({
   questionnaire,
+  editLocked = false,
   setQuestionnaire,
   cpvCodes,
   cpvLoading = false,
@@ -2278,7 +2450,7 @@ const EditQuestionnaireModal = ({
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('actions.updateQuestionnaire')}</h3>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('actions.updateQuestionnaire')}</h3>
               <p className="text-sm text-gray-500 mt-1">{t('sections.editQuestionnaireSubtitle')}</p>
             </div>
             <button
@@ -2291,9 +2463,14 @@ const EditQuestionnaireModal = ({
         </div>
 
         <div className="p-6 space-y-6">
+          {editLocked ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {t('entityPortal.questionnaireEditLocked')}
+            </div>
+          ) : null}
           {/* Basic Information */}
           <div className="space-y-4">
-            <h4 className="text-lg font-bold text-gray-900">{t('sections.basicInformation')}</h4>
+            <h4 className="text-base font-bold text-gray-900">{t('sections.basicInformation')}</h4>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('columns.title')} <span className="text-red-500">*</span>
@@ -2301,8 +2478,9 @@ const EditQuestionnaireModal = ({
               <input
                 type="text"
                 value={safeQuestionnaire.title}
+                disabled={editLocked}
                 onChange={(e) => setQuestionnaire({ ...safeQuestionnaire, title: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder={t('placeholders.enterQuestionnaireTitle')}
               />
             </div>
@@ -2325,7 +2503,7 @@ const EditQuestionnaireModal = ({
                   cpvCodes={cpvCodes}
                   value={safeQuestionnaire.cpvCodeId}
                   onChange={(cpvCodeId) => setQuestionnaire({ ...safeQuestionnaire, cpvCodeId })}
-                  onSearch={onCpvSearch || (() => {})}
+                  onSearch={onCpvSearch}
                   loading={cpvLoading}
                   placeholder={t('forms.selectCPVCode')}
                 />
@@ -2346,7 +2524,7 @@ const EditQuestionnaireModal = ({
           {/* Questions */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h4 className="text-lg font-bold text-gray-900">{t('sections.questionsSection')}</h4>
+              <h4 className="text-base font-bold text-gray-900">{t('sections.questionsSection')}</h4>
               <button
                 onClick={safeAddQuestion}
                 className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm"
@@ -2371,7 +2549,7 @@ const EditQuestionnaireModal = ({
                           {t('sections.questionNumber', { n: index + 1 })}
                         </span>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span>Sort no.</span>
+                          <span>{t('sections.sortNo')}</span>
                           <input
                             type="number"
                             min={1}
@@ -2453,7 +2631,7 @@ const EditQuestionnaireModal = ({
                               </span>
                               {question.attachedDocument?.filePath && (
                                 <a
-                                  href={`${UPLOADS_BASE}/${question.attachedDocument.filePath.replace(/^.*[\\/]/, '')}`}
+                                  href={uploadsUrl(question.attachedDocument.filePath.replace(/^.*[\\/]/, '')) || '#'}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-primary-600 hover:underline text-sm"
@@ -2558,7 +2736,7 @@ const EditQuestionnaireModal = ({
             </button>
             <button
               onClick={onSubmit}
-              disabled={loading}
+              disabled={loading || editLocked}
               className="btn-update px-6 py-2.5 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
             >
               {loading ? (
@@ -2583,6 +2761,7 @@ const EditQuestionnaireModal = ({
 // View Responses Modal
 const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnaire: Questionnaire; responses: any[]; onClose: () => void }) => {
   const { t } = useTranslation();
+  const [expandedResponseId, setExpandedResponseId] = useState<string | null>(null);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -2594,7 +2773,7 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{questionnaire.title}</h3>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{questionnaire.title}</h3>
               <p className="text-sm text-gray-500 mt-1">{t('sections.submittedResponseCount', { count: responses.length })}</p>
             </div>
             <button
@@ -2605,7 +2784,7 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
             </button>
           </div>
         </div>
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-3">
           {responses.length === 0 ? (
             <div className="text-center py-16">
               <Users className="text-gray-400 mx-auto mb-4" size={48} />
@@ -2613,23 +2792,39 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
               <p className="text-sm text-gray-500 mt-2">{t('sections.noResponsesHint')}</p>
             </div>
           ) : (
-            responses.map((response) => (
-              <div key={response.id} className="bg-gradient-to-br from-white to-primary-50/30 rounded-xl p-6 border border-gray-200/50">
-                <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
-                  <div>
-                    <h4 className="text-lg font-bold text-gray-900">
+            responses.map((response) => {
+              const expanded = expandedResponseId === response.id;
+              return (
+              <div key={response.id} className="bg-gradient-to-br from-white to-primary-50/30 rounded-xl border border-gray-200/50 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setExpandedResponseId(expanded ? null : response.id)}
+                  className="w-full flex items-center justify-between gap-3 p-4 sm:p-5 text-left hover:bg-primary-50/40 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-base font-bold text-gray-900">
                       {response.supplier?.user?.firstName} {response.supplier?.user?.lastName}
                     </h4>
-                    <p className="text-sm text-gray-600">{response.supplier?.user?.email}</p>
+                    <p className="text-sm text-gray-600 truncate">{response.supplier?.user?.email}</p>
                     <p className="text-sm text-gray-500 mt-1">
-                      Submitted: {response.submittedAt ? new Date(response.submittedAt).toLocaleString() : 'N/A'}
+                      {t('sections.submittedAtLabel', {
+                        date: response.submittedAt ? new Date(response.submittedAt).toLocaleString() : t('common.na')
+                      })}
                     </p>
                   </div>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                    Submitted
-                  </span>
-                </div>
-                <div className="space-y-4">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                      {t('common.submitted')}
+                    </span>
+                    {expanded ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" aria-hidden />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" aria-hidden />
+                    )}
+                  </div>
+                </button>
+                {expanded ? (
+                <div className="px-4 sm:px-6 pb-6 pt-0 border-t border-gray-200/80 space-y-4">
                   {(() => {
                     // Map answers by questionId so we can render them in the same order as questionnaire.questions
                     const answerMap = new Map<string, any>();
@@ -2669,13 +2864,13 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
                               <p className="text-gray-700">{displayText}</p>
                             )}
                             {!displayText && !answer?.document && (
-                              <p className="text-gray-500 italic">No answer provided</p>
+                              <p className="text-gray-500 italic">{t('common.noAnswerProvided')}</p>
                             )}
                             {answer?.document && (
                               <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
                                 <FileText size={16} />
                                 <a
-                                  href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${answer.document.filePath.replace(/^.*[\\\/]/, '')}`}
+                                  href={uploadsUrl(answer.document.filePath.replace(/^.*[\\\/]/, '')) || '#'}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="hover:underline"
@@ -2690,8 +2885,10 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
                     });
                   })()}
                 </div>
+                ) : null}
               </div>
-            ))
+            );
+            })
           )}
         </div>
       </div>
@@ -2699,20 +2896,19 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
   );
 };
 
-// Supplier Detail Modal – profile, submitted responses, answers, documents (download)
+// Supplier Detail Modal – marketplace profile only (bid responses belong under questionnaires / procedures)
 const SupplierDetailModal = ({
   supplierId: _supplierId,
   supplier,
-  responses,
   loading,
   onClose
 }: {
   supplierId: string | null;
   supplier: any;
-  responses: any[];
   loading: boolean;
   onClose: () => void;
 }) => {
+  const { t } = useTranslation();
   const PROFILE_DOC_TYPES_BY_QUESTION: Record<string, string> = {
     q2: 'q2-financial',
     q5: 'q5-quality',
@@ -2727,24 +2923,97 @@ const SupplierDetailModal = ({
     return (supplier?.documents || []).filter((d: any) => d.documentType === docType);
   };
 
-  const getCommonQuestionRows = () => {
-    const rows = [
-      { key: 'q1', label: 'Question 1 – Information about the Supplier', value: supplier?.turnover ? String(supplier.turnover) : '' },
-      { key: 'q2', label: 'Question 2 – Financial Stability and Financial Position', value: supplier?.financialStability || '' },
-      { key: 'q5', label: 'Question 5 – Management System – Quality', value: supplier?.qualityManagementSystem || '' },
-      { key: 'q6', label: 'Question 6 – Management System – Environment', value: supplier?.environmentalManagementSystem || '' },
-      { key: 'q7', label: 'Question 7 – Management System – Social Responsibility', value: supplier?.socialResponsibilityManagementSystem || '' },
-      { key: 'q8', label: 'Question 8 – Management System – Occupational Health and Safety', value: supplier?.ohsManagementSystem || '' },
-      { key: 'q9', label: 'Question 9 – Grounds for Exclusion', value: supplier?.groundsForExclusion || '' },
-      { key: 'q10', label: 'Question 10 – Labor Law Regulations', value: supplier?.laborLawRegulations || '' },
-      { key: 'q11', label: 'Question 11 – Sanctions Regarding Russia and Belarus', value: supplier?.sanctionsRussiaBelarus || '' },
-      { key: 'q12', label: 'Question 12 – Technical and professional capacity', value: supplier?.technicalCapacityProfessionalExperience || '' }
-    ];
-    return rows.filter((r) => {
-      const hasText = String(r.value || '').trim().length > 0;
-      const hasDocs = getQuestionDocuments(r.key).length > 0;
+  const formatTurnoverDisplay = (raw: unknown) => {
+    if (raw == null || raw === '') return '';
+    const num = typeof raw === 'number' ? raw : parseFloat(String(raw));
+    if (!Number.isNaN(num)) {
+      const match = TURNOVER_SEARCH_OPTIONS.find(
+        (o) => o.value && num >= o.min && num <= o.max
+      );
+      if (match) return t(match.labelKey);
+    }
+    return String(raw);
+  };
+
+  type ProfileFieldRow = { key: string; label: string; value: string; wide?: boolean };
+
+  const profileSections: {
+    id: string;
+    title: string;
+    icon: LucideIcon;
+    fields: ProfileFieldRow[];
+  }[] = [
+    {
+      id: 'financial',
+      title: t('supplierPortal.profileTabs.financial'),
+      icon: Wallet,
+      fields: [
+        { key: 'q1', label: t('commonQuestions.q1Field'), value: formatTurnoverDisplay(supplier?.turnover) },
+        { key: 'q2', label: t('commonQuestions.q2Field'), value: supplier?.financialStability || '', wide: true }
+      ]
+    },
+    {
+      id: 'certifications',
+      title: t('supplierPortal.profileTabs.certifications'),
+      icon: Award,
+      fields: [
+        { key: 'q5', label: t('commonQuestions.q5Field'), value: supplier?.qualityManagementSystem || '', wide: true },
+        { key: 'q6', label: t('commonQuestions.q6Field'), value: supplier?.environmentalManagementSystem || '', wide: true },
+        { key: 'q7', label: t('commonQuestions.q7Field'), value: supplier?.socialResponsibilityManagementSystem || '', wide: true },
+        { key: 'q8', label: t('commonQuestions.q8Field'), value: supplier?.ohsManagementSystem || '', wide: true }
+      ]
+    },
+    {
+      id: 'compliance',
+      title: t('supplierPortal.profileTabs.compliance'),
+      icon: Shield,
+      fields: [
+        { key: 'q9', label: t('commonQuestions.q9Field'), value: supplier?.groundsForExclusion || '', wide: true },
+        { key: 'q10', label: t('commonQuestions.q10Field'), value: supplier?.laborLawRegulations || '', wide: true },
+        { key: 'q11', label: t('commonQuestions.q11Field'), value: supplier?.sanctionsRussiaBelarus || '', wide: true }
+      ]
+    },
+    {
+      id: 'references',
+      title: t('supplierPortal.profileTabs.references'),
+      icon: Users,
+      fields: [
+        {
+          key: 'q12',
+          label: t('commonQuestions.q12Field'),
+          value: supplier?.technicalCapacityProfessionalExperience || '',
+          wide: true
+        }
+      ]
+    }
+  ].map((section) => ({
+    ...section,
+    fields: section.fields.filter((f) => {
+      const hasText = String(f.value || '').trim().length > 0;
+      const hasDocs = getQuestionDocuments(f.key).length > 0;
       return hasText || hasDocs;
-    });
+    })
+  })).filter((section) => section.fields.length > 0);
+
+  const renderFieldDocs = (questionKey: string) => {
+    const qDocs = getQuestionDocuments(questionKey);
+    if (!qDocs.length) return null;
+    return (
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {qDocs.map((doc: any) => (
+          <a
+            key={doc.id}
+            href={uploadsUrl(doc.filePath.replace(/^.*[\\\/]/, '')) || '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 text-xs hover:underline"
+          >
+            <FileText size={13} />
+            {doc.fileName}
+          </a>
+        ))}
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -2753,19 +3022,11 @@ const SupplierDetailModal = ({
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const formatDateAnswer = (raw: string) => {
-    if (!raw || typeof raw !== 'string') return raw;
-    const s = raw.slice(0, 10);
-    if (s.length < 10) return raw;
-    const [y, m, d] = s.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString();
-  };
-
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" style={{ top: 0, left: 0, right: 0, bottom: 0 }}>
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg flex items-center justify-between z-10">
-          <h3 className="text-xl font-bold text-gray-900">Supplier profile & responses</h3>
+          <h3 className="text-base font-bold text-gray-900">{t('sections.supplierProfile')}</h3>
           <button onClick={onClose} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl">
             <XCircle size={24} />
           </button>
@@ -2774,28 +3035,27 @@ const SupplierDetailModal = ({
           {loading ? (
             <div className="text-center py-16">
               <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto" />
-              <p className="mt-4 text-gray-600">Loading...</p>
+              <p className="mt-4 text-gray-600">{t('common.loading')}</p>
             </div>
           ) : supplier ? (
-            <div className="space-y-8">
-              {/* Profile */}
+            <div className="space-y-5">
               <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
                 <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <User size={20} />
-                  Basic data
+                  {t('sections.basicData')}
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-gray-500">Company</span><p className="font-medium text-gray-900">{supplier.companyName}</p></div>
-                  <div><span className="text-gray-500">Contact</span><p className="font-medium text-gray-900">{supplier.user?.firstName} {supplier.user?.lastName}</p></div>
-                  <div><span className="text-gray-500">Email</span><p className="font-medium text-gray-900">{supplier.user?.email}</p></div>
-                  {supplier.user?.phone && <div><span className="text-gray-500">Phone</span><p className="font-medium text-gray-900">{supplier.user.phone}</p></div>}
-                  {supplier.registrationNumber && <div><span className="text-gray-500">Registration No.</span><p className="font-medium text-gray-900">{supplier.registrationNumber}</p></div>}
+                  <div><span className="text-gray-500">{t('common.company')}</span><p className="font-medium text-gray-900">{supplier.companyName}</p></div>
+                  <div><span className="text-gray-500">{t('common.contact')}</span><p className="font-medium text-gray-900">{supplier.user?.firstName} {supplier.user?.lastName}</p></div>
+                  <div><span className="text-gray-500">{t('common.email')}</span><p className="font-medium text-gray-900">{supplier.user?.email}</p></div>
+                  {supplier.user?.phone && <div><span className="text-gray-500">{t('common.phone')}</span><p className="font-medium text-gray-900">{supplier.user.phone}</p></div>}
+                  {supplier.registrationNumber && <div><span className="text-gray-500">{t('columns.registrationNumber')}</span><p className="font-medium text-gray-900">{supplier.registrationNumber}</p></div>}
                   {(supplier.address || supplier.city || supplier.country) && (
-                    <div className="sm:col-span-2"><span className="text-gray-500">Address</span><p className="font-medium text-gray-900">{[supplier.address, supplier.city, supplier.country].filter(Boolean).join(', ')}</p></div>
+                    <div className="sm:col-span-2"><span className="text-gray-500">{t('common.address')}</span><p className="font-medium text-gray-900">{[supplier.address, supplier.city, supplier.country].filter(Boolean).join(', ')}</p></div>
                   )}
                   {supplier.cpvCodes?.length > 0 && (
                     <div className="sm:col-span-2">
-                      <span className="text-gray-500 block mb-2">CPV codes</span>
+                      <span className="text-gray-500 block mb-2">{t('sections.cpvCodesLabel')}</span>
                       <div className="flex flex-wrap gap-2">
                         {supplier.cpvCodes.map((c: any) => (
                           <span
@@ -2812,7 +3072,7 @@ const SupplierDetailModal = ({
                   )}
                   {supplier.nutsCodes?.length > 0 && (
                     <div className="sm:col-span-2">
-                      <span className="text-gray-500 block mb-2">NUTS codes</span>
+                      <span className="text-gray-500 block mb-2">{t('sections.nutsCodesLabel')}</span>
                       <div className="flex flex-wrap gap-2">
                         {supplier.nutsCodes.map((nuts: any) => (
                           <span
@@ -2827,105 +3087,34 @@ const SupplierDetailModal = ({
                       </div>
                     </div>
                   )}
-                  {getCommonQuestionRows().length > 0 && (
-                    <div className="sm:col-span-2">
-                      <span className="text-gray-500 block mb-2">Common questions</span>
-                      <div className="space-y-3">
-                        {getCommonQuestionRows().map((q) => {
-                          const qDocs = getQuestionDocuments(q.key);
-                          return (
-                            <div key={q.key} className="bg-white border border-gray-200 rounded-lg p-3">
-                              <p className="text-sm font-medium text-gray-700 mb-1">{q.label}</p>
-                              {String(q.value || '').trim().length > 0 && (
-                                <p className="text-sm text-gray-900 whitespace-pre-wrap">{q.value}</p>
-                              )}
-                              {qDocs.length > 0 && (
-                                <div className="mt-2 space-y-1">
-                                  {qDocs.map((doc: any) => (
-                                    <a
-                                      key={doc.id}
-                                      href={`${UPLOADS_BASE}/${doc.filePath.replace(/^.*[\\\/]/, '')}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1.5 mr-2 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 text-xs hover:underline"
-                                    >
-                                      <FileText size={13} />
-                                      {doc.fileName}
-                                    </a>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Submitted responses */}
-              <div>
-                <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <FileText size={20} />
-                  Questionnaire responses
-                </h4>
-                {!responses?.length ? (
-                  <p className="text-gray-500 text-sm">No submitted responses.</p>
-                ) : (
-                  <div className="space-y-6">
-                    {responses.map((resp) => {
-                      const q = resp.questionnaire;
-                      const answers = (resp.answers || []).slice().sort((a: any, b: any) => (a.question?.order ?? 0) - (b.question?.order ?? 0));
-                      return (
-                        <div key={resp.id} className="border border-gray-200 rounded-xl overflow-hidden">
-                          <div className="bg-primary-50/50 px-4 py-3 border-b border-gray-200">
-                            <p className="font-semibold text-gray-900">{q?.title}</p>
-                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                              {q?.cpvCode && (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-primary-100 text-primary-800 text-xs font-medium">
-                                  {q.cpvCode.code}
-                                  {q.cpvCode.description && <span className="text-primary-600 ml-1">– {q.cpvCode.description}</span>}
-                                </span>
-                              )}
-                              <span className="text-xs text-gray-500">
-                                Submitted: {resp.submittedAt ? new Date(resp.submittedAt).toLocaleString() : 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="p-4 space-y-3">
-                            {answers.map((ans: any) => {
-                              const raw = ans.answerText ?? ans.answerValue ?? '';
-                              const isDate = ans.question?.questionType === 'date';
-                              const displayText = isDate && raw ? formatDateAnswer(String(raw)) : (raw ? String(raw) : '');
-                              return (
-                                <div key={ans.id} className="bg-gray-50 rounded-lg p-3">
-                                  <p className="text-sm font-medium text-gray-700 mb-1">{ans.question?.questionText}</p>
-                                  {displayText && <p className="text-gray-900">{displayText}</p>}
-                                  {ans.document && (
-                                    <a
-                                      href={`${UPLOADS_BASE}/${ans.document.filePath.replace(/^.*[\\\/]/, '')}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1.5 mt-2 text-sm text-blue-600 hover:underline"
-                                    >
-                                      <FileText size={14} />
-                                      {ans.document.fileName} (download)
-                                    </a>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+              {profileSections.map((section) => {
+                const Icon = section.icon;
+                return (
+                  <div key={section.id} className="bg-gray-50 rounded-xl p-5 border border-gray-200">
+                    <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <Icon size={20} />
+                      {section.title}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                      {section.fields.map((field) => (
+                        <div key={field.key} className={field.wide ? 'sm:col-span-2' : undefined}>
+                          <span className="text-gray-500">{field.label}</span>
+                          {String(field.value || '').trim().length > 0 ? (
+                            <p className="font-medium text-gray-900 whitespace-pre-wrap mt-0.5">{field.value}</p>
+                          ) : null}
+                          {renderFieldDocs(field.key)}
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })}
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-8">No supplier data.</p>
+            <p className="text-gray-500 text-center py-8">{t('sections.noSupplierData')}</p>
           )}
         </div>
       </div>

@@ -175,7 +175,7 @@ export function SupplierProfileTabsNav({
                   }`}
                   aria-hidden
                 />
-                <span className="text-[11px] sm:text-sm font-semibold leading-tight whitespace-nowrap">
+                <span className="text-xs sm:text-sm font-semibold leading-tight whitespace-nowrap">
                   <span className="sm:hidden">{shortLabel}</span>
                   <span className="hidden sm:inline">{label}</span>
                 </span>

@@ -8,7 +8,8 @@ export type CpvCodeOption = {
 };
 
 /**
- * Server-side CPV search — same catalog as GET /cpv (supplier profile picker).
+ * Server-side CPV search against the full lookup catalog (~10k codes).
+ * Uses GET /lookups/cpv (active codes); falls back to GET /cpv if needed.
  */
 export function useCpvCatalogSearch() {
   const [cpvCodes, setCpvCodes] = useState<CpvCodeOption[]>([]);
@@ -18,12 +19,22 @@ export function useCpvCatalogSearch() {
   const fetchCodes = useCallback(async (searchTerm?: string, selectedIds?: string | string[]) => {
     try {
       setLoading(true);
-      const params: Record<string, string> = { limit: '500' };
+      const params: Record<string, string | number> = { limit: 500, offset: 0 };
       const q = searchTerm?.trim();
       if (q) params.search = q;
 
-      const response = await api.get('/cpv', { params });
-      let list: CpvCodeOption[] = response.data.cpvCodes || [];
+      let list: CpvCodeOption[] = [];
+      try {
+        const response = await api.get('/lookups/cpv', { params });
+        list = (response.data.items || []).map((row: { id: string; code: string; description?: string }) => ({
+          id: row.id,
+          code: row.code,
+          description: row.description || row.code
+        }));
+      } catch {
+        const response = await api.get('/cpv', { params });
+        list = response.data.cpvCodes || [];
+      }
 
       const ids = (Array.isArray(selectedIds) ? selectedIds : selectedIds ? [selectedIds] : []).filter(
         Boolean

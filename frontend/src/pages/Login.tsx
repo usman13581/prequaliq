@@ -1,21 +1,61 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { LogIn } from 'lucide-react';
+import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { Logo } from '../components/ui/Logo';
 
+const REMEMBER_KEY = 'prequaliq_remember_login';
+
+/** Remember email only — never store passwords (rule 01). */
+function loadRememberedEmail(): { email: string; remember: boolean } {
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    if (!raw) return { email: '', remember: false };
+    const data = JSON.parse(raw) as { email?: string; password?: string };
+    // Migrate away from legacy entries that stored a password (base64 or otherwise)
+    if (data.password) {
+      const emailOnly = { email: (data.email || '').trim() };
+      if (emailOnly.email) {
+        localStorage.setItem(REMEMBER_KEY, JSON.stringify(emailOnly));
+      } else {
+        localStorage.removeItem(REMEMBER_KEY);
+      }
+      return { email: emailOnly.email, remember: !!emailOnly.email };
+    }
+    return {
+      email: data.email || '',
+      remember: !!data.email
+    };
+  } catch {
+    localStorage.removeItem(REMEMBER_KEY);
+    return { email: '', remember: false };
+  }
+}
+
 const Login = () => {
   const { t } = useTranslation();
-  const [email, setEmail] = useState('');
+  const remembered = loadRememberedEmail();
+  const [email, setEmail] = useState(remembered.email);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(remembered.remember);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const stored = loadRememberedEmail();
+    if (stored.remember) {
+      setEmail(stored.email);
+      setRemember(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,8 +64,23 @@ const Login = () => {
 
     try {
       await login(email, password);
+
+      if (remember) {
+        localStorage.setItem(
+          REMEMBER_KEY,
+          JSON.stringify({ email: email.trim() })
+        );
+      } else {
+        localStorage.removeItem(REMEMBER_KEY);
+      }
+
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      
+      const redirect = searchParams.get('redirect');
+      if (redirect && redirect.startsWith('/')) {
+        navigate(redirect);
+        return;
+      }
+
       // Redirect based on role
       if (user.role === 'admin') {
         navigate('/admin');
@@ -35,7 +90,7 @@ const Login = () => {
         navigate('/procuring-entity');
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Login failed';
+      const errorMessage = err.response?.data?.message || t('msg.loginFailed');
       setError(errorMessage);
       showToast(errorMessage, 'error');
     } finally {
@@ -154,21 +209,46 @@ const Login = () => {
             <label htmlFor="password" className="block text-sm font-medium text-muted mb-2">
               {t('login.password')}
             </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="input-brand"
-              placeholder={t('login.placeholderPassword')}
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="input-brand pr-12"
+                placeholder={t('login.placeholderPassword')}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors"
+                aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
           </div>
+
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setRemember(next);
+                if (!next) localStorage.removeItem(REMEMBER_KEY);
+              }}
+              className="w-4 h-4 rounded border-border accent-accent"
+            />
+            <span className="text-sm text-muted">{t('login.rememberEmail')}</span>
+          </label>
 
           <button
             type="submit"
             disabled={loading}
-            className="btn-save w-full py-3 px-4 rounded-full focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-accent hover:shadow-lg transition-all duration-300"
+            className="btn-save w-full py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-accent hover:shadow-lg transition-all duration-300"
           >
             <LogIn size={20} />
             {loading ? t('login.loggingIn') : t('login.submit')}

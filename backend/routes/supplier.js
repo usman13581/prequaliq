@@ -29,6 +29,7 @@ router.put('/notifications/:notificationId/read', supplierController.markNotific
 router.put('/notifications/read-all', supplierController.markAllNotificationsRead);
 router.get('/questionnaires/active', supplierController.getActiveQuestionnaires);
 router.get('/questionnaires/history', supplierController.getQuestionnaireHistory);
+router.get('/questionnaires/:questionnaireId', supplierController.getQuestionnaireById);
 router.post(
   '/questionnaires/:questionnaireId/ai-suggest-answers',
   supplierController.suggestAnswersForQuestionnaire

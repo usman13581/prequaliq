@@ -62,7 +62,7 @@ export function SupplierOverviewTab({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">{t('supplierPortal.overviewTitle')}</h2>
+        <h2 className="text-base font-bold text-gray-900">{t('supplierPortal.overviewTitle')}</h2>
         <p className="text-sm text-muted mt-1">{t('supplierPortal.overviewSubtitle')}</p>
       </div>
 

@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 const getNUTSCodes = async (req, res) => {
   try {
     const { search, level } = req.query;
-    const where = {};
+    const where = { isActive: true };
 
     if (search && search.trim()) {
       where[Op.or] = [
@@ -42,7 +42,21 @@ const getNUTSCount = async (req, res) => {
   }
 };
 
+const getNUTSCode = async (req, res) => {
+  try {
+    const nutsCode = await db.NUTSCode.findByPk(req.params.id);
+    if (!nutsCode) {
+      return res.status(404).json({ message: 'NUTS code not found' });
+    }
+    res.json({ nutsCode });
+  } catch (error) {
+    console.error('Get NUTS code error:', error);
+    res.status(500).json({ message: 'Error fetching NUTS code', error: error.message });
+  }
+};
+
 module.exports = {
   getNUTSCodes,
-  getNUTSCount
+  getNUTSCount,
+  getNUTSCode
 };

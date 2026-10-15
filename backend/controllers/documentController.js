@@ -5,6 +5,7 @@ const fs = require('fs');
 const { sendSupplierProfileSubmittedToAdminEmail, sendSupplierProfileSubmittedConfirmationEmail } = require('../services/emailService');
 const { getDocumentStatus } = require('../services/supplierCompleteness');
 const { notifyDocumentExpiring } = require('../services/supplierNotificationService');
+const { reapprovalAfterMaterialChange } = require('./supplierController');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -111,6 +112,8 @@ const uploadDocument = async (req, res) => {
     if (docStatus === 'expiring_soon') {
       notifyDocumentExpiring(supplier, 1).catch(() => {});
     }
+
+    await reapprovalAfterMaterialChange(supplier);
 
     res.status(201).json({
       message: 'Document uploaded successfully',

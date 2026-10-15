@@ -360,7 +360,7 @@ function UnderstandConfirmModal() {
           <div className="flex items-start gap-2 min-w-0">
             <Sparkles className="text-violet-600 shrink-0 mt-0.5" size={20} />
             <div>
-              <h3 id="ai-understand-title" className="text-lg font-bold text-gray-900">
+              <h3 id="ai-understand-title" className="text-base font-bold text-gray-900">
                 {t('entityPortal.aiQuestionnaireUnderstandTitle')}
               </h3>
               <p className="text-xs text-muted mt-0.5">{t('entityPortal.aiQuestionnaireUnderstandSubtitle')}</p>
@@ -377,7 +377,7 @@ function UnderstandConfirmModal() {
         </div>
         <div className="px-5 py-4 space-y-3">
           <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
               {t('entityPortal.aiQuestionnaireYourInput')}
             </p>
             <p className="text-sm text-gray-800 mt-1">{understanding.userDescription}</p>
@@ -389,7 +389,7 @@ function UnderstandConfirmModal() {
             </p>
           )}
           <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-3">
-            <p className="text-[11px] font-semibold text-violet-800 uppercase tracking-wide">
+            <p className="text-xs font-semibold text-violet-800 uppercase tracking-wide">
               {t('entityPortal.aiQuestionnaireAiUnderstanding')}
             </p>
             <p className="text-sm text-gray-800 mt-1 leading-relaxed">{understanding.understanding}</p>
@@ -484,7 +484,7 @@ function InputBar() {
         aria-invalid={Boolean(validationError)}
         aria-describedby="ai-questionnaire-desc-hint ai-questionnaire-desc-error"
       />
-      <div className="flex items-center justify-between gap-2 text-[11px]">
+      <div className="flex items-center justify-between gap-2 text-xs">
         <p id="ai-questionnaire-desc-hint" className="text-muted">
           {t('entityPortal.aiQuestionnaireCharLimit', { max: descriptionMaxChars })}
         </p>
@@ -502,7 +502,7 @@ function InputBar() {
         </p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-muted">{t('entityPortal.aiQuestionnaireHint')}</p>
+        <p className="text-xs text-muted">{t('entityPortal.aiQuestionnaireHint')}</p>
         <button
           type="button"
           disabled={!canGenerate}
@@ -568,7 +568,7 @@ function Drawer() {
         <button
           type="button"
           onClick={openDrawer}
-          className="fixed right-0 top-[var(--portal-header-height)] bottom-0 z-40 hidden sm:flex w-9 flex-col items-center justify-center gap-1 rounded-l-xl bg-violet-600 text-white text-[10px] font-bold shadow-lg hover:bg-violet-700"
+          className="fixed right-0 top-[var(--portal-header-height)] bottom-0 z-40 hidden sm:flex w-9 flex-col items-center justify-center gap-1 rounded-l-xl bg-violet-600 text-white text-xs font-bold shadow-lg hover:bg-violet-700"
           aria-label={t('entityPortal.aiQuestionnaireShow')}
         >
           <ChevronLeft size={16} />
@@ -600,7 +600,7 @@ function Drawer() {
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <p className="text-xs font-semibold text-gray-700 mb-1">{t('sections.basicInformation')}</p>
-              <p className="text-[11px] text-muted mb-2">{t('entityPortal.aiQuestionnaireSupplierPreviewHint')}</p>
+              <p className="text-xs text-muted mb-2">{t('entityPortal.aiQuestionnaireSupplierPreviewHint')}</p>
               <p className="text-xs font-medium text-gray-500 mb-0.5">{t('forms.questionnaireTitle')}</p>
               <p className="text-sm font-medium text-gray-900">{result.title}</p>
               <p className="text-xs font-medium text-gray-500 mt-2 mb-0.5">
@@ -631,9 +631,9 @@ function Drawer() {
                         <span className="min-w-0">
                           <span className="font-medium text-gray-900">{cpv.code}</span>
                           <span className="block text-xs text-gray-700">{cpv.description}</span>
-                          <span className="block text-[11px] text-muted mt-0.5">{cpv.reason}</span>
+                          <span className="block text-xs text-muted mt-0.5">{cpv.reason}</span>
                           {typeof cpv.supplierCount === 'number' && cpv.supplierCount > 0 && (
-                            <span className="block text-[10px] text-violet-700 mt-0.5">
+                            <span className="block text-xs text-violet-700 mt-0.5">
                               {t('entityPortal.aiQuestionnaireCpvSuppliers', { count: cpv.supplierCount })}
                             </span>
                           )}
@@ -647,7 +647,7 @@ function Drawer() {
 
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <p className="text-xs font-semibold text-gray-700 mb-1">{t('entityPortal.aiQuestionnaireQuestionsTitle')}</p>
-              <p className="text-[11px] text-muted mb-2">{t('entityPortal.aiQuestionnaireQuestionsHint')}</p>
+              <p className="text-xs text-muted mb-2">{t('entityPortal.aiQuestionnaireQuestionsHint')}</p>
               {questions.length === 0 ? (
                 <p className="text-xs text-gray-600">{t('entityPortal.aiQuestionnaireNoQuestions')}</p>
               ) : (
@@ -681,7 +681,7 @@ function Drawer() {
                             <span className="font-medium text-gray-700">{t('forms.requiresDocument')}</span>
                           </label>
                           {q.requiresDocumentEnabled && q.documentType && (
-                            <p className="text-[11px] text-muted pl-6">{q.documentType}</p>
+                            <p className="text-xs text-muted pl-6">{q.documentType}</p>
                           )}
                         </div>
                       )}

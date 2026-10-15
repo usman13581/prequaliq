@@ -24,6 +24,10 @@ module.exports = (sequelize, DataTypes) => {
     linkTab: {
       type: DataTypes.STRING
     },
+    meta: {
+      type: DataTypes.JSONB,
+      allowNull: true
+    },
     isRead: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

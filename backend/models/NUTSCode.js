@@ -30,6 +30,11 @@ module.exports = (sequelize, DataTypes) => {
         model: 'nuts_codes',
         key: 'code'
       }
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
     }
   }, {
     tableName: 'nuts_codes',

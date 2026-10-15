@@ -54,6 +54,9 @@ module.exports = (sequelize, DataTypes) => {
     Questionnaire.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     Questionnaire.hasMany(models.Question, { foreignKey: 'questionnaireId', as: 'questions' });
     Questionnaire.hasMany(models.QuestionnaireResponse, { foreignKey: 'questionnaireId', as: 'responses' });
+    if (models.Procedure) {
+      Questionnaire.hasMany(models.Procedure, { foreignKey: 'questionnaireId', as: 'procedures' });
+    }
   };
 
   return Questionnaire;

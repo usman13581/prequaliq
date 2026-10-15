@@ -4,7 +4,12 @@ import { useToast } from '../../contexts/ToastContext';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { DateOnlyPicker } from '../../components/DateOnlyPicker';
+import { SearchField } from '../../components/ui/SearchField';
 import { PortalLayout } from '../../components/ui/PortalLayout';
+import { AccountStatusBanner } from '../../components/ui/AccountStatusBanner';
+import { SupplierTendersPanel } from '../../components/supplier/SupplierTendersPanel';
+import { AiPreferencesPanel } from '../../components/ai/AiPreferencesPanel';
+import { SupplierContractsPanel } from '../../components/supplier/SupplierContractsPanel';
 import { SupplierOverviewTab } from '../../components/supplier/SupplierOverviewTab';
 import { SupplierNotificationsBell } from '../../components/supplier/SupplierNotificationsBell';
 import { SupplierExportProfileModal } from '../../components/supplier/SupplierExportProfileModal';
@@ -25,11 +30,12 @@ import { useCpvCatalogSearch } from '../../hooks/useCpvCatalogSearch';
 import { ListPagination } from '../../components/ui/ListPagination';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
 import { 
-  FileText, History, User, Upload, Plus, Edit2, Eye, 
+  FileText, History, User, Upload, Edit2, Eye, 
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
-  Search, ChevronDown, LayoutDashboard, Download
+  ChevronDown, LayoutDashboard, Download, Briefcase, ScrollText, Sparkles
 } from 'lucide-react';
 import type { AnswerSuggestion } from '../../components/supplier/SupplierQuestionnaireAnswerAiAssist';
+import { uploadsUrl } from '../../utils/uploadsUrl';
 
 interface Document {
   id: string;
@@ -87,11 +93,10 @@ interface QuestionnaireResponse {
   id: string;
   status: 'draft' | 'submitted';
   submittedAt?: string;
+  procedureId?: string | null;
   questionnaire: Questionnaire;
   answers?: any[];
 }
-
-const UPLOADS_BASE = import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads';
 
 // Turnover range options: value = upper bound (stored in DB)
 const TURNOVER_OPTIONS = [
@@ -106,9 +111,9 @@ const TURNOVER_OPTIONS = [
 
 const getTurnoverLabel = (val: string | number | undefined, t: (k: string) => string): string => {
   const n = val === '' || val == null ? NaN : Number(val);
-  if (isNaN(n)) return 'N/A';
+  if (isNaN(n)) return t('common.na');
   const opt = TURNOVER_OPTIONS.find((o) => o.value === n) ?? TURNOVER_OPTIONS.find((o) => n <= o.value);
-  return opt ? t(opt.labelKey) : 'N/A';
+  return opt ? t(opt.labelKey) : t('common.na');
 };
 
 const getTurnoverValueForSelect = (val: string | number | undefined): string => {
@@ -133,9 +138,6 @@ const SupplierDashboard = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [submittingProfile, setSubmittingProfile] = useState(false);
   const [documentExpiryDates, setDocumentExpiryDates] = useState<Record<string, string>>({});
-  const [questionnaireFilter, setQuestionnaireFilter] = useState<'all' | 'open' | 'draft' | 'submitted' | 'overdue'>('all');
-  const [questionnaireSort, setQuestionnaireSort] = useState<'deadline' | 'newest'>('deadline');
-  
   // Profile state
   const [profile, setProfile] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -184,19 +186,28 @@ const SupplierDashboard = () => {
   const [nutsSearchTerm, setNutsSearchTerm] = useState('');
   const [showNUTSSelector, setShowNUTSSelector] = useState(false);
   
-  // Questionnaires state
-  const [activeQuestionnaires, setActiveQuestionnaires] = useState<Questionnaire[]>([]);
+  // Questionnaires state (tender-linked modal; no standalone Forms tab)
   const [questionnaireHistory, setQuestionnaireHistory] = useState<QuestionnaireResponse[]>([]);
   const [selectedQuestionnaire, setSelectedQuestionnaire] = useState<Questionnaire | null>(null);
+  /** When set, answers are stored per procedure (tender bid), not shared across procedures. */
+  const [bidProcedureId, setBidProcedureId] = useState<string | null>(null);
   const [questionnaireResponse, setQuestionnaireResponse] = useState<Record<string, any>>({});
   const [responseDocuments, setResponseDocuments] = useState<Record<string, File>>({});
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [prefillHint, setPrefillHint] = useState(false);
+  const [bidContext, setBidContext] = useState<{
+    editable?: boolean;
+    reason?: string | null;
+    label?: string;
+    procedureStatus?: string;
+    bidDeadline?: string | null;
+  } | null>(null);
 
   // Fetch profile
-  const fetchProfile = async () => {
+  const fetchProfile = async (opts?: { silent?: boolean }) => {
     try {
-      setLoading(true);
+      if (!opts?.silent) setLoading(true);
       const response = await api.get('/supplier/profile');
       const supplier = response.data.supplier;
       setProfile(supplier);
@@ -233,9 +244,11 @@ const SupplierDashboard = () => {
       setSelectedCPVCodes(supplier.cpvCodes?.map((cpv: CPVCode) => cpv.id) || []);
       setSelectedNUTSCodes(supplier.nutsCodes?.map((nuts: NUTSCode) => nuts.id) || []);
     } catch (error: any) {
-      showToast(error.response?.data?.message || t('msg.failedFetchProfile'), 'error');
+      if (!opts?.silent) {
+        showToast(error.response?.data?.message || t('msg.failedFetchProfile'), 'error');
+      }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   };
 
@@ -296,6 +309,40 @@ const SupplierDashboard = () => {
     setActiveTab(tab);
   };
 
+  const openLinkedQuestionnaire = async (questionnaireId: string, procedureId?: string) => {
+    if (!questionnaireId) return;
+    try {
+      const params = procedureId ? { procedureId } : undefined;
+      const res = await api.get(`/supplier/questionnaires/${questionnaireId}`, { params });
+      const questionnaire = res.data.questionnaire;
+
+      if (!questionnaire) {
+        showToast(t('msg.questionnaireNotFound', { defaultValue: 'Questionnaire not found' }), 'error');
+        return;
+      }
+
+      setBidProcedureId(procedureId || null);
+      setPrefillHint(false);
+      setSelectedQuestionnaire(questionnaire);
+      await loadQuestionnaireResponse(questionnaireId, procedureId || null);
+    } catch (error: any) {
+      showToast(
+        error.response?.data?.message ||
+          t('msg.failedLoadQuestionnaire', { defaultValue: 'Failed to open questionnaire' }),
+        'error'
+      );
+    }
+  };
+
+  const closeQuestionnaireModal = () => {
+    setSelectedQuestionnaire(null);
+    setBidProcedureId(null);
+    setPrefillHint(false);
+    setBidContext(null);
+    setQuestionnaireResponse({});
+    setResponseDocuments({});
+  };
+
   // Fetch NUTS codes
   const fetchNUTSCodes = async (searchTerm?: string) => {
     try {
@@ -308,24 +355,6 @@ const SupplierDashboard = () => {
       console.error('Failed to fetch NUTS codes:', error);
       showToast(error.response?.data?.message || t('nutsCodes.failedToLoad'), 'error');
       setNutsCodes([]);
-    }
-  };
-
-  // Fetch active questionnaires
-  const fetchActiveQuestionnaires = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get('/supplier/questionnaires/active');
-      setActiveQuestionnaires(response.data.questionnaires || []);
-    } catch (error: any) {
-      const msg = error.response?.data?.message || 'Failed to fetch questionnaires';
-      showToast(msg, 'error');
-      // If not approved, clear list so we show the empty state with hints
-      if (error.response?.status === 403) {
-        setActiveQuestionnaires([]);
-      }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -342,166 +371,121 @@ const SupplierDashboard = () => {
     }
   };
 
-  // Load existing response for questionnaire
-  const loadQuestionnaireResponse = async (questionnaireId: string): Promise<void> => {
-    try {
-      console.log('=== LOADING RESPONSE FOR QUESTIONNAIRE:', questionnaireId, '===');
-      const response = await api.get(`/questionnaires/${questionnaireId}/responses`);
-      console.log('API Response received:', response.data);
-      
-      if (response.data.response) {
-        const answers: Record<string, any> = {};
-        console.log('=== LOADING ANSWERS ===');
-        console.log('Questionnaire ID:', questionnaireId);
-        console.log('Raw response data:', JSON.stringify(response.data.response, null, 2));
-        console.log('Answers array:', response.data.response.answers);
-        console.log('Answers array length:', response.data.response.answers?.length || 0);
-        console.log('Response status:', response.data.response.status);
-        console.log('Response ID:', response.data.response.id);
-        
-        if (response.data.response.answers && Array.isArray(response.data.response.answers) && response.data.response.answers.length > 0) {
-          console.log('Processing', response.data.response.answers.length, 'answers...');
-          response.data.response.answers.forEach((answer: any, index: number) => {
-            console.log(`\n--- Answer ${index + 1} ---`);
-            console.log('Full answer object:', JSON.stringify(answer, null, 2));
-            console.log('Question ID:', answer.questionId);
-            console.log('Question ID type:', typeof answer.questionId);
-            console.log('Answer text:', answer.answerText);
-            console.log('Answer value:', answer.answerValue);
-            console.log('Answer value type:', typeof answer.answerValue);
-            console.log('Has document:', !!answer.document);
-            
-            // Handle different answer value formats
-            let answerValue = answer.answerValue;
-            
-            // If answerValue is null/undefined, use answerText
-            if (answerValue === null || answerValue === undefined) {
-              answerValue = answer.answerText || '';
-              console.log('Using answerText as answerValue:', answerValue);
-            } else if (typeof answerValue === 'object') {
-              // If it's an object (JSONB), try to extract value or stringify
-              if (Array.isArray(answerValue)) {
-                answerValue = answerValue.join(',');
-                console.log('Converted array to string:', answerValue);
-              } else if (answerValue.value !== undefined) {
-                answerValue = answerValue.value;
-                console.log('Extracted value from object:', answerValue);
-              } else {
-                answerValue = JSON.stringify(answerValue);
-                console.log('Stringified object:', answerValue);
-              }
-            } else if (typeof answerValue !== 'string') {
-              // Convert to string if not already
-              answerValue = String(answerValue);
-              console.log('Converted to string:', answerValue);
-            }
-            
-            // Fallback to answerText if answerValue is empty
-            if (!answerValue && answer.answerText) {
-              answerValue = answer.answerText;
-              console.log('Using answerText as fallback:', answerValue);
-            }
-            
-            // Use questionId as key - ensure it's a string
-            const questionIdKey = String(answer.questionId);
-            answers[questionIdKey] = {
-              answerText: answer.answerText || answerValue || '',
-              answerValue: answerValue || answer.answerText || '',
-              documentId: answer.documentId || null,
-              document: answer.document || null // Include document info
-            };
-            
-            console.log(`✓ Stored answer for questionId "${questionIdKey}":`, answers[questionIdKey]);
-          });
+  const mapAnswersFromApi = (answerList: any[]): Record<string, any> => {
+    const answers: Record<string, any> = {};
+    if (!Array.isArray(answerList)) return answers;
+    answerList.forEach((answer: any) => {
+      let answerValue = answer.answerValue;
+      if (answerValue === null || answerValue === undefined) {
+        answerValue = answer.answerText || '';
+      } else if (typeof answerValue === 'object') {
+        if (Array.isArray(answerValue)) {
+          answerValue = answerValue.join(',');
+        } else if (answerValue.value !== undefined) {
+          answerValue = answerValue.value;
         } else {
-          console.warn('⚠️ NO ANSWERS FOUND IN RESPONSE!');
-          console.log('Response object keys:', Object.keys(response.data.response));
-          console.log('Answers property:', response.data.response.answers);
-          console.log('Is answers an array?', Array.isArray(response.data.response.answers));
+          answerValue = JSON.stringify(answerValue);
         }
-        
-        console.log('\n=== FINAL PROCESSED ANSWERS OBJECT ===');
-        console.log('Answer object:', answers);
-        console.log('Answer keys:', Object.keys(answers));
-        console.log('Number of answer keys:', Object.keys(answers).length);
-        console.log('Answer entries:', Object.entries(answers));
-        
-        // Set answers directly - use functional update to ensure we merge correctly
-        setQuestionnaireResponse((prev) => {
-          const merged = { ...answers }; // Replace instead of merge to ensure clean state
-          console.log('\n=== SETTING STATE ===');
-          console.log('Previous state keys:', Object.keys(prev));
-          console.log('New merged state keys:', Object.keys(merged));
-          console.log('Full merged state:', merged);
-          return merged;
-        });
-        
-        // Small delay to ensure state is set before continuing
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        // Update the selectedQuestionnaire to include the response status AND ensure questionnaire has questions
+      } else if (typeof answerValue !== 'string') {
+        answerValue = String(answerValue);
+      }
+      if (!answerValue && answer.answerText) {
+        answerValue = answer.answerText;
+      }
+      const questionIdKey = String(answer.questionId);
+      answers[questionIdKey] = {
+        answerText: answer.answerText || answerValue || '',
+        answerValue: answerValue || answer.answerText || '',
+        documentId: answer.documentId || null,
+        document: answer.document || null
+      };
+    });
+    return answers;
+  };
+
+  // Load existing response for questionnaire (optionally scoped to a procedure bid)
+  const loadQuestionnaireResponse = async (
+    questionnaireId: string,
+    procedureId: string | null = bidProcedureId
+  ): Promise<void> => {
+    try {
+      const params = procedureId ? { procedureId } : undefined;
+      const response = await api.get(`/questionnaires/${questionnaireId}/responses`, { params });
+
+      setBidContext(response.data.bidContext || null);
+
+      if (response.data.response) {
+        const answers = mapAnswersFromApi(response.data.response.answers || []);
+        setPrefillHint(false);
+        setQuestionnaireResponse(answers);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         setSelectedQuestionnaire((prev) => {
           if (prev && prev.id === questionnaireId) {
-            // Merge questionnaire data from response (which includes questions) with existing data
             const questionnaireFromResponse = response.data.response.questionnaire;
             return {
               ...prev,
-              // Ensure questions are included from the response
               questions: questionnaireFromResponse?.questions || prev.questions,
-              // Update other questionnaire fields from response if available
               ...(questionnaireFromResponse && {
                 title: questionnaireFromResponse.title || prev.title,
                 description: questionnaireFromResponse.description || prev.description,
                 deadline: questionnaireFromResponse.deadline || prev.deadline,
-                cpvCode: questionnaireFromResponse.cpvCode || prev.cpvCode,
+                cpvCode: questionnaireFromResponse.cpvCode || prev.cpvCode
               }),
-              responses: [{
-                id: response.data.response.id,
-                status: response.data.response.status,
-                submittedAt: response.data.response.submittedAt
-              }]
+              responses: [
+                {
+                  id: response.data.response.id,
+                  status: response.data.response.status,
+                  submittedAt: response.data.response.submittedAt
+                }
+              ]
             };
           }
           return prev;
         });
-        
-        console.log('=== RESPONSE LOADED SUCCESSFULLY ===');
-      } else {
-        console.log('No response data found, starting fresh');
-        // No existing response, start fresh
-        setQuestionnaireResponse({});
-        // Clear response status if no response exists
+      } else if (response.data.prefill?.answers?.length) {
+        // New procedure bid: prefill from a previous submission, still editable
+        const answers = mapAnswersFromApi(response.data.prefill.answers);
+        setQuestionnaireResponse(answers);
+        setPrefillHint(!!response.data.bidContext?.editable);
         setSelectedQuestionnaire((prev) => {
           if (prev && prev.id === questionnaireId) {
-            return {
-              ...prev,
-              responses: []
-            };
+            return { ...prev, responses: [] };
+          }
+          return prev;
+        });
+      } else {
+        setPrefillHint(false);
+        setQuestionnaireResponse({});
+        setSelectedQuestionnaire((prev) => {
+          if (prev && prev.id === questionnaireId) {
+            return { ...prev, responses: [] };
           }
           return prev;
         });
       }
     } catch (error: any) {
-      // 404 is normal if no response exists yet - start fresh
       if (error.response?.status === 404) {
-        console.log('No existing response found (404) for questionnaire:', questionnaireId);
+        setPrefillHint(false);
+        setBidContext(null);
         setQuestionnaireResponse({});
-        // Clear response status if no response exists
         setSelectedQuestionnaire((prev) => {
           if (prev && prev.id === questionnaireId) {
-            return {
-              ...prev,
-              responses: []
-            };
+            return { ...prev, responses: [] };
           }
           return prev;
         });
       } else {
-        // Other errors - log but don't clear state
         console.error('Error loading response:', error);
       }
     }
   };
+
+  // Always load profile status on mount — needed for tender action gates (Q&A, ESPD, bid)
+  useEffect(() => {
+    fetchProfile({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'overview') {
@@ -509,11 +493,13 @@ const SupplierDashboard = () => {
     } else if (activeTab === 'profile') {
       fetchProfile();
       fetchCompleteness();
-    } else if (activeTab === 'questionnaires') {
-      fetchActiveQuestionnaires();
+    } else if (activeTab === 'tenders') {
+      // Ensure approval status is known before enabling tender actions
+      if (!profile) fetchProfile({ silent: true });
     } else if (activeTab === 'history') {
       fetchQuestionnaireHistory();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const handleAiProfileApply = (fields: Record<string, string>) => {
@@ -589,7 +575,7 @@ const SupplierDashboard = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      showToast('Please select a valid image (JPEG, PNG)', 'error');
+      showToast(t('msg.invalidProfileImage'), 'error');
       return;
     }
     setUploadingPicture(true);
@@ -601,10 +587,10 @@ const SupplierDashboard = () => {
       });
       await refreshUser();
       fetchProfile();
-      showToast('Profile picture updated successfully', 'success');
+      showToast(t('msg.profilePictureUpdated'), 'success');
       if (profilePictureRef.current) profilePictureRef.current.value = '';
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Failed to upload profile picture', 'error');
+      showToast(error.response?.data?.message || t('msg.failedUploadProfilePicture'), 'error');
     } finally {
       setUploadingPicture(false);
     }
@@ -615,9 +601,9 @@ const SupplierDashboard = () => {
       await api.delete('/auth/profile-picture');
       await refreshUser();
       fetchProfile();
-      showToast('Profile picture removed', 'success');
+      showToast(t('msg.profilePictureRemoved'), 'success');
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Failed to remove profile picture', 'error');
+      showToast(error.response?.data?.message || t('msg.failedRemoveProfilePicture'), 'error');
     }
   };
 
@@ -679,44 +665,14 @@ const SupplierDashboard = () => {
   const getDocumentsForQuestion = (documentType: string) =>
     (documents || []).filter((d) => d.documentType === documentType && d.isActive !== false);
 
-  const getQuestionnaireTaskStatus = (questionnaire: Questionnaire): 'open' | 'draft' | 'submitted' | 'overdue' => {
-    const hasResponse = questionnaire.responses && questionnaire.responses.length > 0;
-    const isSubmitted = hasResponse && questionnaire.responses?.[0]?.status === 'submitted';
-    const isExpired = new Date(questionnaire.deadline) < new Date();
-    if (isSubmitted) return 'submitted';
-    if (isExpired) return 'overdue';
-    if (hasResponse) return 'draft';
-    return 'open';
-  };
-
-  const filteredQuestionnaires = [...activeQuestionnaires]
-    .filter((q) => questionnaireFilter === 'all' || getQuestionnaireTaskStatus(q) === questionnaireFilter)
-    .sort((a, b) => {
-      if (questionnaireSort === 'deadline') {
-        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-      }
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
-  const {
-    page: questionnairePage,
-    setPage: setQuestionnairePage,
-    paginatedItems: paginatedQuestionnaires,
-    total: filteredQuestionnaireTotal,
-    pageSize: questionnairePageSize
-  } = useListPagination(filteredQuestionnaires);
-
   const {
     page: historyPage,
     setPage: setHistoryPage,
     paginatedItems: paginatedHistory,
     total: historyTotal,
-    pageSize: historyPageSize
+    pageSize: historyPageSize,
+    setPageSize: setHistoryPageSize
   } = useListPagination(questionnaireHistory);
-
-  useEffect(() => {
-    setQuestionnairePage(1);
-  }, [questionnaireFilter, questionnaireSort, setQuestionnairePage]);
 
   const showSubmitButton = profile && (
     profile.status === 'pending' ||
@@ -755,10 +711,7 @@ const SupplierDashboard = () => {
     </div>
   );
 
-  const getDocumentUrl = (doc: { filePath: string }) => {
-    const filename = doc.filePath.replace(/^.*[\\\/]/, '');
-    return `${UPLOADS_BASE}/${filename}`;
-  };
+  const getDocumentUrl = (doc: { filePath: string }) => uploadsUrl(doc.filePath) || '#';
 
   const handleProfileQuestionDocumentUpload = async (documentType: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -829,20 +782,16 @@ const SupplierDashboard = () => {
 
       const saveResponse = await api.post(`/questionnaires/${selectedQuestionnaire.id}/responses`, {
         answers,
-        status: 'draft'
+        status: 'draft',
+        ...(bidProcedureId ? { procedureId: bidProcedureId } : {})
       });
 
       console.log('Save response from backend:', saveResponse.data);
 
       showToast(t('msg.savedAsDraft'), 'success');
-      
-      // Reload questionnaires to update status
-      await fetchActiveQuestionnaires();
-      
+
       // Close modal after saving
-      setSelectedQuestionnaire(null);
-      setQuestionnaireResponse({});
-      setResponseDocuments({});
+      closeQuestionnaireModal();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
     } finally {
@@ -893,18 +842,14 @@ const SupplierDashboard = () => {
 
       await api.post(`/questionnaires/${selectedQuestionnaire.id}/responses`, {
         answers,
-        status: 'submitted'
+        status: 'submitted',
+        ...(bidProcedureId ? { procedureId: bidProcedureId } : {})
       });
 
       showToast(t('msg.questionnaireSubmitted'), 'success');
-      
-      // Reload questionnaires to update status
-      await fetchActiveQuestionnaires();
-      
+
       // Close modal after submitting
-      setSelectedQuestionnaire(null);
-      setQuestionnaireResponse({});
-      setResponseDocuments({});
+      closeQuestionnaireModal();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedSubmitQuestionnaire'), 'error');
     } finally {
@@ -938,8 +883,10 @@ const SupplierDashboard = () => {
   const sidebarItems = [
     { id: 'overview', label: t('supplierPortal.navOverview'), icon: LayoutDashboard },
     { id: 'profile', label: t('supplierPortal.navProfile'), icon: User },
-    { id: 'questionnaires', label: t('supplierPortal.navQuestionnaires'), icon: FileText },
+    { id: 'tenders', label: t('procedures.navTenders'), icon: Briefcase },
+    { id: 'contracts', label: t('contracts.nav'), icon: ScrollText },
     { id: 'history', label: t('supplierPortal.navHistory'), icon: History },
+    { id: 'ai-preferences', label: t('common.aiPreferences'), icon: Sparkles },
   ];
 
   return (
@@ -953,6 +900,37 @@ const SupplierDashboard = () => {
         onTabSelect={setActiveTab}
         headerExtra={<SupplierNotificationsBell onNavigate={handleNavigateTab} />}
       >
+            <AccountStatusBanner
+              status={profile?.status}
+              rejectionReason={profile?.rejectionReason}
+              roleLabel={t('nav.supplier')}
+            />
+
+            {activeTab === 'profile' && (
+              <div className="mb-4">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700"
+                  onClick={async () => {
+                    try {
+                      const res = await api.get('/ai-extras/completeness');
+                      const issues = res.data.issues || [];
+                      showToast(
+                        res.data.ready
+                          ? t('supplierPortal.completenessOk', { defaultValue: 'Profile looks complete' })
+                          : `${issues.length} issue(s): ${issues.map((i: any) => i.message).join('; ')}`,
+                        res.data.ready ? 'success' : 'warning'
+                      );
+                    } catch (error: any) {
+                      showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
+                    }
+                  }}
+                >
+                  {t('supplierPortal.aiCompletenessCheck', { defaultValue: 'AI completeness check' })}
+                </button>
+              </div>
+            )}
+
             {/* Overview */}
             {activeTab === 'overview' && (
               <SupplierOverviewTab
@@ -962,140 +940,22 @@ const SupplierDashboard = () => {
               />
             )}
 
-            {/* Active Questionnaires Tab */}
-            {activeTab === 'questionnaires' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{t('supplierPortal.buyerQuestionnaires')}</h2>
-                    <p className="text-sm text-gray-500 mt-1">{t('sections.respondToQuestionnaires')}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(['all', 'open', 'draft', 'submitted', 'overdue'] as const).map((filter) => (
-                      <button
-                        key={filter}
-                        type="button"
-                        onClick={() => setQuestionnaireFilter(filter)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                          questionnaireFilter === filter
-                            ? 'bg-primary-600 text-white'
-                            : 'bg-surface text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {t(`supplierPortal.filter${filter.charAt(0).toUpperCase()}${filter.slice(1)}`)}
-                      </button>
-                    ))}
-                    <select
-                      value={questionnaireSort}
-                      onChange={(e) => setQuestionnaireSort(e.target.value as 'deadline' | 'newest')}
-                      className="text-sm border border-border rounded-lg px-3 py-1.5 bg-white"
-                    >
-                      <option value="deadline">{t('supplierPortal.sortByDeadline')}</option>
-                      <option value="newest">{t('supplierPortal.sortByNewest')}</option>
-                    </select>
-                  </div>
-                </div>
-
-                {loading && activeQuestionnaires.length === 0 ? (
-                  <div className="text-center py-16">
-                    <div className="inline-flex flex-col items-center">
-                      <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
-                      <p className="mt-6 text-gray-600 font-medium">{t('sections.loadingQuestionnaires')}</p>
-                    </div>
-                  </div>
-                ) : filteredQuestionnaires.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-primary-50/30 rounded-xl border-2 border-dashed border-gray-300">
-                    <FileText className="text-gray-400 mx-auto mb-4" size={48} />
-                    <p className="text-lg font-semibold text-gray-700">{t('sections.noActiveQuestionnaires')}</p>
-                    <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
-                      {t('sections.noActiveQuestionnairesHint')}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {paginatedQuestionnaires.map((questionnaire) => {
-                      const hasResponse = questionnaire.responses && questionnaire.responses.length > 0;
-                      const isSubmitted = hasResponse && questionnaire.responses?.[0]?.status === 'submitted';
-                      const isExpired = new Date(questionnaire.deadline) < new Date();
-
-                      return (
-                        <QuestionnaireSlimRow
-                          key={questionnaire.id}
-                          title={questionnaire.title}
-                          description={questionnaire.description}
-                          meta={
-                            <>
-                              <span className="inline-flex items-center gap-1">
-                                <Building2 size={14} />
-                                {questionnaire.cpvCode?.code} - {questionnaire.cpvCode?.description}
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <Calendar size={14} />
-                                {t('columns.deadline')}: {new Date(questionnaire.deadline).toLocaleDateString()}
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <FileText size={14} />
-                                {questionnaire.questions?.length || 0} {t('sections.questionsCount')}
-                              </span>
-                            </>
-                          }
-                          trailing={
-                            <>
-                              {isSubmitted && (
-                                <StatusBadge tone="green">{t('common.submitted')}</StatusBadge>
-                              )}
-                              {hasResponse && !isSubmitted && (
-                                <StatusBadge tone="yellow">{t('common.draft')}</StatusBadge>
-                              )}
-                              {isExpired && (
-                                <StatusBadge tone="red">{t('common.expired')}</StatusBadge>
-                              )}
-                              {!isExpired && !isSubmitted && (
-                                <RowActionButton
-                                  variant="primary"
-                                  onClick={async () => {
-                                    await loadQuestionnaireResponse(questionnaire.id);
-                                    setSelectedQuestionnaire(questionnaire);
-                                  }}
-                                >
-                                  {hasResponse ? <Edit2 size={14} /> : <Plus size={14} />}
-                                  {hasResponse ? t('buttons.continue') : t('buttons.respond')}
-                                </RowActionButton>
-                              )}
-                              {isSubmitted && (
-                                <RowActionButton
-                                  variant="secondary"
-                                  onClick={async () => {
-                                    await loadQuestionnaireResponse(questionnaire.id);
-                                    setSelectedQuestionnaire(questionnaire);
-                                  }}
-                                >
-                                  <Eye size={14} />
-                                  {t('buttons.view')}
-                                </RowActionButton>
-                              )}
-                            </>
-                          }
-                        />
-                      );
-                    })}
-                    <ListPagination
-                      page={questionnairePage}
-                      pageSize={questionnairePageSize}
-                      total={filteredQuestionnaireTotal}
-                      onPageChange={setQuestionnairePage}
-                      itemLabel={t('nav.questionnaires').toLowerCase()}
-                    />
-                  </div>
-                )}
-              </div>
+            {activeTab === 'tenders' && (
+              <SupplierTendersPanel
+                accountApproved={profile?.status === 'approved'}
+                onOpenQuestionnaire={openLinkedQuestionnaire}
+              />
             )}
+
+            {activeTab === 'contracts' && <SupplierContractsPanel />}
 
             {/* History Tab */}
             {activeTab === 'history' && (
-              <div className="space-y-6">
+              <div className="space-y-8">
+                <SupplierTendersPanel mode="history" accountApproved={profile?.status === 'approved'} />
+
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{t('sections.questionHistory')}</h2>
+                  <h2 className="text-base font-bold text-gray-900">{t('sections.questionHistory')}</h2>
                   <p className="text-sm text-gray-500 mt-1">{t('sections.viewSubmittedQuestionnaires')}</p>
                 </div>
 
@@ -1113,34 +973,36 @@ const SupplierDashboard = () => {
                     <p className="text-sm text-gray-500 mt-2">{t('sections.submittedHistoryWillAppear')}</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {paginatedHistory.map((response) => (
                       <QuestionnaireSlimRow
                         key={response.id}
                         title={response.questionnaire?.title || ''}
+                        badges={<StatusBadge tone="green">{t('common.submitted')}</StatusBadge>}
                         meta={
                           <>
-                            <span className="inline-flex items-center gap-1">
-                              <Building2 size={14} />
-                              {response.questionnaire?.cpvCode?.code} - {response.questionnaire?.cpvCode?.description}
+                            <span className="inline-flex items-center gap-1.5 min-w-0">
+                              <Building2 size={14} className="shrink-0" />
+                              <span className="truncate">
+                                {response.questionnaire?.cpvCode?.code} - {response.questionnaire?.cpvCode?.description}
+                              </span>
                             </span>
-                            {response.submittedAt && (
-                              <span className="inline-flex items-center gap-1">
-                                <Calendar size={14} />
+                            {response.submittedAt ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <Calendar size={14} className="shrink-0" />
                                 {t('columns.submittedAt')}: {new Date(response.submittedAt).toLocaleDateString()}
                               </span>
-                            )}
-                            {response.questionnaire?.deadline && (
-                              <span className="inline-flex items-center gap-1">
-                                <Calendar size={14} />
+                            ) : null}
+                            {response.questionnaire?.deadline ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <Calendar size={14} className="shrink-0" />
                                 {t('columns.deadline')}: {new Date(response.questionnaire.deadline).toLocaleDateString()}
                               </span>
-                            )}
+                            ) : null}
                           </>
                         }
                         trailing={
                           <>
-                            <StatusBadge tone="green">{t('common.submitted')}</StatusBadge>
                             <RowActionButton
                               variant="secondary"
                               onClick={async () => {
@@ -1170,6 +1032,8 @@ const SupplierDashboard = () => {
                                   });
                                 }
                                 setQuestionnaireResponse(preloadedAnswers);
+                                setBidProcedureId(response.procedureId || null);
+                                setPrefillHint(false);
                                 setSelectedQuestionnaire({
                                   ...response.questionnaire,
                                   responses: [{
@@ -1178,7 +1042,10 @@ const SupplierDashboard = () => {
                                     submittedAt: response.submittedAt
                                   }]
                                 });
-                                await loadQuestionnaireResponse(response.questionnaire.id);
+                                await loadQuestionnaireResponse(
+                                  response.questionnaire.id,
+                                  response.procedureId || null
+                                );
                               }}
                             >
                               <Eye size={14} />
@@ -1193,10 +1060,17 @@ const SupplierDashboard = () => {
                       pageSize={historyPageSize}
                       total={historyTotal}
                       onPageChange={setHistoryPage}
+                      onPageSizeChange={setHistoryPageSize}
                       itemLabel={t('nav.history').toLowerCase()}
                     />
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'ai-preferences' && (
+              <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 p-4 sm:p-6">
+                <AiPreferencesPanel />
               </div>
             )}
 
@@ -1260,14 +1134,14 @@ const SupplierDashboard = () => {
                       <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl border border-gray-200/50 flex flex-col max-h-[calc(100vh-var(--portal-header-height)-5.5rem)] lg:max-h-[calc(100vh-var(--portal-header-height)-4rem)] min-h-[280px]">
                         {/* Sticky: photo + edit/save/cancel + qualification status */}
                         <div className="shrink-0 px-3 sm:px-4 pt-3 pb-2 border-b border-gray-200 bg-white/95 backdrop-blur-sm rounded-t-2xl z-10">
-                          <h3 className="text-lg font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
+                          <h3 className="text-base font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                               <div className="relative group shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-gray-200">
                                 <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
                                   {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
                                     <img
-                                      src={`${UPLOADS_BASE}/${profile?.user?.profilePicture ?? user?.profilePicture}`}
+                                      src={uploadsUrl(profile?.user?.profilePicture ?? user?.profilePicture) || undefined}
                                       alt="Profile"
                                       className="w-full h-full object-cover"
                                     />
@@ -1388,7 +1262,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.firstName || 'N/A'}
+                                {profileData.firstName || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1403,14 +1277,14 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.lastName || 'N/A'}
+                                {profileData.lastName || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.email')}</label>
                             <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                              {profileData.email || 'N/A'}
+                              {profileData.email || t('common.na')}
                             </div>
                           </div>
                           <div>
@@ -1424,7 +1298,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.phone || 'N/A'}
+                                {profileData.phone || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1439,7 +1313,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.companyName || 'N/A'}
+                                {profileData.companyName || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1454,7 +1328,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.registrationNumber || 'N/A'}
+                                {profileData.registrationNumber || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1469,7 +1343,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.taxId || 'N/A'}
+                                {profileData.taxId || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1484,7 +1358,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.address || 'N/A'}
+                                {profileData.address || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1499,7 +1373,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.city || 'N/A'}
+                                {profileData.city || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1514,7 +1388,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.country || 'N/A'}
+                                {profileData.country || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1529,7 +1403,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.website || 'N/A'}
+                                {profileData.website || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1544,7 +1418,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.employeeCount || 'N/A'}
+                                {profileData.employeeCount || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1559,7 +1433,7 @@ const SupplierDashboard = () => {
                               />
                             ) : (
                               <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                {profileData.yearEstablished || 'N/A'}
+                                {profileData.yearEstablished || t('common.na')}
                               </div>
                             )}
                           </div>
@@ -1613,7 +1487,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                  {profileData.financialStability || 'N/A'}
+                                  {profileData.financialStability || t('common.na')}
                                 </div>
                               )}
                               {renderProfileDocuments(DOCUMENT_TYPES.q2)}
@@ -1710,7 +1584,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                  {profileData.qualityManagementSystem || 'N/A'}
+                                  {profileData.qualityManagementSystem || t('common.na')}
                                 </div>
                               )}
                               {renderProfileDocuments(DOCUMENT_TYPES.q5)}
@@ -1731,7 +1605,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                  {profileData.environmentalManagementSystem || 'N/A'}
+                                  {profileData.environmentalManagementSystem || t('common.na')}
                                 </div>
                               )}
                               {renderProfileDocuments(DOCUMENT_TYPES.q6)}
@@ -1752,7 +1626,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                  {profileData.socialResponsibilityManagementSystem || 'N/A'}
+                                  {profileData.socialResponsibilityManagementSystem || t('common.na')}
                                 </div>
                               )}
                               {renderProfileDocuments(DOCUMENT_TYPES.q7)}
@@ -1773,7 +1647,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                  {profileData.ohsManagementSystem || 'N/A'}
+                                  {profileData.ohsManagementSystem || t('common.na')}
                                 </div>
                               )}
                               {renderProfileDocuments(DOCUMENT_TYPES.q8)}
@@ -1798,7 +1672,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                  {profileData.groundsForExclusion || 'N/A'}
+                                  {profileData.groundsForExclusion || t('common.na')}
                                 </div>
                               )}
                             </div>
@@ -1818,7 +1692,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                  {profileData.laborLawRegulations || 'N/A'}
+                                  {profileData.laborLawRegulations || t('common.na')}
                                 </div>
                               )}
                             </div>
@@ -1838,7 +1712,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                  {profileData.sanctionsRussiaBelarus || 'N/A'}
+                                  {profileData.sanctionsRussiaBelarus || t('common.na')}
                                 </div>
                               )}
                             </div>
@@ -1862,7 +1736,7 @@ const SupplierDashboard = () => {
                                 />
                               ) : (
                                 <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 whitespace-pre-wrap">
-                                  {profileData.technicalCapacityProfessionalExperience || 'N/A'}
+                                  {profileData.technicalCapacityProfessionalExperience || t('common.na')}
                                 </div>
                               )}
                             </div>
@@ -1891,7 +1765,7 @@ const SupplierDashboard = () => {
                                     />
                                   ) : (
                                     <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                      {profileData.insurerName || 'N/A'}
+                                      {profileData.insurerName || t('common.na')}
                                     </div>
                                   )}
                                 </div>
@@ -1906,7 +1780,7 @@ const SupplierDashboard = () => {
                                     />
                                   ) : (
                                     <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                      {profileData.insurancePolicyNumber || 'N/A'}
+                                      {profileData.insurancePolicyNumber || t('common.na')}
                                     </div>
                                   )}
                                 </div>
@@ -1921,7 +1795,7 @@ const SupplierDashboard = () => {
                                     />
                                   ) : (
                                     <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                      {profileData.insuranceCoverageAmount || 'N/A'}
+                                      {profileData.insuranceCoverageAmount || t('common.na')}
                                     </div>
                                   )}
                                 </div>
@@ -1935,7 +1809,7 @@ const SupplierDashboard = () => {
                                     />
                                   ) : (
                                     <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-                                      {profileData.insuranceValidTo ? new Date(profileData.insuranceValidTo).toLocaleDateString() : 'N/A'}
+                                      {profileData.insuranceValidTo ? new Date(profileData.insuranceValidTo).toLocaleDateString() : t('common.na')}
                                     </div>
                                   )}
                                 </div>
@@ -2043,16 +1917,15 @@ const SupplierDashboard = () => {
           setResponse={setQuestionnaireResponse}
           responseDocuments={responseDocuments}
           setResponseDocuments={setResponseDocuments}
-          onClose={() => {
-            setSelectedQuestionnaire(null);
-            setQuestionnaireResponse({});
-            setResponseDocuments({});
-          }}
+          onClose={closeQuestionnaireModal}
           onSaveDraft={handleSaveDraft}
           onSubmit={handleSubmitQuestionnaire}
           savingDraft={savingDraft}
           submitting={submitting}
           loadResponse={loadQuestionnaireResponse}
+          procedureId={bidProcedureId}
+          prefillHint={prefillHint}
+          bidContext={bidContext}
         />
       )}
     </>
@@ -2083,7 +1956,7 @@ const CPVSelectorModal = ({
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('cpvCodes.modalTitle')}</h3>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('cpvCodes.modalTitle')}</h3>
               <p className="text-sm text-gray-500 mt-1">{t('cpvCodes.modalDescription')}</p>
             </div>
             <button
@@ -2094,16 +1967,11 @@ const CPVSelectorModal = ({
             </button>
           </div>
           <div className="mt-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={t('cpvCodes.searchPlaceholder')}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-              />
-            </div>
+            <SearchField
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t('cpvCodes.searchPlaceholder')}
+            />
           </div>
         </div>
         <div className="p-6">
@@ -2199,7 +2067,7 @@ const NUTSSelectorModal = ({
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('nutsCodes.modalTitle')}</h3>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{t('nutsCodes.modalTitle')}</h3>
               <p className="text-sm text-gray-500 mt-1">{t('nutsCodes.modalDescription')}</p>
             </div>
             <button
@@ -2210,16 +2078,11 @@ const NUTSSelectorModal = ({
             </button>
           </div>
           <div className="mt-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={t('nutsCodes.searchPlaceholder')}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-              />
-            </div>
+            <SearchField
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t('nutsCodes.searchPlaceholder')}
+            />
           </div>
         </div>
         <div className="p-6">
@@ -2354,7 +2217,10 @@ const QuestionnaireResponseModal = ({
   onSubmit,
   savingDraft,
   submitting,
-  loadResponse
+  loadResponse,
+  procedureId = null,
+  prefillHint = false,
+  bidContext = null
 }: any) => {
   const { t } = useTranslation();
   // Load answers when modal opens
@@ -2368,14 +2234,8 @@ const QuestionnaireResponseModal = ({
 
   useEffect(() => {
     if (questionnaire?.id && loadResponse) {
-      console.log('Modal opened, loading response for questionnaire:', questionnaire.id);
-      console.log('Current response state:', response);
-      console.log('Response keys:', Object.keys(response));
-      console.log('Questionnaire has questions:', !!questionnaire.questions, 'Count:', questionnaire.questions?.length || 0);
-      // Always load to ensure we have latest data (including answers)
       setLoadingResponse(true);
-      loadResponse(questionnaire.id).finally(() => {
-        // Small delay to ensure state has updated
+      loadResponse(questionnaire.id, procedureId || null).finally(() => {
         setTimeout(() => {
           setLoadingResponse(false);
         }, 200);
@@ -2383,7 +2243,7 @@ const QuestionnaireResponseModal = ({
     } else {
       setLoadingResponse(false);
     }
-  }, [questionnaire?.id]);
+  }, [questionnaire?.id, procedureId]);
 
   // Check if response is submitted - if so, make it read-only
   // IMPORTANT: Submitted responses should always be viewable (read-only) regardless of expiration.
@@ -2398,9 +2258,11 @@ const QuestionnaireResponseModal = ({
   // Only show as expired if it's NOT submitted AND current deadline has passed.
   const isExpired = !isSubmitted && new Date(questionnaire.deadline) < new Date();
 
-  // Read-only if submitted (always viewable) OR if expired and not submitted (can't edit expired questionnaires)
-  // Submitted responses are always read-only and viewable forever, regardless of current deadline status
-  const isReadOnly = isSubmitted || isExpired;
+  // Prefer server bidContext (procedure status / bid deadline / submitted). Fallback to local checks.
+  const isReadOnly =
+    bidContext && typeof bidContext.editable === 'boolean'
+      ? !bidContext.editable
+      : isSubmitted || isExpired;
 
   // Helper function to get answer for a question - handles both string and UUID formats
   const getAnswer = (questionId: string) => {
@@ -2453,14 +2315,14 @@ const QuestionnaireResponseModal = ({
       return (
         <div>
           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
-            {formatted || 'No answer provided'}
+            {formatted || t('common.noAnswerProvided')}
           </div>
           {/* Document link is shown only in the "Upload Document" section below (when question.requiresDocument) to avoid showing it twice */}
           {answer?.document && !question.requiresDocument && (
             <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
               <FileText size={16} />
               <a 
-                href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${answer.document.filePath.replace(/^.*[\\\/]/, '')}`} 
+                href={uploadsUrl(answer.document.filePath.replace(/^.*[\\\/]/, '')) || '#'} 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="hover:underline"
@@ -2555,7 +2417,7 @@ const QuestionnaireResponseModal = ({
                 }
               });
             }}
-            placeholder="Select date"
+            placeholder={t('common.selectDate')}
             required={question.isRequired}
           />
         );
@@ -2576,7 +2438,7 @@ const QuestionnaireResponseModal = ({
                 className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
                 required={question.isRequired}
               />
-              <span>Yes</span>
+              <span>{t('common.yes')}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -2591,7 +2453,7 @@ const QuestionnaireResponseModal = ({
                 className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
                 required={question.isRequired}
               />
-              <span>No</span>
+              <span>{t('common.no')}</span>
             </label>
           </div>
         );
@@ -2672,7 +2534,7 @@ const QuestionnaireResponseModal = ({
               required={question.isRequired}
               style={{ minHeight: '48px' }}
             >
-              <option value="">Select an option</option>
+              <option value="">{t('common.selectOption')}</option>
               {question.options?.map((option: string, index: number) => (
                 <option key={index} value={option}>{option}</option>
               ))}
@@ -2691,13 +2553,13 @@ const QuestionnaireResponseModal = ({
         <div className="sticky top-0 bg-gradient-to-r from-white to-primary-50/30 border-b border-gray-200/50 px-6 py-5 backdrop-blur-lg">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{questionnaire.title}</h3>
+              <h3 className="text-base font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">{questionnaire.title}</h3>
               <p className="text-sm text-gray-500 mt-1">
                 {t('columns.deadline')}: {new Date(questionnaire.deadline).toLocaleDateString()}
                 {/* Only show expired if NOT submitted - submitted responses are always viewable */}
-                {isExpired && !isSubmitted && <span className="text-red-600 ml-2">(Expired)</span>}
-                {isSubmitted && <span className="text-green-600 ml-2">(Submitted)</span>}
-                {responseStatus === 'draft' && <span className="text-yellow-600 ml-2">(Draft)</span>}
+                {isExpired && !isSubmitted && <span className="text-red-600 ml-2">{t('sections.statusExpiredParen')}</span>}
+                {isSubmitted && <span className="text-green-600 ml-2">{t('sections.statusSubmittedParen')}</span>}
+                {responseStatus === 'draft' && <span className="text-yellow-600 ml-2">{t('sections.statusDraftParen')}</span>}
               </p>
             </div>
             <button
@@ -2713,7 +2575,7 @@ const QuestionnaireResponseModal = ({
             <div className="text-center py-12">
               <div className="inline-flex flex-col items-center">
                 <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
-                <p className="mt-4 text-gray-600 font-medium">Loading your answers...</p>
+                <p className="mt-4 text-gray-600 font-medium">{t('sections.loadingAnswers')}</p>
               </div>
             </div>
           ) : (
@@ -2721,6 +2583,44 @@ const QuestionnaireResponseModal = ({
               {questionnaire.description && (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <p className="text-gray-700">{questionnaire.description}</p>
+                </div>
+              )}
+              {prefillHint && !isReadOnly && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="text-sm text-amber-900">
+                    {t('procedures.prefillFromPrevious', {
+                      defaultValue:
+                        'Answers were prefilled from a previous submission. Review and edit them for this tender, then save or submit.'
+                    })}
+                  </p>
+                </div>
+              )}
+              {isReadOnly && bidContext?.reason && bidContext.reason !== 'submitted' && (
+                <div className="bg-slate-100 border border-slate-200 rounded-xl p-4">
+                  <p className="text-sm text-slate-800">
+                    {bidContext.reason === 'bid_deadline_passed'
+                      ? t('procedures.lockedBidDeadline', {
+                          defaultValue: 'Bid deadline has passed — answers are locked for this tender.'
+                        })
+                      : bidContext.reason === 'procedure_closed'
+                        ? t('procedures.lockedProcedureClosed', {
+                            defaultValue:
+                              'This procedure is no longer open for bids — answers are view-only.'
+                          })
+                        : t('procedures.lockedGeneric', {
+                            defaultValue: 'Answers are locked for this tender.'
+                          })}
+                  </p>
+                </div>
+              )}
+              {procedureId && !isReadOnly && !prefillHint && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  <p className="text-xs text-slate-600">
+                    {t('procedures.bidScopedHint', {
+                      defaultValue:
+                        'Answers for this tender are saved separately from other procedures that use the same questionnaire.'
+                    })}
+                  </p>
                 </div>
               )}
               {!isReadOnly && !loadingResponse && (
@@ -2770,7 +2670,7 @@ const QuestionnaireResponseModal = ({
                     <div className="mt-2 mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg">
                       <FileText size={18} className="text-blue-600 flex-shrink-0" />
                       <a
-                        href={`${UPLOADS_BASE}/${question.attachedDocument.filePath.replace(/^.*[\\/]/, '')}`}
+                        href={uploadsUrl(question.attachedDocument.filePath.replace(/^.*[\\/]/, '')) || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:underline font-medium text-sm truncate"
@@ -2786,7 +2686,9 @@ const QuestionnaireResponseModal = ({
                   {question.requiresDocument && (
                     <div className="mt-3">
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        {isReadOnly ? `Preview/Download ${question.documentType || 'document'}` : `Attach ${question.documentType || 'document'}`}
+                        {isReadOnly
+                          ? t('sections.previewDownloadType', { type: question.documentType || t('sections.documentFallback') })
+                          : t('sections.attachDocumentType', { type: question.documentType || t('sections.documentFallback') })}
                       </label>
                       {isReadOnly ? (
                         <div>
@@ -2794,7 +2696,7 @@ const QuestionnaireResponseModal = ({
                             <div className="flex items-center gap-2 text-sm text-blue-600">
                               <FileText size={16} />
                               <a 
-                                href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${response[question.id].document.filePath.replace(/^.*[\\\/]/, '')}`} 
+                                href={uploadsUrl(response[question.id].document.filePath.replace(/^.*[\\\/]/, '')) || '#'} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
                                 className="hover:underline"
@@ -2803,7 +2705,7 @@ const QuestionnaireResponseModal = ({
                               </a>
                             </div>
                           ) : (
-                            <div className="text-sm text-gray-500">No document uploaded</div>
+                            <div className="text-sm text-gray-500">{t('sections.noDocumentUploaded')}</div>
                           )}
                         </div>
                       ) : (
@@ -2813,12 +2715,12 @@ const QuestionnaireResponseModal = ({
                               <FileText size={16} />
                               <span>{response[question.id].document.fileName}</span>
                               <a 
-                                href={`${import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads'}/${response[question.id].document.filePath.replace(/^.*[\\\/]/, '')}`} 
+                                href={uploadsUrl(response[question.id].document.filePath.replace(/^.*[\\\/]/, '')) || '#'} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
                                 className="text-blue-600 hover:underline"
                               >
-                                View
+                                {t('buttons.view')}
                               </a>
                             </div>
                           ) : null}
@@ -2852,12 +2754,12 @@ const QuestionnaireResponseModal = ({
                 {savingDraft ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
-                    Saving...
+                    {t('common.saving')}
                   </>
                 ) : (
                   <>
                     <Save size={18} />
-                    Save as Draft
+                    {t('sections.saveAsDraft')}
                   </>
                 )}
               </button>
@@ -2869,12 +2771,12 @@ const QuestionnaireResponseModal = ({
                 {submitting ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Submitting...
+                    {t('common.submitting')}
                   </>
                 ) : (
                   <>
                     <CheckCircle size={18} />
-                    Submit
+                    {t('common.submit')}
                   </>
                 )}
               </button>
@@ -2883,7 +2785,7 @@ const QuestionnaireResponseModal = ({
           {isReadOnly && isSubmitted && (
             <div className="flex justify-end pt-6 border-t border-gray-200/50">
               <div className="px-4 py-2 bg-green-100 text-green-700 rounded-xl text-sm font-semibold">
-                ✓ Submitted - This response is now read-only
+                ✓ {t('sections.responseReadOnly')}
               </div>
             </div>
           )}

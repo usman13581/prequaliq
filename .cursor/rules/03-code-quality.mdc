@@ -1,0 +1,58 @@
+---
+description: Coding standards to avoid glitches, drift, and brittle code
+globs: "**/*.{ts,tsx,js,jsx}"
+alwaysApply: false
+---
+
+# Code Quality
+
+## Language & style
+
+- Frontend: TypeScript, functional components + hooks. Avoid `any`; type API payloads and props.
+- Backend: CommonJS JavaScript matching existing controllers/models.
+- Prefer clear names over clever abstractions; keep diffs focused on the task.
+
+## Errors & async
+
+```ts
+// ❌ BAD
+try { await api.get('/x'); } catch (e) {}
+
+// ✅ GOOD
+try {
+  await api.get('/x');
+} catch (error: unknown) {
+  const message =
+    (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+    || t('msg.somethingWentWrong');
+  showToast(message, 'error');
+}
+```
+
+- Never swallow errors. Always handle loading → success/empty → error in UI that fetches.
+- Guard `useEffect` fetches with `user?.id` / active tab; cancel or ignore stale responses when tab changes.
+
+## Lists & state
+
+- Client lists: `useListPagination` + `ListPagination` (default page size 10).
+- Controlled forms; don’t leave orphaned state when closing `SlideOver` / modals.
+- Map status enums to labels via existing helpers — never show raw DB enums in UI.
+
+## i18n
+
+- All user-visible strings via `t('key')` — no hardcoded English/Swedish in JSX.
+- Add keys to **both** `locales/en.json` and `locales/sv.json`.
+
+## Reuse before invent
+
+- Buttons: `.btn-save`, `.btn-approve`, `.btn-reject`, `.btn-cancel`, `.btn-delete`, `.btn-close`.
+- Inputs: `.input-brand`; dates: `DateOnlyPicker`; icons: `lucide-react` only.
+- Toasts: `useToast().showToast(message, 'success' | 'error' | 'warning' | 'info')`.
+
+## Glitch prevention checklist
+
+- [ ] Empty `catch` or missing toast on failed mutation?
+- [ ] Missing loading/empty state on lists?
+- [ ] Effect missing dependency causing double-fetch or stale tab data?
+- [ ] Untranslated string or only one locale updated?
+- [ ] New one-off color/button instead of existing class?

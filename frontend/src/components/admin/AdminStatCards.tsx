@@ -29,7 +29,7 @@ export function AdminStatCard({ label, value, hint, icon: Icon, accent = 'blue',
           <p className="text-2xl sm:text-3xl font-bold text-foreground mt-1 tabular-nums">{value}</p>
           {hint && <p className="text-xs text-muted mt-1.5">{hint}</p>}
           {badge && (
-            <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-accent-subtle text-accent">
+            <span className="inline-block mt-2 text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-accent-subtle text-accent">
               {badge}
             </span>
           )}
@@ -81,7 +81,7 @@ export function AdminStatsGrid({ children }: { children: React.ReactNode }) {
 export function AdminSectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-4">
-      <h2 className="text-xl font-bold text-foreground">{title}</h2>
+      <h2 className="text-base font-bold text-foreground">{title}</h2>
       {subtitle && <p className="text-sm text-muted mt-0.5">{subtitle}</p>}
     </div>
   );

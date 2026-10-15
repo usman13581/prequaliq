@@ -1,4 +1,5 @@
 const db = require('../models');
+const { sendServerError } = require('../utils/httpError');
 
 // Get CPV count (for debugging empty list)
 const getCPVCount = async (req, res) => {
@@ -7,16 +8,16 @@ const getCPVCount = async (req, res) => {
     res.json({ count });
   } catch (error) {
     console.error('Get CPV count error:', error);
-    res.status(500).json({ message: 'Error', error: error.message });
+    return sendServerError(res, error, 'Error fetching CPV count');
   }
 };
 
-// Get all CPV codes (with optional search and limit to avoid huge responses)
+// Get CPV codes (search against full catalog; paginate — catalog is ~10k)
 const getCPVCodes = async (req, res) => {
   try {
-    const { search, level, limit: limitParam } = req.query;
+    const { search, level, limit: limitParam, offset: offsetParam } = req.query;
 
-    const where = {};
+    const where = { isActive: true };
     if (search && typeof search === 'string' && search.trim()) {
       const term = `%${search.trim()}%`;
       where[db.Sequelize.Op.or] = [
@@ -28,15 +29,16 @@ const getCPVCodes = async (req, res) => {
       where.level = parseInt(level);
     }
 
-    const limit = Math.min(parseInt(limitParam, 10) || 2000, 5000);
-    const cpvCodes = await db.CPVCode.findAll({
+    const limit = Math.min(parseInt(limitParam, 10) || 500, 20000);
+    const offset = Math.max(parseInt(offsetParam, 10) || 0, 0);
+    const { rows: cpvCodes, count: total } = await db.CPVCode.findAndCountAll({
       where,
       order: [['code', 'ASC']],
-      limit
+      limit,
+      offset
     });
 
-    console.log('[CPV] Returning', cpvCodes.length, 'codes (limit', limit + ')');
-    res.json({ cpvCodes });
+    res.json({ cpvCodes, total, limit, offset });
   } catch (error) {
     console.error('Get CPV codes error:', error);
     res.status(500).json({ message: 'Error fetching CPV codes', error: error.message });

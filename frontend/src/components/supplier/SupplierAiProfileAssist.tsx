@@ -378,7 +378,7 @@ function Drawer() {
         <button
           type="button"
           onClick={openDrawer}
-          className="fixed right-0 top-[var(--portal-header-height)] bottom-0 z-40 hidden sm:flex w-9 flex-col items-center justify-center gap-1 rounded-l-xl bg-violet-600 text-white text-[10px] font-bold shadow-lg hover:bg-violet-700 transition-colors"
+          className="fixed right-0 top-[var(--portal-header-height)] bottom-0 z-40 hidden sm:flex w-9 flex-col items-center justify-center gap-1 rounded-l-xl bg-violet-600 text-white text-xs font-bold shadow-lg hover:bg-violet-700 transition-colors"
           aria-label={t('supplierPortal.aiProfileShowSuggestions', { count: suggestionCount })}
         >
           <ChevronLeft size={16} />
@@ -482,7 +482,7 @@ function Drawer() {
             {nonConflictCount > 0 && (
               <div className="rounded-lg bg-white border border-gray-200 p-3">
                 <p className="text-xs font-semibold text-gray-700 mb-1">{t('supplierPortal.aiProfileSuggestions')}</p>
-                <p className="text-[11px] text-muted mb-2">{t('supplierPortal.aiProfileSuggestionsHint')}</p>
+                <p className="text-xs text-muted mb-2">{t('supplierPortal.aiProfileSuggestionsHint')}</p>
                 <ul className="space-y-2">
                   {Object.entries(result.suggestions).map(([field, sug]) => {
                     if (sug.conflict) return null;

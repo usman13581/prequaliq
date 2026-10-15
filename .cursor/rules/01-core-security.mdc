@@ -1,0 +1,46 @@
+---
+description: Core agent behavior and security non-negotiables for all work
+alwaysApply: true
+---
+
+# Core + Security
+
+## Agent behavior
+
+- Match existing patterns; reuse shared components before inventing new ones.
+- Do not expand scope, add unrequested features, or create docs/markdown unless asked.
+- Prefer editing existing files over adding new ones; extract only when reused 2+ times.
+- Ask before large refactors, new dependencies, or destructive git operations.
+- Never commit secrets (`.env`, keys, tokens). Use env vars only.
+
+## Stack (do not replace)
+
+- Backend: Node.js, Express, PostgreSQL, Sequelize, JWT, CommonJS JS
+- Frontend: React, TypeScript, Vite, Tailwind, react-i18next, axios, lucide-react
+- Auth: JWT in `localStorage` (`token`); `ProtectedRoute` + role guards
+
+## Security
+
+- Protect every private route with `authenticate` + `authorize(role)` on the backend.
+- Validate/sanitize on the server; never trust client-only checks (including entitlements).
+- Parameterized Sequelize queries only — no string-built SQL.
+- Do not log passwords, tokens, or full PII payloads.
+- CORS stays locked to `FRONTEND_URL`; uploads stay under controlled `/uploads`.
+- Frontend API 401 → clear token and redirect to `/login` (existing `api.ts` behavior).
+- Do not extend “remember me” password storage patterns; do not store credentials in plaintext/base64.
+
+```js
+// ❌ BAD — unprotected or client-trusted auth
+router.get('/items', controller.list);
+
+// ✅ GOOD
+router.get('/items', authenticate, authorize('procuring_entity'), controller.list);
+```
+
+```ts
+// ❌ BAD
+localStorage.setItem('password', value);
+
+// ✅ GOOD — store only JWT; secrets in env
+Authorization: `Bearer ${token}`
+```

@@ -141,9 +141,9 @@ QUESTION rules:
 - If no CPV list is provided, return empty selectedCpvCodes array.
 - No markdown. JSON only."""
 
-QUESTIONNAIRE_UNDERSTAND_PROMPT = """You are NOT a general chatbot. You ONLY validate notes for a supplier qualification questionnaire tool used in public procurement.
+QUESTIONNAIRE_UNDERSTAND_PROMPT = """You validate short notes for a supplier qualification questionnaire tool used in public procurement.
 
-Your job: decide if the user's text describes something they want to PROCURE (works, services, or supplies). You do NOT answer their questions.
+Default to ACCEPT. Reject ONLY when the text is clearly unrelated chat, trivia, travel, jokes, or general-knowledge questions.
 
 Return ONLY valid JSON:
 {
@@ -153,24 +153,29 @@ Return ONLY valid JSON:
   "rejectionReason": "polite refusal — only if isValid is false, else empty string"
 }
 
-isValid TRUE examples (procurement intent):
+isValid TRUE examples (accept these and similar):
 - "need to construct a bridge"
-- "office cleaning services"
-- "IT support contract with ISO 27001"
+- "office cleaning"
+- "IT support with ISO 27001"
+- "we need furniture for municipal offices"
+- "snow removal for city roads"
+- "paint and facade renovation"
+- "looking for catering for schools"
+- Short notes naming works, services, goods, facilities, maintenance, or suppliers to qualify
 
-isValid FALSE examples (reject — do NOT echo the question as understanding):
-- "which place is beautiful ISB or LHR" (travel/opinion — NOT procurement)
+isValid FALSE examples (reject only these kinds):
+- "which place is beautiful ISB or LHR" (travel/opinion)
 - "hi how are you" (chat)
 - "what is the capital of France" (general knowledge)
 - "tell me a joke"
-- Any question asking you for advice, opinions, comparisons, or facts unrelated to buying works/services/supplies
+- Pure greetings with no procurement subject
 
 Rules:
-- NEVER repeat the user's unrelated question as understanding.
-- NEVER answer general knowledge, travel, beauty, politics, or casual chat.
+- Prefer isValid true whenever the text could reasonably describe works, services, or supplies to buy/qualify.
+- Do NOT require exact words like "procure", "contract", or "supplier".
 - understanding must frame a procurement need ("You want to qualify suppliers for…").
-- rejectionReason must state this tool only creates supplier qualification questionnaires and ask them to describe procurement needs.
-- When in doubt and no clear procurement intent → isValid false.
+- NEVER answer general knowledge, travel, beauty, politics, or casual chat.
+- When unsure but text is not clearly off-topic → isValid true.
 - No markdown. JSON only."""
 
 QUESTIONNAIRE_ANSWERS_PROMPT = """You help suppliers draft answers to public-procurement qualification questionnaires.

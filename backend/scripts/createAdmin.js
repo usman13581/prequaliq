@@ -31,7 +31,7 @@ async function createAdmin() {
 
     console.log('Admin user created successfully!');
     console.log('Email:', email);
-    console.log('Password:', password);
+    console.log('Password: (not logged — use the value you passed on the CLI)');
     console.log('User ID:', admin.id);
     console.log('\nPlease change the password after first login.');
 

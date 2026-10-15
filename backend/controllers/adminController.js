@@ -34,11 +34,26 @@ const createSupplier = async (req, res) => {
       role: 'supplier'
     });
 
-    await db.Supplier.create({
+    const supplier = await db.Supplier.create({
       userId: user.id,
       companyName: `${firstName} ${lastName} Company`,
       status: 'pending'
     });
+
+    if (db.OrgMembership) {
+      await db.OrgMembership.create({
+        userId: user.id,
+        ownerType: 'supplier',
+        ownerId: supplier.id,
+        membershipRole: 'owner'
+      });
+    }
+    try {
+      const { ensureDefaultsForUser } = require('../services/entitlementService');
+      await ensureDefaultsForUser(user.id);
+    } catch (entErr) {
+      console.warn('Entitlement seed skipped:', entErr.message);
+    }
 
     // Send welcome email to the new supplier
     sendAccountCreatedEmail(user.email, firstName, lastName, 'supplier').catch((err) =>
@@ -143,9 +158,27 @@ const createProcuringEntity = async (req, res) => {
     const procuringEntity = await db.ProcuringEntity.create({
       userId: user.id,
       entityName: entityName.trim(),
-      companyId: validCompanyId
+      companyId: validCompanyId,
+      status: 'approved',
+      approvedAt: new Date(),
+      approvedBy: req.user.id
     });
     console.log('Procuring entity created successfully:', procuringEntity.id);
+
+    if (db.OrgMembership) {
+      await db.OrgMembership.create({
+        userId: user.id,
+        ownerType: 'procuring_entity',
+        ownerId: procuringEntity.id,
+        membershipRole: 'owner'
+      });
+    }
+    try {
+      const { ensureDefaultsForUser } = require('../services/entitlementService');
+      await ensureDefaultsForUser(user.id);
+    } catch (entErr) {
+      console.warn('Entitlement seed skipped:', entErr.message);
+    }
 
     // Send welcome email to the new procuring entity
     sendAccountCreatedEmail(user.email, firstName, lastName, 'procuring_entity').catch((err) =>
@@ -194,7 +227,20 @@ const createProcuringEntity = async (req, res) => {
 // Create company
 const createCompany = async (req, res) => {
   try {
-    const company = await db.Company.create(req.body);
+    const { name, registrationNumber, address, city, country, phone, email, website } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ message: 'Company name is required' });
+    }
+    const company = await db.Company.create({
+      name: String(name).trim(),
+      registrationNumber: registrationNumber || null,
+      address: address || null,
+      city: city || null,
+      country: country || null,
+      phone: phone || null,
+      email: email || null,
+      website: website || null
+    });
     res.status(201).json({ message: 'Company created successfully', company });
   } catch (error) {
     console.error('Create company error:', error);
@@ -283,6 +329,13 @@ const reviewSupplier = async (req, res) => {
 
       await notifyProfileApproved(supplier);
 
+      try {
+        const { ensureDefaultsForUser } = require('../services/entitlementService');
+        await ensureDefaultsForUser(supplier.userId);
+      } catch (entErr) {
+        console.warn('Entitlement seed skipped:', entErr.message);
+      }
+
       if (supplier.user && supplier.user.email) {
         sendSupplierApprovedEmail(
           supplier.user.email,
@@ -329,6 +382,69 @@ const reviewSupplier = async (req, res) => {
   } catch (error) {
     console.error('Review supplier error:', error);
     res.status(500).json({ message: 'Error reviewing supplier', error: error.message });
+  }
+};
+
+// Review procuring entity (approve / reject eligibility)
+const reviewProcuringEntity = async (req, res) => {
+  try {
+    const { entityId } = req.params;
+    const { action, rejectionReason } = req.body;
+
+    const entity = await db.ProcuringEntity.findByPk(entityId, {
+      include: [{ model: db.User, as: 'user', attributes: ['id', 'email', 'firstName', 'lastName'] }]
+    });
+    if (!entity) {
+      return res.status(404).json({ message: 'Procuring entity not found' });
+    }
+
+    if (action === 'approve') {
+      const now = new Date();
+      await entity.update({
+        status: 'approved',
+        approvedAt: now,
+        approvedBy: req.user.id,
+        rejectionReason: null,
+        isActive: true
+      });
+      try {
+        const { ensureDefaultsForUser } = require('../services/entitlementService');
+        await ensureDefaultsForUser(entity.userId);
+      } catch (entErr) {
+        console.warn('Entitlement seed skipped:', entErr.message);
+      }
+      if (entity.user?.email) {
+        sendAccountActivatedEmail(
+          entity.user.email,
+          entity.user.firstName,
+          entity.user.lastName,
+          'procuring_entity'
+        ).catch((err) => console.error('Failed to send entity approved email:', err));
+      }
+      return res.json({ message: 'Procuring entity approved successfully', procuringEntity: entity });
+    }
+
+    if (action === 'reject') {
+      await entity.update({
+        status: 'rejected',
+        approvedBy: req.user.id,
+        rejectionReason: rejectionReason || null
+      });
+      if (entity.user?.email) {
+        sendAccountDeactivatedEmail(
+          entity.user.email,
+          entity.user.firstName,
+          entity.user.lastName,
+          'procuring_entity'
+        ).catch((err) => console.error('Failed to send entity rejected email:', err));
+      }
+      return res.json({ message: 'Procuring entity rejected', procuringEntity: entity });
+    }
+
+    return res.status(400).json({ message: 'Invalid action. Use "approve" or "reject"' });
+  } catch (error) {
+    console.error('Review procuring entity error:', error);
+    res.status(500).json({ message: 'Error reviewing procuring entity', error: error.message });
   }
 };
 
@@ -949,6 +1065,14 @@ const getDashboardStats = async (req, res) => {
       })
     );
 
+    const entityStatuses = ['pending', 'approved', 'rejected'];
+    const entityStatusCounts = {};
+    await Promise.all(
+      entityStatuses.map(async (status) => {
+        entityStatusCounts[status] = await db.ProcuringEntity.count({ where: { status } });
+      })
+    );
+
     const [
       supplierTotal,
       supplierActive,
@@ -1013,7 +1137,7 @@ const getDashboardStats = async (req, res) => {
           as: 'user',
           attributes: ['firstName', 'lastName', 'email', 'isActive']
         }],
-        attributes: ['id', 'entityName', 'createdAt']
+        attributes: ['id', 'entityName', 'status', 'createdAt']
       })
     ]);
 
@@ -1028,6 +1152,7 @@ const getDashboardStats = async (req, res) => {
         },
         entities: {
           total: entityTotal,
+          ...entityStatusCounts,
           active: entitiesActive,
           inactive: entitiesInactive,
           newThisMonth: entitiesNewThisMonth
@@ -1060,6 +1185,7 @@ module.exports = {
   getSuppliers,
   getSupplierById,
   reviewSupplier,
+  reviewProcuringEntity,
   updateSupplier,
   toggleSupplierStatus,
   resetSupplierPassword,

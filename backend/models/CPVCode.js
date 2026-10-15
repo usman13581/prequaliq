@@ -24,6 +24,11 @@ module.exports = (sequelize, DataTypes) => {
     level: {
       type: DataTypes.INTEGER,
       defaultValue: 1
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
     }
   }, {
     tableName: 'cpv_codes',

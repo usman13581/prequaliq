@@ -8,5 +8,6 @@ router.get('/count', nutsController.getNUTSCount);
 
 // Get NUTS codes (authenticated)
 router.get('/', authenticate, nutsController.getNUTSCodes);
+router.get('/:id', authenticate, nutsController.getNUTSCode);
 
 module.exports = router;

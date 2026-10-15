@@ -1,8 +1,10 @@
 # PrequaliQ AI Service
 
-FastAPI wrapper around **local Ollama** on your Trooper GPU instance. PDF text is extracted on Railway/backend; only plain text is sent to this service. The LLM never leaves the GPU machine.
+FastAPI wrapper around **local Ollama** on a GPU server (Trooper today; any monthly GPU VPS works). PDF text is extracted on Railway/backend; only plain text is sent to this service. The LLM never leaves the GPU machine.
 
 **Model:** `qwen2.5:7b` (via Ollama on `127.0.0.1:11434`)
+
+**Moving off Trooper / changing host:** see **[MIGRATE_AI_SERVER.md](./MIGRATE_AI_SERVER.md)**.
 
 ## Architecture
 

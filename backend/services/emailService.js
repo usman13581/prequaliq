@@ -451,6 +451,48 @@ const sendNewQuestionnaireEmail = async (email, firstName, lastName, questionnai
   return sendEmail(email, subject, html);
 };
 
+const sendSimpleHtmlEmail = async (email, subject, htmlBody) => {
+  return sendEmail(email, subject, htmlBody);
+};
+
+const sendTenderInviteEmail = async (email, firstName, procedureTitle, referenceNumber) => {
+  const name = firstName || 'Supplier';
+  const subject = `You are invited to tender: ${procedureTitle}`;
+  const html = `<p>Hello ${name},</p><p>You have been invited to participate in <strong>${procedureTitle}</strong>${referenceNumber ? ` (${referenceNumber})` : ''}.</p><p>Please log in to PrequaliQ to view the underlag and submit your bid.</p>`;
+  return sendSimpleHtmlEmail(email, subject, html);
+};
+
+const sendAwardDecisionEmail = async (email, firstName, procedureTitle, isWinner, standstillEndsAt) => {
+  const name = firstName || 'Supplier';
+  const subject = isWinner
+    ? `Award decision — you are the intended winner: ${procedureTitle}`
+    : `Award decision — ${procedureTitle}`;
+  const html = isWinner
+    ? `<p>Hello ${name},</p><p>The contracting authority intends to award <strong>${procedureTitle}</strong> to your company.</p>${standstillEndsAt ? `<p>Standstill ends: ${standstillEndsAt}</p>` : ''}<p>Please log in to PrequaliQ for details.</p>`
+    : `<p>Hello ${name},</p><p>An award decision has been made for <strong>${procedureTitle}</strong>. Your tender was not selected.</p>${standstillEndsAt ? `<p>Standstill ends: ${standstillEndsAt}</p>` : ''}<p>Please log in to PrequaliQ for details.</p>`;
+  return sendSimpleHtmlEmail(email, subject, html);
+};
+
+const sendComplementRequestEmail = async (email, firstName, procedureTitle, deadline) => {
+  const name = firstName || 'Supplier';
+  const subject = `Complement request — ${procedureTitle}`;
+  const html = `<p>Hello ${name},</p><p>The buyer has requested a complement for <strong>${procedureTitle}</strong>.</p>${deadline ? `<p>Deadline: ${deadline}</p>` : ''}<p>Please log in to PrequaliQ to respond.</p>`;
+  return sendSimpleHtmlEmail(email, subject, html);
+};
+
+const sendOrgInviteEmail = async (email, orgName, acceptUrl) => {
+  const subject = `Invitation to join ${orgName} on PrequaliQ`;
+  const html = `<p>You have been invited to join <strong>${orgName}</strong> on PrequaliQ.</p><p><a href="${acceptUrl}">Accept invitation</a></p><p>If you do not have an account, register with this email first, then open the link again.</p>`;
+  return sendSimpleHtmlEmail(email, subject, html);
+};
+
+const sendDocumentExpiringEmail = async (email, firstName, count) => {
+  const name = firstName || 'Supplier';
+  const subject = `${count} document(s) expiring soon — PrequaliQ`;
+  const html = `<p>Hello ${name},</p><p>${count} of your documents will expire within 30 days. Please update them in your supplier profile.</p>`;
+  return sendSimpleHtmlEmail(email, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendAccountCreatedEmail,
@@ -463,5 +505,10 @@ module.exports = {
   sendSupplierRejectedEmail,
   sendSupplierProfileSubmittedToAdminEmail,
   sendSupplierProfileSubmittedConfirmationEmail,
-  sendNewQuestionnaireEmail
+  sendNewQuestionnaireEmail,
+  sendTenderInviteEmail,
+  sendAwardDecisionEmail,
+  sendComplementRequestEmail,
+  sendOrgInviteEmail,
+  sendDocumentExpiringEmail
 };

@@ -9,6 +9,7 @@ export type SupplierRow = {
 export type EntityRow = {
   id: string;
   entityName: string;
+  status?: string;
   user?: { isActive?: boolean; email?: string; firstName?: string; lastName?: string };
   createdAt?: string;
 };
@@ -26,6 +27,9 @@ export type AdminDashboardStats = {
   };
   entities: {
     total: number;
+    pending?: number;
+    approved?: number;
+    rejected?: number;
     active: number;
     inactive: number;
     newThisMonth: number;
@@ -67,6 +71,9 @@ export function statsFromEntities(entities: EntityRow[]) {
   monthStart.setHours(0, 0, 0, 0);
   return {
     total: entities.length,
+    pending: entities.filter((e) => e.status === 'pending' || !e.status).length,
+    approved: entities.filter((e) => e.status === 'approved').length,
+    rejected: entities.filter((e) => e.status === 'rejected').length,
     active: entities.filter((e) => e.user?.isActive !== false).length,
     inactive: entities.filter((e) => e.user?.isActive === false).length,
     newThisMonth: entities.filter((e) => e.createdAt && new Date(e.createdAt) >= monthStart).length
