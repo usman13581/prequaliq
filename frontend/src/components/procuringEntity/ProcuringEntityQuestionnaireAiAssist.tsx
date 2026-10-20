@@ -113,12 +113,6 @@ type ContextValue = {
 
 const QuestionnaireAiContext = createContext<ContextValue | null>(null);
 
-function useQuestionnaireAi() {
-  const ctx = useContext(QuestionnaireAiContext);
-  if (!ctx) throw new Error('ProcuringEntityQuestionnaireAiAssist must be used within Root');
-  return ctx;
-}
-
 type RootProps = {
   onApply: (draft: AppliedQuestionnaireDraft) => void;
   children: ReactNode;

@@ -110,12 +110,6 @@ type AiAssistContextValue = {
 
 const AiAssistContext = createContext<AiAssistContextValue | null>(null);
 
-function useAiAssist() {
-  const ctx = useContext(AiAssistContext);
-  if (!ctx) throw new Error('SupplierAiProfileAssist components must be used within Root');
-  return ctx;
-}
-
 type RootProps = {
   enabled?: boolean;
   suggestEndpoint?: string;
