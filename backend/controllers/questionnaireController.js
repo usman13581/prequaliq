@@ -926,6 +926,31 @@ const submitResponse = async (req, res) => {
         console.warn('Bid completeness check skipped:', checkErr.message);
       }
       await response.update({ status: 'submitted', submittedAt: new Date() });
+
+      // Notify procuring entity when a bid is submitted on a procedure
+      if (procedureId) {
+        try {
+          const { createForUser } = require('../services/notificationService');
+          const proc = procedure || (await db.Procedure.findByPk(procedureId, {
+            include: [{ model: db.ProcuringEntity, as: 'procuringEntity', attributes: ['userId'] }]
+          }));
+          const buyerUserId =
+            proc?.createdBy ||
+            proc?.procuringEntity?.userId ||
+            (await db.ProcuringEntity.findByPk(proc?.procuringEntityId, { attributes: ['userId'] }))?.userId;
+          if (buyerUserId) {
+            await createForUser(buyerUserId, {
+              type: 'bid_submitted',
+              title: 'New bid received',
+              message: `${supplier.companyName || 'A supplier'} submitted a bid for ${proc?.title || 'a procedure'}.`,
+              linkTab: 'procedures',
+              meta: { procedureId, supplierId: supplier.id }
+            });
+          }
+        } catch (e) {
+          console.warn('[notifications] buyer notify on bid failed:', e.message);
+        }
+      }
     } else {
       await response.update({ status: status || 'draft' });
     }

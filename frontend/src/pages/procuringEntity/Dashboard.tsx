@@ -48,9 +48,11 @@ import {
   FileText, Search, User, Plus, Edit2, Trash2, Eye, 
   Upload, X, Calendar, Building2, Save, XCircle, Camera,
   CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Users, Power, PowerOff,
-  LayoutDashboard, Briefcase, ScrollText, Sparkles, Wallet, Award, Shield, Copy
+  LayoutDashboard, Briefcase, ScrollText, Sparkles, Wallet, Award, Shield, Copy, Bell
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { NotificationsBell } from '../../components/notifications/NotificationsBell';
+import { NotificationsPanel } from '../../components/notifications/NotificationsPanel';
 
 const BUYER_QUESTIONNAIRE_FILTER_FIELDS: FilterFieldDef[] = [
   {
@@ -146,6 +148,7 @@ const ENTITY_PORTAL_TABS = [
   'contracts',
   'questionnaires',
   'suppliers',
+  'notifications',
   'profile',
   'ai-preferences',
 ] as const;
@@ -984,6 +987,7 @@ const ProcuringEntityDashboard = () => {
     { id: 'contracts', label: t('contracts.nav'), icon: ScrollText },
     { id: 'questionnaires', label: t('nav.questionnaires'), icon: FileText },
     { id: 'suppliers', label: t('nav.searchSuppliers'), icon: Search },
+    { id: 'notifications', label: t('nav.notifications'), icon: Bell },
     { id: 'profile', label: t('nav.profile'), icon: User },
     { id: 'ai-preferences', label: t('common.aiPreferences'), icon: Sparkles },
   ];
@@ -999,6 +1003,7 @@ const ProcuringEntityDashboard = () => {
         onTabSelect={setActiveTab}
         onProfileClick={() => setActiveTab('profile')}
         sidebarVariant="wide"
+        headerExtra={<NotificationsBell onNavigate={setActiveTab} />}
       >
             <AccountStatusBanner
               status={profile?.status}
@@ -1019,6 +1024,10 @@ const ProcuringEntityDashboard = () => {
             )}
 
             {activeTab === 'contracts' && <ContractsPanel />}
+
+            {activeTab === 'notifications' && (
+              <NotificationsPanel onNavigate={setActiveTab} />
+            )}
 
             {/* Questionnaires Tab */}
             {activeTab === 'questionnaires' && (

@@ -67,6 +67,7 @@ app.use('/api/procedures', require('./routes/procedures'));
 app.use('/api/contracts', require('./routes/contracts'));
 app.use('/api/ai-extras', require('./routes/aiExtras'));
 app.use('/api/saved-searches', require('./routes/savedSearches'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // Root - so visiting the URL shows something friendly
 app.get('/', (req, res) => {

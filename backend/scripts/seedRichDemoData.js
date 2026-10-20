@@ -935,13 +935,12 @@ async function run() {
       }
 
       if (db.SupplierNotification && status === 'active') {
-        await db.SupplierNotification.create({
-          supplierId: supplier.supplier.id,
+        const { createNotification } = require('../services/supplierNotificationService');
+        await createNotification(supplier.supplier.id, {
           type: 'contract_updated',
           title: 'Contract available',
           message: `${contract.title} is ready in your Contracts tab.`,
-          linkTab: 'contracts',
-          isRead: i % 3 === 0
+          linkTab: 'contracts'
         }).catch(() => {});
       }
     }
@@ -1107,20 +1106,39 @@ async function run() {
   // Extra notifications for supplier1
   if (db.SupplierNotification && activeApprovedSuppliers[0]) {
     const s1 = activeApprovedSuppliers[0];
+    const { createNotification } = require('../services/supplierNotificationService');
     const notes = [
       { type: 'tender_invite', title: 'New tender invite', message: 'You were invited to a demo procedure.', linkTab: 'tenders' },
       { type: 'award_decision', title: 'Award decision', message: 'An award decision was published (seed).', linkTab: 'tenders' },
       { type: 'qa_reply', title: 'Q&A reply', message: 'Buyer replied in a private Q&A thread.', linkTab: 'tenders' }
     ];
     for (const n of notes) {
-      await db.SupplierNotification.create({
-        supplierId: s1.supplier.id,
-        type: n.type,
-        title: n.title,
-        message: n.message,
-        linkTab: n.linkTab,
-        isRead: false
-      }).catch(() => {});
+      await createNotification(s1.supplier.id, n).catch(() => {});
+    }
+  }
+
+  // Sample notifications for buyer1 and admin (unified inbox)
+  if (db.UserNotification) {
+    const { createForUser } = require('../services/notificationService');
+    if (activeApprovedBuyers[0]?.user?.id) {
+      const buyerNotes = [
+        { type: 'bid_submitted', title: 'New bid received', message: 'Nordic Facility submitted a bid on a demo procedure.', linkTab: 'procedures' },
+        { type: 'complement_reply', title: 'Complement response', message: 'A supplier replied to a complement request.', linkTab: 'procedures' },
+        { type: 'contract_activity', title: 'Contract activity', message: 'Supplier uploaded a delivery note.', linkTab: 'contracts' }
+      ];
+      for (const n of buyerNotes) {
+        await createForUser(activeApprovedBuyers[0].user.id, n).catch(() => {});
+      }
+    }
+    const adminUser = await db.User.findOne({ where: { role: 'admin', isActive: true }, attributes: ['id'] });
+    if (adminUser) {
+      const adminNotes = [
+        { type: 'supplier_submitted', title: 'Supplier awaiting review', message: 'A demo supplier submitted a qualification profile.', linkTab: 'suppliers' },
+        { type: 'entity_pending', title: 'Entity pending approval', message: 'A procuring entity registration needs review.', linkTab: 'entities' }
+      ];
+      for (const n of adminNotes) {
+        await createForUser(adminUser.id, n).catch(() => {});
+      }
     }
   }
 

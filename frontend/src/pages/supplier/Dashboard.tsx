@@ -12,7 +12,8 @@ import { SupplierTendersPanel } from '../../components/supplier/SupplierTendersP
 import { AiPreferencesPanel } from '../../components/ai/AiPreferencesPanel';
 import { SupplierContractsPanel } from '../../components/supplier/SupplierContractsPanel';
 import { SupplierOverviewTab } from '../../components/supplier/SupplierOverviewTab';
-import { SupplierNotificationsBell } from '../../components/supplier/SupplierNotificationsBell';
+import { NotificationsBell } from '../../components/notifications/NotificationsBell';
+import { NotificationsPanel } from '../../components/notifications/NotificationsPanel';
 import { SupplierExportProfileModal } from '../../components/supplier/SupplierExportProfileModal';
 import {
   SupplierProfileCompletenessRail,
@@ -34,7 +35,7 @@ import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../compon
 import { 
   FileText, History, User, Upload, Edit2, Eye, 
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
-  ChevronDown, LayoutDashboard, Download, Briefcase, ScrollText, Sparkles
+  ChevronDown, LayoutDashboard, Download, Briefcase, ScrollText, Sparkles, Bell
 } from 'lucide-react';
 import type { AnswerSuggestion } from '../../components/supplier/SupplierQuestionnaireAnswerAiAssist';
 import { uploadsUrl } from '../../utils/uploadsUrl';
@@ -133,6 +134,7 @@ const SUPPLIER_PORTAL_TABS = [
   'tenders',
   'contracts',
   'history',
+  'notifications',
   'ai-preferences',
 ] as const;
 
@@ -898,6 +900,7 @@ const SupplierDashboard = () => {
     { id: 'tenders', label: t('procedures.navTenders'), icon: Briefcase },
     { id: 'contracts', label: t('contracts.nav'), icon: ScrollText },
     { id: 'history', label: t('supplierPortal.navHistory'), icon: History },
+    { id: 'notifications', label: t('nav.notifications'), icon: Bell },
     { id: 'ai-preferences', label: t('common.aiPreferences'), icon: Sparkles },
   ];
 
@@ -910,7 +913,7 @@ const SupplierDashboard = () => {
         sidebarItems={sidebarItems}
         activeTab={activeTab}
         onTabSelect={setActiveTab}
-        headerExtra={<SupplierNotificationsBell onNavigate={handleNavigateTab} />}
+        headerExtra={<NotificationsBell onNavigate={handleNavigateTab} />}
       >
             <AccountStatusBanner
               status={profile?.status}
@@ -985,6 +988,10 @@ const SupplierDashboard = () => {
             )}
 
             {activeTab === 'contracts' && <SupplierContractsPanel />}
+
+            {activeTab === 'notifications' && (
+              <NotificationsPanel onNavigate={handleNavigateTab} />
+            )}
 
             {/* History Tab */}
             {activeTab === 'history' && (

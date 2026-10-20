@@ -1,8 +1,9 @@
 const db = require('../models');
+const { createForUser } = require('./notificationService');
 
 async function createNotification(supplierId, { type, title, message, linkTab = null, meta = null }) {
   if (!db.SupplierNotification) return null;
-  return db.SupplierNotification.create({
+  const row = await db.SupplierNotification.create({
     supplierId,
     type,
     title,
@@ -11,6 +12,25 @@ async function createNotification(supplierId, { type, title, message, linkTab = 
     meta,
     isRead: false
   });
+
+  // Dual-write into unified user_notifications
+  try {
+    const supplier = await db.Supplier.findByPk(supplierId, { attributes: ['userId'] });
+    if (supplier?.userId) {
+      await createForUser(supplier.userId, {
+        id: row.id,
+        type,
+        title,
+        message,
+        linkTab,
+        meta
+      });
+    }
+  } catch (e) {
+    console.warn('[notifications] dual-write failed:', e.message);
+  }
+
+  return row;
 }
 
 async function notifyProfileApproved(supplier) {

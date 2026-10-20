@@ -349,6 +349,19 @@ const submitProfile = async (req, res) => {
     const user = supplier.user;
     await sendSubmissionEmails(supplier, user);
 
+    try {
+      const { notifyAdmins } = require('../services/notificationService');
+      await notifyAdmins({
+        type: 'supplier_submitted',
+        title: 'Supplier awaiting review',
+        message: `${supplier.companyName || 'A supplier'} submitted a qualification profile.`,
+        linkTab: 'suppliers',
+        meta: { supplierId: supplier.id }
+      });
+    } catch (e) {
+      console.warn('[notifications] admin notify on submit failed:', e.message);
+    }
+
     const updatedSupplier = await loadSupplierForUser(req.user.id);
     res.json({
       message: 'Profile submitted for qualification review',
@@ -473,16 +486,9 @@ const deleteReference = async (req, res) => {
 
 const getNotifications = async (req, res) => {
   try {
-    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
-    if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
-    const notifications = db.SupplierNotification
-      ? await db.SupplierNotification.findAll({
-        where: { supplierId: supplier.id },
-        order: [['createdAt', 'DESC']],
-        limit: 50
-      })
-      : [];
-    res.json({ notifications });
+    const { previewForUser } = require('../services/notificationService');
+    const data = await previewForUser(req.user.id, 10);
+    res.json({ notifications: data.notifications, unreadCount: data.unreadCount });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching notifications', error: error.message });
   }
@@ -490,13 +496,9 @@ const getNotifications = async (req, res) => {
 
 const markNotificationRead = async (req, res) => {
   try {
-    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
-    if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
-    const notification = await db.SupplierNotification.findOne({
-      where: { id: req.params.notificationId, supplierId: supplier.id }
-    });
+    const { markRead } = require('../services/notificationService');
+    const notification = await markRead(req.user.id, req.params.notificationId);
     if (!notification) return res.status(404).json({ message: 'Notification not found' });
-    await notification.update({ isRead: true });
     res.json({ notification });
   } catch (error) {
     res.status(500).json({ message: 'Error updating notification', error: error.message });
@@ -505,14 +507,8 @@ const markNotificationRead = async (req, res) => {
 
 const markAllNotificationsRead = async (req, res) => {
   try {
-    const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
-    if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
-    if (db.SupplierNotification) {
-      await db.SupplierNotification.update(
-        { isRead: true },
-        { where: { supplierId: supplier.id, isRead: false } }
-      );
-    }
+    const { markAllRead } = require('../services/notificationService');
+    await markAllRead(req.user.id);
     res.json({ message: 'All notifications marked as read' });
   } catch (error) {
     res.status(500).json({ message: 'Error updating notifications', error: error.message });

@@ -445,7 +445,19 @@
     "activeQuestionnaires": "Aktiva enkäter",
     "history": "Historik",
     "documents": "Dokument",
-    "lookups": "Uppslag"
+    "lookups": "Uppslag",
+    "notifications": "Aviseringar"
+  },
+  "notifications": {
+    "title": "Aviseringar",
+    "empty": "Inga aviseringar",
+    "viewAll": "Visa alla aviseringar",
+    "markAllRead": "Markera alla som lästa",
+    "markAsRead": "Markera som läst",
+    "searchPlaceholder": "Sök aviseringar…",
+    "unreadCount": "{{count}} olästa",
+    "allCaughtUp": "Du är ikapp",
+    "itemLabel": "aviseringar"
   },
   "questionnaires": {
     "copyAsNew": "Kopiera som ny",

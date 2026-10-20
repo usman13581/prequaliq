@@ -445,7 +445,19 @@
     "activeQuestionnaires": "Active Questionnaires",
     "history": "History",
     "documents": "Documents",
-    "lookups": "Lookups"
+    "lookups": "Lookups",
+    "notifications": "Notifications"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "viewAll": "View all notifications",
+    "markAllRead": "Mark all as read",
+    "markAsRead": "Mark as read",
+    "searchPlaceholder": "Search notifications…",
+    "unreadCount": "{{count}} unread",
+    "allCaughtUp": "You're all caught up",
+    "itemLabel": "notifications"
   },
   "questionnaires": {
     "copyAsNew": "Copy as new",

@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadsUrl } from '../../utils/uploadsUrl';
-import { Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, User, Lock, Eye, EyeOff, Key, Camera, Upload, LayoutDashboard, SlidersHorizontal, BookMarked, Sparkles } from 'lucide-react';
+import { Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, User, Lock, Eye, EyeOff, Key, Camera, Upload, LayoutDashboard, SlidersHorizontal, BookMarked, Sparkles, Bell } from 'lucide-react';
+import { NotificationsBell } from '../../components/notifications/NotificationsBell';
+import { NotificationsPanel } from '../../components/notifications/NotificationsPanel';
 import { SearchField } from '../../components/ui/SearchField';
 import { BrandSelect } from '../../components/ui/BrandSelect';
 import { AdminLookupsPanel } from '../../components/admin/AdminLookupsPanel';
@@ -72,6 +74,7 @@ const ADMIN_PORTAL_TABS = [
   'home',
   'suppliers',
   'entities',
+  'notifications',
   'ai-controls',
   'lookups',
 ] as const;
@@ -285,6 +288,7 @@ const AdminDashboard = () => {
     { id: 'home', label: t('adminPortal.navHome'), icon: LayoutDashboard },
     { id: 'suppliers', label: t('nav.suppliers'), icon: Users },
     { id: 'entities', label: t('nav.entities'), icon: Building2 },
+    { id: 'notifications', label: t('nav.notifications'), icon: Bell },
     { id: 'ai-controls', label: t('adminPortal.aiControls'), icon: Sparkles },
     { id: 'lookups', label: t('nav.lookups'), icon: BookMarked },
     { id: 'profile', label: t('nav.profile'), icon: User },
@@ -310,12 +314,17 @@ const AdminDashboard = () => {
         activeTab={sidebarActiveId}
         onTabSelect={handleSidebarSelect}
         onProfileClick={() => setShowProfileModal(true)}
+        headerExtra={<NotificationsBell onNavigate={handleSidebarSelect} />}
       >
         {activeTab === 'home' && (
           <AdminHomeTab
             stats={dashboardStats}
             loading={statsLoading}
           />
+        )}
+
+        {activeTab === 'notifications' && (
+          <NotificationsPanel onNavigate={handleSidebarSelect} />
         )}
 
         {activeTab === 'lookups' && <AdminLookupsPanel />}
