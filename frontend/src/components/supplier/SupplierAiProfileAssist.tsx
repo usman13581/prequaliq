@@ -14,12 +14,12 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
-  Loader2,
   Sparkles,
 } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useEntitlement } from '../../contexts/EntitlementContext';
+import { AiBusyButton } from '../ai/AiBusyButton';
 
 export type ProfileAiSuggestion = {
   value: string;
@@ -321,24 +321,15 @@ function UploadBar() {
                 : t('supplierPortal.aiProfileShowSuggestions', { count: suggestionCount })}
             </button>
           )}
-          <button
-            type="button"
-            disabled={loading}
+          <AiBusyButton
+            busy={loading}
             onClick={triggerUpload}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs sm:text-sm font-semibold transition-colors disabled:opacity-60"
+            className="!px-3 !py-1.5 text-xs sm:text-sm"
+            idleIcon={<FileText size={14} aria-hidden />}
+            busyLabel={t('supplierPortal.aiProfileLoading')}
           >
-            {loading ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                {t('supplierPortal.aiProfileLoading')}
-              </>
-            ) : (
-              <>
-                <FileText size={14} />
-                {t('supplierPortal.aiProfileUpload')}
-              </>
-            )}
-          </button>
+            {t('supplierPortal.aiProfileUpload')}
+          </AiBusyButton>
         </div>
       </div>
     </div>

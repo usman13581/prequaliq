@@ -13,6 +13,7 @@ import { ComplementHistoryThread } from '../procedures/ComplementHistoryThread';
 import { procedureStatusLabelKey } from '../../utils/procedureStatus';
 import { DateOnlyPicker } from '../DateOnlyPicker';
 import { BrandSelect } from '../ui/BrandSelect';
+import { AiBusyButton } from '../ai/AiBusyButton';
 
 type Procedure = {
   id: string;
@@ -1266,15 +1267,15 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
 
                 {!evalReadOnly && canAiEval ? (
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={evalAiLoading}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+                    <AiBusyButton
+                      busy={evalAiLoading}
+                      className="!rounded-xl !px-4"
                       onClick={runAiEvaluation}
+                      idleIcon={<Sparkles size={16} aria-hidden />}
+                      busyLabel={t('procedures.aiEvalLoading', { defaultValue: 'Running AI evaluation…' })}
                     >
-                      {evalAiLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
                       {t('procedures.aiEvalSummary')}
-                    </button>
+                    </AiBusyButton>
                   </div>
                 ) : null}
 

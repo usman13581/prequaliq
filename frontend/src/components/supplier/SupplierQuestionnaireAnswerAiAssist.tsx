@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Sparkles, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Sparkles, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useEntitlement } from '../../contexts/EntitlementContext';
+import { AiBusyButton } from '../ai/AiBusyButton';
 
 export type AnswerSuggestion = {
   questionId: string;
@@ -115,24 +116,15 @@ export function SupplierQuestionnaireAnswerAiAssist({
           </p>
           <p className="text-xs text-muted mt-0.5">{t('supplierPortal.aiAnswersSubtitle')}</p>
         </div>
-        <button
-          type="button"
-          disabled={disabled || loading}
+        <AiBusyButton
+          busy={loading}
+          disabled={disabled}
           onClick={generate}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50 shrink-0"
+          idleIcon={<Sparkles size={16} aria-hidden />}
+          busyLabel={t('supplierPortal.aiAnswersLoading')}
         >
-          {loading ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              {t('supplierPortal.aiAnswersLoading')}
-            </>
-          ) : (
-            <>
-              <Sparkles size={16} />
-              {t('supplierPortal.aiAnswersGenerate')}
-            </>
-          )}
-        </button>
+          {t('supplierPortal.aiAnswersGenerate')}
+        </AiBusyButton>
       </div>
 
       {items.length > 0 && (

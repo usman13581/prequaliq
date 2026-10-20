@@ -11,13 +11,13 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
-  Loader2,
   Sparkles,
   XCircle,
 } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useEntitlement } from '../../contexts/EntitlementContext';
+import { AiBusyButton } from '../ai/AiBusyButton';
 import {
   QUESTIONNAIRE_DESC_MAX,
   QUESTIONNAIRE_DESC_MIN,
@@ -407,21 +407,14 @@ function UnderstandConfirmModal() {
           >
             {t('entityPortal.aiQuestionnaireRewrite')}
           </button>
-          <button
-            type="button"
+          <AiBusyButton
             onClick={confirmGenerate}
-            disabled={loadingPhase === 'generate'}
-            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-semibold text-sm disabled:opacity-50"
+            busy={loadingPhase === 'generate'}
+            className="flex-1 !rounded-xl !px-4 !py-2.5"
+            busyLabel={t('entityPortal.aiQuestionnaireLoading')}
           >
-            {loadingPhase === 'generate' ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                {t('entityPortal.aiQuestionnaireLoading')}
-              </>
-            ) : (
-              t('entityPortal.aiQuestionnaireConfirmGenerate')
-            )}
-          </button>
+            {t('entityPortal.aiQuestionnaireConfirmGenerate')}
+          </AiBusyButton>
         </div>
       </div>
     </div>,
@@ -507,26 +500,20 @@ function InputBar() {
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted">{t('entityPortal.aiQuestionnaireHint')}</p>
-        <button
-          type="button"
-          disabled={!canGenerate}
+        <AiBusyButton
+          disabled={!canGenerate && !loading}
+          busy={loading}
           onClick={generate}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-50"
+          className="!px-4"
+          idleIcon={<Sparkles size={16} aria-hidden />}
+          busyLabel={
+            loadingPhase === 'understand'
+              ? t('entityPortal.aiQuestionnaireUnderstanding')
+              : t('entityPortal.aiQuestionnaireLoading')
+          }
         >
-          {loading ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              {loadingPhase === 'understand'
-                ? t('entityPortal.aiQuestionnaireUnderstanding')
-                : t('entityPortal.aiQuestionnaireLoading')}
-            </>
-          ) : (
-            <>
-              <Sparkles size={16} />
-              {t('entityPortal.aiQuestionnaireGenerate')}
-            </>
-          )}
-        </button>
+          {t('entityPortal.aiQuestionnaireGenerate')}
+        </AiBusyButton>
       </div>
       {hasResult && result && (
         <p className="text-xs text-violet-800">
