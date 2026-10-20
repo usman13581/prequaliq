@@ -131,57 +131,68 @@ export function ContractThread({
         </p>
       ) : null}
 
-      <div className="space-y-3 max-h-72 overflow-y-auto">
+      <div className="max-h-72 overflow-y-auto">
         {messages.length === 0 ? (
           <p className="text-sm text-muted">{t('contracts.thread.empty')}</p>
         ) : (
-          messages.map((m, idx) => {
-            const isBuyer = m.senderRole === 'procuring_entity';
-            return (
-              <div key={m.id} className="relative pl-4 border-l-2 border-slate-200">
-                <span className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-slate-400" />
-                <div className="rounded-lg border border-border bg-slate-50/80 px-3 py-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                    <p className="text-xs font-semibold uppercase text-muted">
-                      {isBuyer ? t('contracts.thread.buyer') : t('contracts.thread.supplier')}
-                      <span className="normal-case font-normal text-muted">
-                        {' '}
-                        · {t('contracts.thread.entry', { n: idx + 1 })}
-                      </span>
-                    </p>
-                    <span className="text-xs text-muted">{formatWhen(m.createdAt)}</span>
+          <div className="relative pl-5">
+            <div
+              className="absolute left-[5px] top-2 bottom-2 w-0.5 bg-slate-200"
+              aria-hidden
+            />
+            <div className="space-y-3">
+              {messages.map((m, idx) => {
+                const isBuyer = m.senderRole === 'procuring_entity';
+                return (
+                  <div key={m.id} className="relative">
+                    <span
+                      className="absolute -left-[15px] top-2 z-[1] h-2.5 w-2.5 rounded-full bg-slate-400 ring-2 ring-white"
+                      aria-hidden
+                    />
+                    <div className="rounded-lg border border-border bg-slate-50/80 px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                        <p className="text-xs font-semibold uppercase text-muted">
+                          {isBuyer ? t('contracts.thread.buyer') : t('contracts.thread.supplier')}
+                          <span className="normal-case font-normal text-muted">
+                            {' '}
+                            · {t('contracts.thread.entry', { n: idx + 1 })}
+                          </span>
+                        </p>
+                        <span className="text-xs text-muted">{formatWhen(m.createdAt)}</span>
+                      </div>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">{m.body}</p>
+                      {(m.attachments || []).length > 0 ? (
+                        <ul className="mt-2 space-y-1">
+                          {(m.attachments || []).map((att) => (
+                            <li key={att.id}>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await downloadAttachment(att.id, att.fileName);
+                                  } catch (error: unknown) {
+                                    const message =
+                                      (error as { response?: { data?: { message?: string } } })?.response
+                                        ?.data?.message || t('msg.failedSave');
+                                    showToast(message, 'error');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                {att.fileName}
+                                <Download className="w-3 h-3" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                   </div>
-                  <p className="text-sm text-foreground whitespace-pre-wrap">{m.body}</p>
-                  {(m.attachments || []).length > 0 ? (
-                    <ul className="mt-2 space-y-1">
-                      {(m.attachments || []).map((att) => (
-                        <li key={att.id}>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await downloadAttachment(att.id, att.fileName);
-                              } catch (error: unknown) {
-                                const message =
-                                  (error as { response?: { data?: { message?: string } } })?.response
-                                    ?.data?.message || t('msg.failedSave');
-                                showToast(message, 'error');
-                              }
-                            }}
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            {att.fileName}
-                            <Download className="w-3 h-3" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
 
@@ -197,22 +208,6 @@ export function ContractThread({
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted cursor-pointer">
-              <Paperclip className="w-3.5 h-3.5" />
-              {t('contracts.thread.attach')}
-              <input
-                type="file"
-                multiple
-                className="hidden"
-                disabled={busy}
-                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
-                onChange={(e) => {
-                  const list = Array.from(e.target.files || []);
-                  setFiles([...files, ...list]);
-                  e.target.value = '';
-                }}
-              />
-            </label>
             {files.length > 0 ? (
               <ul className="text-xs text-foreground space-y-1">
                 {files.map((f, i) => (
@@ -232,15 +227,33 @@ export function ContractThread({
                 ))}
               </ul>
             ) : null}
-            <button
-              type="button"
-              className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1.5"
-              disabled={busy || (!text.trim() && files.length === 0)}
-              onClick={postMessage}
-            >
-              <Send className="w-3.5 h-3.5" />
-              {t('contracts.thread.send')}
-            </button>
+            <div className="flex items-center justify-between gap-3">
+              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted cursor-pointer hover:text-foreground">
+                <Paperclip className="w-3.5 h-3.5" />
+                {t('contracts.thread.attach')}
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  disabled={busy}
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+                  onChange={(e) => {
+                    const list = Array.from(e.target.files || []);
+                    setFiles([...files, ...list]);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1.5 shrink-0"
+                disabled={busy || (!text.trim() && files.length === 0)}
+                onClick={postMessage}
+              >
+                <Send className="w-3.5 h-3.5" />
+                {t('contracts.thread.send')}
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2 pt-2 border-t border-border">

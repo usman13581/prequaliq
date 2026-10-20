@@ -42,22 +42,59 @@ async function attachQuestionnaireEditLockedFlags(questionnaires, procuringEntit
   if (!db.Procedure || !questionnaires?.length) {
     return questionnaires.map((q) => {
       const plain = q.toJSON ? q.toJSON() : { ...q };
-      return { ...plain, editLocked: false };
+      return {
+        ...plain,
+        editLocked: false,
+        linkedProcedureCount: 0,
+        linkedProcedures: [],
+        inUse: false
+      };
     });
   }
   const ids = questionnaires.map((q) => q.id);
   const linked = await db.Procedure.findAll({
     where: { questionnaireId: { [Op.in]: ids }, procuringEntityId },
-    attributes: ['questionnaireId', 'isSealed', 'sealedUntil']
+    attributes: ['id', 'title', 'status', 'referenceNumber', 'questionnaireId', 'isSealed', 'sealedUntil']
   });
   const now = new Date();
   const lockedIds = new Set();
+  const byQ = new Map();
   for (const p of linked) {
     if (isProcedureSealedForLock(p, now)) lockedIds.add(p.questionnaireId);
+    if (!byQ.has(p.questionnaireId)) byQ.set(p.questionnaireId, []);
+    byQ.get(p.questionnaireId).push({
+      id: p.id,
+      title: p.title,
+      status: p.status,
+      referenceNumber: p.referenceNumber || null
+    });
   }
   return questionnaires.map((q) => {
     const plain = q.toJSON ? q.toJSON() : { ...q };
-    return { ...plain, editLocked: lockedIds.has(q.id) };
+    const linkedProcedures = byQ.get(q.id) || [];
+    return {
+      ...plain,
+      editLocked: lockedIds.has(q.id),
+      linkedProcedureCount: linkedProcedures.length,
+      linkedProcedures,
+      inUse: linkedProcedures.length > 0
+    };
+  });
+}
+
+/** Find another procedure (≠ exceptProcedureId) already using this questionnaire. */
+async function findOtherProcedureUsingQuestionnaire(questionnaireId, procuringEntityId, exceptProcedureId = null) {
+  if (!db.Procedure || !questionnaireId) return null;
+  const where = {
+    questionnaireId,
+    procuringEntityId
+  };
+  if (exceptProcedureId) {
+    where.id = { [Op.ne]: exceptProcedureId };
+  }
+  return db.Procedure.findOne({
+    where,
+    attributes: ['id', 'title', 'status', 'referenceNumber']
   });
 }
 
@@ -388,6 +425,122 @@ const getQuestionnaires = async (req, res) => {
   } catch (error) {
     console.error('Get questionnaires error:', error);
     res.status(500).json({ message: 'Error fetching questionnaires', error: error.message });
+  }
+};
+
+/**
+ * Deep-copy a questionnaire (questions only — not responses/bids).
+ * Body: { title?, description?, notes? } — notes append to description.
+ */
+const copyQuestionnaire = async (req, res) => {
+  try {
+    const procuringEntity = await db.ProcuringEntity.findOne({
+      where: { userId: req.user.id }
+    });
+    if (!procuringEntity) {
+      return res.status(404).json({ message: 'Procuring entity not found' });
+    }
+    if (procuringEntity.status && procuringEntity.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your procuring entity account must be approved by an admin before creating questionnaires.'
+      });
+    }
+    try {
+      const { getEntitlementsForUser } = require('../services/entitlementService');
+      const entitlements = await getEntitlementsForUser(req.user.id);
+      if (entitlements['tender.requirements'] === false) {
+        return res.status(403).json({ message: 'Feature not enabled for this account: tender.requirements' });
+      }
+    } catch (_entErr) {
+      // allow if entitlements unavailable
+    }
+
+    const source = await db.Questionnaire.findOne({
+      where: { id: req.params.questionnaireId, procuringEntityId: procuringEntity.id },
+      include: [
+        {
+          model: db.Question,
+          as: 'questions',
+          separate: true,
+          order: [['order', 'ASC']]
+        }
+      ]
+    });
+    if (!source) {
+      return res.status(404).json({ message: 'Questionnaire not found' });
+    }
+
+    const titleInput = String(req.body.title || '').trim();
+    const title = titleInput || `${source.title} (copy)`;
+    const notes = String(req.body.notes || '').trim();
+    let description =
+      req.body.description !== undefined
+        ? String(req.body.description || '').trim()
+        : source.description || '';
+    if (notes) {
+      description = description
+        ? `${description}\n\n${notes}`
+        : notes;
+    }
+
+    const result = await db.sequelize.transaction(async (transaction) => {
+      const copy = await db.Questionnaire.create(
+        {
+          procuringEntityId: procuringEntity.id,
+          cpvCodeId: source.cpvCodeId,
+          title: title.slice(0, 255),
+          description: description || null,
+          deadline: source.deadline,
+          isActive: true,
+          createdBy: req.user.id
+        },
+        { transaction }
+      );
+
+      const questions = source.questions || [];
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        await db.Question.create(
+          {
+            questionnaireId: copy.id,
+            questionText: q.questionText,
+            questionType: q.questionType,
+            options: q.options,
+            isRequired: q.isRequired,
+            requiresDocument: q.requiresDocument,
+            documentType: q.documentType,
+            attachedDocumentId: q.attachedDocumentId || null,
+            order: q.order != null ? q.order : i
+          },
+          { transaction }
+        );
+      }
+      return copy;
+    });
+
+    const full = await db.Questionnaire.findByPk(result.id, {
+      include: [
+        { model: db.Question, as: 'questions' },
+        { model: db.CPVCode, as: 'cpvCode' }
+      ],
+      order: [[{ model: db.Question, as: 'questions' }, 'order', 'ASC']]
+    });
+
+    const plain = full.toJSON();
+    res.status(201).json({
+      message: 'Questionnaire copied successfully',
+      questionnaire: {
+        ...plain,
+        editLocked: false,
+        linkedProcedureCount: 0,
+        linkedProcedures: [],
+        inUse: false,
+        copiedFromId: source.id
+      }
+    });
+  } catch (error) {
+    console.error('Copy questionnaire error:', error);
+    res.status(500).json({ message: 'Error copying questionnaire', error: error.message });
   }
 };
 
@@ -1321,6 +1474,7 @@ const toggleQuestionnaireStatus = async (req, res) => {
 module.exports = {
   createQuestionnaire,
   getQuestionnaires,
+  copyQuestionnaire,
   getQuestionnaireResponses,
   submitResponse,
   getResponse,
@@ -1328,5 +1482,6 @@ module.exports = {
   deleteQuestionnaire,
   updateQuestion,
   deleteQuestion,
-  toggleQuestionnaireStatus
+  toggleQuestionnaireStatus,
+  findOtherProcedureUsingQuestionnaire
 };

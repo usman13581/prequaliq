@@ -20,6 +20,7 @@ router.get('/:questionnaireId/responses', authenticate, (req, res, next) => {
 // Procuring Entity routes
 router.post('/', authenticate, authorize('procuring_entity'), questionnaireController.createQuestionnaire);
 router.get('/', authenticate, authorize('procuring_entity'), questionnaireController.getQuestionnaires);
+router.post('/:questionnaireId/copy', authenticate, authorize('procuring_entity'), questionnaireController.copyQuestionnaire);
 router.put('/:questionnaireId', authenticate, authorize('procuring_entity'), questionnaireController.updateQuestionnaire);
 router.delete('/:questionnaireId', authenticate, authorize('procuring_entity'), questionnaireController.deleteQuestionnaire);
 router.put('/:questionnaireId/toggle-status', authenticate, authorize('procuring_entity'), questionnaireController.toggleQuestionnaireStatus);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useEntitlement } from '../../contexts/EntitlementContext';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { DateOnlyPicker } from '../../components/DateOnlyPicker';
@@ -26,6 +27,7 @@ import { SupplierAiProfileAssist } from '../../components/supplier/SupplierAiPro
 import { SupplierQuestionnaireAnswerAiAssist } from '../../components/supplier/SupplierQuestionnaireAnswerAiAssist';
 import { SupplierProfileTabsNav, type ProfileTabId } from '../../components/supplier/SupplierProfileTabsNav';
 import { useListPagination } from '../../hooks/useListPagination';
+import { usePortalTab } from '../../hooks/usePortalTab';
 import { useCpvCatalogSearch } from '../../hooks/useCpvCatalogSearch';
 import { ListPagination } from '../../components/ui/ListPagination';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
@@ -125,11 +127,21 @@ const getTurnoverValueForSelect = (val: string | number | undefined): string => 
   return range ? String(range.value) : '';
 };
 
+const SUPPLIER_PORTAL_TABS = [
+  'overview',
+  'profile',
+  'tenders',
+  'contracts',
+  'history',
+  'ai-preferences',
+] as const;
+
 const SupplierDashboard = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, refreshUser } = useAuth();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState('overview');
+  const { enabled: canAiCompleteness } = useEntitlement('ai.completeness_conflict');
+  const [activeTab, setActiveTab] = usePortalTab('overview', SUPPLIER_PORTAL_TABS);
   const [loading, setLoading] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -906,20 +918,45 @@ const SupplierDashboard = () => {
               roleLabel={t('nav.supplier')}
             />
 
-            {activeTab === 'profile' && (
+            {activeTab === 'profile' && canAiCompleteness ? (
               <div className="mb-4">
                 <button
                   type="button"
                   className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700"
                   onClick={async () => {
                     try {
-                      const res = await api.get('/ai-extras/completeness');
-                      const issues = res.data.issues || [];
+                      const res = await api.get('/ai-extras/completeness', {
+                        params: { language: (i18n.language || 'en').slice(0, 2) },
+                      });
+                      const data = res.data || {};
+                      const issues = data.issues || [];
+                      const conflicts = data.conflicts || [];
+                      const percent = data.percent ?? null;
+                      await fetchCompleteness();
+                      if (data.ready) {
+                        showToast(
+                          data.summary ||
+                            t('supplierPortal.completenessOk', {
+                              defaultValue: 'Profile looks complete ({{percent}}%)',
+                              percent: percent ?? 100,
+                            }),
+                          'success'
+                        );
+                        return;
+                      }
+                      const gapLines = [
+                        ...issues.slice(0, 4).map((i: { message?: string }) => i.message),
+                        ...conflicts.slice(0, 2).map((c: { message?: string }) => c.message),
+                      ].filter(Boolean);
+                      const header = t('supplierPortal.completenessGaps', {
+                        defaultValue: 'Profile {{percent}}% complete — {{count}} gap(s)',
+                        percent: percent ?? '—',
+                        count: issues.length + conflicts.length,
+                      });
                       showToast(
-                        res.data.ready
-                          ? t('supplierPortal.completenessOk', { defaultValue: 'Profile looks complete' })
-                          : `${issues.length} issue(s): ${issues.map((i: any) => i.message).join('; ')}`,
-                        res.data.ready ? 'success' : 'warning'
+                        data.summary ||
+                          (gapLines.length ? `${header}: ${gapLines.join('; ')}` : header),
+                        'warning'
                       );
                     } catch (error: any) {
                       showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
@@ -929,7 +966,7 @@ const SupplierDashboard = () => {
                   {t('supplierPortal.aiCompletenessCheck', { defaultValue: 'AI completeness check' })}
                 </button>
               </div>
-            )}
+            ) : null}
 
             {/* Overview */}
             {activeTab === 'overview' && (

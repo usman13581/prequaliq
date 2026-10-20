@@ -19,6 +19,11 @@ from prompts import (
     QUESTIONNAIRE_GENERATE_PROMPT,
     QUESTIONNAIRE_UNDERSTAND_PROMPT,
     QUESTIONNAIRE_ANSWERS_PROMPT,
+    COMPLETENESS_PROMPT,
+    QA_REPLY_PROMPT,
+    EVALUATION_PROMPT,
+    AWARD_MEMO_PROMPT,
+    ANNOUNCEMENT_PROMPT,
 )
 
 load_dotenv()
@@ -49,6 +54,11 @@ ENDPOINTS_CATALOG = [
     {"method": "POST", "path": "/generate/questionnaire", "auth": True, "description": "Generate questionnaire draft from procurement description"},
     {"method": "POST", "path": "/generate/questionnaire/understand", "auth": True, "description": "Validate procurement intent and summarize for user confirmation"},
     {"method": "POST", "path": "/generate/questionnaire/answers", "auth": True, "description": "Suggest supplier answers from profile context"},
+    {"method": "POST", "path": "/generate/completeness", "auth": True, "description": "Summarize profile gaps and flag conflicts"},
+    {"method": "POST", "path": "/generate/qa-reply", "auth": True, "description": "Draft buyer Q&A reply from procedure context"},
+    {"method": "POST", "path": "/generate/evaluation", "auth": True, "description": "Score submitted bids from questionnaire answers"},
+    {"method": "POST", "path": "/generate/award-memo", "auth": True, "description": "Draft award decision memo from evaluation scores"},
+    {"method": "POST", "path": "/generate/announcement", "auth": True, "description": "Draft public procedure announcement text"},
 ]
 
 
@@ -115,6 +125,78 @@ class QuestionnaireAnswersRequest(BaseModel):
     language: Optional[str] = Field(default="en")
     questionnaire: dict[str, Any] = Field(default_factory=dict)
     supplierProfile: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompletenessRequest(BaseModel):
+    language: Optional[str] = Field(default="en")
+    completeness: dict[str, Any] = Field(default_factory=dict)
+    issues: list[dict[str, Any]] = Field(default_factory=list)
+    conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    supplierProfile: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompletenessResponse(BaseModel):
+    summary: str = ""
+    conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    nextActions: list[str] = Field(default_factory=list)
+    raw: Optional[dict[str, Any]] = None
+
+
+class QaReplyRequest(BaseModel):
+    language: Optional[str] = Field(default="en")
+    question: str = Field(..., min_length=1, max_length=4000)
+    procedure: dict[str, Any] = Field(default_factory=dict)
+    underlag: Optional[dict[str, Any]] = None
+    thread: list[dict[str, Any]] = Field(default_factory=list)
+    supplierName: Optional[str] = None
+
+
+class QaReplyResponse(BaseModel):
+    draft: str
+    needsClarification: bool = False
+    rationale: str = ""
+    raw: Optional[dict[str, Any]] = None
+
+
+class EvaluationRequest(BaseModel):
+    language: Optional[str] = Field(default="en")
+    procedure: dict[str, Any] = Field(default_factory=dict)
+    underlag: Optional[dict[str, Any]] = None
+    questions: list[dict[str, Any]] = Field(default_factory=list)
+    submissions: list[dict[str, Any]] = Field(default_factory=list)
+    existingScores: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class EvaluationResponse(BaseModel):
+    summary: str = ""
+    recommendation: Optional[str] = None
+    proposals: list[dict[str, Any]] = Field(default_factory=list)
+    raw: Optional[dict[str, Any]] = None
+
+
+class AwardMemoRequest(BaseModel):
+    language: Optional[str] = Field(default="en")
+    procedure: dict[str, Any] = Field(default_factory=dict)
+    winner: dict[str, Any] = Field(default_factory=dict)
+    evaluations: list[dict[str, Any]] = Field(default_factory=list)
+    standstillEndsAt: Optional[str] = None
+
+
+class AwardMemoResponse(BaseModel):
+    draft: str
+    rationale: str = ""
+    raw: Optional[dict[str, Any]] = None
+
+
+class AnnouncementRequest(BaseModel):
+    language: Optional[str] = Field(default="en")
+    procedure: dict[str, Any] = Field(default_factory=dict)
+
+
+class AnnouncementResponse(BaseModel):
+    draft: str
+    rationale: str = ""
+    raw: Optional[dict[str, Any]] = None
 
 
 class QuestionnaireAnswersResponse(BaseModel):
@@ -597,6 +679,284 @@ def _build_answers_user_text(body: QuestionnaireAnswersRequest) -> str:
     parts.append("SUPPLIER PROFILE CONTEXT (JSON):")
     parts.append(profile_json)
     return "\n".join(parts)
+
+
+@app.post("/generate/qa-reply", response_model=QaReplyResponse)
+async def generate_qa_reply(
+    body: QaReplyRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    verify_api_key(x_api_key)
+    lang = (body.language or "en").strip()[:2]
+    lang_label = "Swedish" if lang == "sv" else "English"
+    thread = body.thread or []
+    if len(thread) > 20:
+        thread = thread[-20:]
+    payload = {
+        "question": (body.question or "").strip()[:2000],
+        "supplierName": body.supplierName,
+        "procedure": body.procedure or {},
+        "underlag": body.underlag or {},
+        "thread": thread,
+    }
+    user_text = json.dumps(payload, ensure_ascii=False)
+    if len(user_text) > 12000:
+        user_text = user_text[:12000] + "…"
+    user_prefix = (
+        f"Output language: {lang_label} ({lang}). "
+        "Draft a buyer Q&A reply. Do not invent tender facts."
+    )
+    parsed = await generate_with_prompt(
+        QA_REPLY_PROMPT,
+        user_text,
+        lang,
+        user_prefix=user_prefix,
+    )
+    draft = str(parsed.get("draft") or "").strip()[:4000]
+    if not draft:
+        raise HTTPException(status_code=502, detail="Model returned empty Q&A draft")
+    return QaReplyResponse(
+        draft=draft,
+        needsClarification=bool(parsed.get("needsClarification")),
+        rationale=str(parsed.get("rationale") or "").strip()[:400],
+        raw=parsed,
+    )
+
+
+@app.post("/generate/evaluation", response_model=EvaluationResponse)
+async def generate_evaluation(
+    body: EvaluationRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    verify_api_key(x_api_key)
+    lang = (body.language or "en").strip()[:2]
+    lang_label = "Swedish" if lang == "sv" else "English"
+    submissions = body.submissions or []
+    if not submissions:
+        raise HTTPException(status_code=400, detail="submissions are required")
+    # Bound payload size for LLM context
+    trimmed_subs = []
+    for sub in submissions[:15]:
+        if not isinstance(sub, dict):
+            continue
+        answers = sub.get("answers") if isinstance(sub.get("answers"), list) else []
+        trimmed_subs.append(
+            {
+                "supplierId": sub.get("supplierId"),
+                "companyName": sub.get("companyName"),
+                "responseId": sub.get("responseId"),
+                "answers": [
+                    {
+                        "questionId": a.get("questionId"),
+                        "questionText": str(a.get("questionText") or "")[:300],
+                        "answerText": str(a.get("answerText") or "")[:800],
+                        "answerValue": a.get("answerValue"),
+                        "hasDocument": bool(a.get("hasDocument")),
+                    }
+                    for a in answers[:40]
+                    if isinstance(a, dict)
+                ],
+            }
+        )
+    payload = {
+        "procedure": body.procedure or {},
+        "underlag": body.underlag or {},
+        "questions": (body.questions or [])[:40],
+        "submissions": trimmed_subs,
+        "existingScores": (body.existingScores or [])[:20],
+    }
+    user_text = json.dumps(payload, ensure_ascii=False)
+    if len(user_text) > 14000:
+        user_text = user_text[:14000] + "…"
+    user_prefix = (
+        f"Output language: {lang_label} ({lang}). "
+        "Score each supplier from submitted answers only."
+    )
+    parsed = await generate_with_prompt(
+        EVALUATION_PROMPT,
+        user_text,
+        lang,
+        user_prefix=user_prefix,
+    )
+    summary = str(parsed.get("summary") or "").strip()[:4000]
+    recommendation = str(parsed.get("recommendation") or "").strip()[:800] or None
+    raw_props = parsed.get("proposals") if isinstance(parsed.get("proposals"), list) else []
+    proposals: list[dict[str, Any]] = []
+    for item in raw_props:
+        if not isinstance(item, dict):
+            continue
+        sid = str(item.get("supplierId") or "").strip()
+        if not sid:
+            continue
+        try:
+            score = float(item.get("score"))
+        except (TypeError, ValueError):
+            score = None
+        if score is not None:
+            score = max(0.0, min(100.0, score))
+        proposals.append(
+            {
+                "supplierId": sid,
+                "score": score,
+                "notes": str(item.get("notes") or "").strip()[:2000],
+                "rationale": str(item.get("rationale") or "").strip()[:800],
+            }
+        )
+    if not summary:
+        summary = f"Evaluation draft for {len(trimmed_subs)} submission(s)."
+    return EvaluationResponse(
+        summary=summary,
+        recommendation=recommendation,
+        proposals=proposals,
+        raw=parsed,
+    )
+
+
+@app.post("/generate/award-memo", response_model=AwardMemoResponse)
+async def generate_award_memo(
+    body: AwardMemoRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    verify_api_key(x_api_key)
+    lang = (body.language or "en").strip()[:2]
+    lang_label = "Swedish" if lang == "sv" else "English"
+    evaluations = body.evaluations or []
+    if len(evaluations) > 30:
+        evaluations = evaluations[:30]
+    payload = {
+        "procedure": body.procedure or {},
+        "winner": body.winner or {},
+        "evaluations": [
+            {
+                "supplierId": e.get("supplierId"),
+                "companyName": e.get("companyName"),
+                "score": e.get("score"),
+                "notes": str(e.get("notes") or "")[:500],
+            }
+            for e in evaluations
+            if isinstance(e, dict)
+        ],
+        "standstillEndsAt": body.standstillEndsAt,
+    }
+    user_text = json.dumps(payload, ensure_ascii=False)
+    if len(user_text) > 10000:
+        user_text = user_text[:10000] + "…"
+    user_prefix = (
+        f"Output language: {lang_label} ({lang}). "
+        "Draft an award decision memo grounded in evaluation scores only."
+    )
+    parsed = await generate_with_prompt(
+        AWARD_MEMO_PROMPT,
+        user_text,
+        lang,
+        user_prefix=user_prefix,
+    )
+    draft = str(parsed.get("draft") or "").strip()[:4000]
+    if not draft:
+        raise HTTPException(status_code=502, detail="Model returned empty award memo")
+    return AwardMemoResponse(
+        draft=draft,
+        rationale=str(parsed.get("rationale") or "").strip()[:400],
+        raw=parsed,
+    )
+
+
+@app.post("/generate/announcement", response_model=AnnouncementResponse)
+async def generate_announcement(
+    body: AnnouncementRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    verify_api_key(x_api_key)
+    lang = (body.language or "en").strip()[:2]
+    lang_label = "Swedish" if lang == "sv" else "English"
+    proc = body.procedure or {}
+    payload = {
+        "title": proc.get("title"),
+        "referenceNumber": proc.get("referenceNumber"),
+        "procedureType": proc.get("procedureType"),
+        "bidDeadline": proc.get("bidDeadline"),
+        "qaDeadline": proc.get("qaDeadline"),
+        "description": str(proc.get("description") or "")[:2000],
+        "announcementText": str(proc.get("announcementText") or "")[:2000],
+        "status": proc.get("status"),
+    }
+    user_text = json.dumps(payload, ensure_ascii=False)
+    if len(user_text) > 8000:
+        user_text = user_text[:8000] + "…"
+    user_prefix = (
+        f"Output language: {lang_label} ({lang}). "
+        "Draft a short public procurement announcement from procedure facts only."
+    )
+    parsed = await generate_with_prompt(
+        ANNOUNCEMENT_PROMPT,
+        user_text,
+        lang,
+        user_prefix=user_prefix,
+    )
+    draft = str(parsed.get("draft") or "").strip()[:4000]
+    if not draft:
+        raise HTTPException(status_code=502, detail="Model returned empty announcement")
+    return AnnouncementResponse(
+        draft=draft,
+        rationale=str(parsed.get("rationale") or "").strip()[:400],
+        raw=parsed,
+    )
+
+
+@app.post("/generate/completeness", response_model=CompletenessResponse)
+async def generate_completeness_review(
+    body: CompletenessRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    verify_api_key(x_api_key)
+    lang = (body.language or "en").strip()[:2]
+    lang_label = "Swedish" if lang == "sv" else "English"
+    payload = {
+        "completeness": body.completeness or {},
+        "issues": (body.issues or [])[:40],
+        "conflicts": (body.conflicts or [])[:20],
+        "supplierProfile": body.supplierProfile or {},
+    }
+    profile_json = json.dumps(payload, ensure_ascii=False)
+    if len(profile_json) > 12000:
+        profile_json = profile_json[:12000] + "…"
+    user_prefix = (
+        f"Output language: {lang_label} ({lang}). "
+        "Do not invent missing evidence. Prioritize actionable gaps."
+    )
+    parsed = await generate_with_prompt(
+        COMPLETENESS_PROMPT,
+        profile_json,
+        lang,
+        user_prefix=user_prefix,
+    )
+    summary = str(parsed.get("summary") or "").strip()[:1200]
+    raw_conflicts = parsed.get("conflicts") if isinstance(parsed.get("conflicts"), list) else []
+    conflicts: list[dict[str, Any]] = []
+    for item in raw_conflicts[:10]:
+        if not isinstance(item, dict):
+            continue
+        msg = str(item.get("message") or "").strip()
+        if not msg:
+            continue
+        conflicts.append(
+            {
+                "code": str(item.get("code") or "ai_conflict").strip()[:80] or "ai_conflict",
+                "severity": "error" if item.get("severity") == "error" else "warning",
+                "message": msg[:400],
+            }
+        )
+    raw_actions = parsed.get("nextActions") if isinstance(parsed.get("nextActions"), list) else []
+    next_actions = [str(a).strip()[:200] for a in raw_actions if str(a).strip()][:5]
+    if not summary:
+        pct = (body.completeness or {}).get("percent")
+        summary = f"Profile completeness review ({pct if pct is not None else 'n/a'}%)."
+    return CompletenessResponse(
+        summary=summary,
+        conflicts=conflicts,
+        nextActions=next_actions,
+        raw=parsed,
+    )
 
 
 @app.post("/generate/questionnaire/answers", response_model=QuestionnaireAnswersResponse)

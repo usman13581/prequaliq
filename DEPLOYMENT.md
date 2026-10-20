@@ -41,7 +41,22 @@ cd backend
 NODE_ENV=production npm start
 ```
 
-The start script runs migrations, seed scripts, then starts the server.
+The start script runs migrations, CPV/NUTS/prod questionnaire seeds, then starts the server.
+
+### 5b. Reset demo / E2E test data (optional, destructive)
+
+Wipes prior `@prequaliq.demo` / `*.e2e` buyers & suppliers and reloads the rich demo + AI test kit (unique underlag per procedure, Maria/Jonas/Anna, `[AI TEST]` award procedures).
+
+```bash
+cd backend
+# One-shot after deploy:
+npm run seed-demo
+
+# Or enable on every start (Railway / env):
+SEED_DEMO_DATA=1 NODE_ENV=production npm start
+```
+
+Keeps `admin@prequaliq.com` and CPV/NUTS catalogs. **Do not** set `SEED_DEMO_DATA=1` if you have real customer data in the same database.
 
 ### 6. Serve frontend
 Serve the `frontend/dist` folder with your web server (Nginx, Vercel, Railway static, etc.)

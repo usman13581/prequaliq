@@ -272,45 +272,61 @@ export function ComplementHistoryThread({
                 </StatusBadge>
               </div>
 
-              <div className="px-3 py-3 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-muted">
+              <div className="px-3 py-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-muted mb-3">
                   {t('procedures.complementHistory')}
                 </p>
-                {history.map((m, idx) => {
-                  const isBuyer = m.authorRole === 'procuring_entity';
-                  return (
-                    <div key={m.id} className="relative pl-4 border-l-2 border-slate-200">
-                      <span className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-slate-400" />
-                      <div className="rounded-lg border border-border bg-slate-50/80 px-3 py-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                          <p className="text-xs font-semibold uppercase text-muted">
-                            {isBuyer ? t('procedures.qaBuyer') : t('procedures.qaSupplier')}
-                            <span className="normal-case font-normal text-muted"> · {t('procedures.complementEntry', { n: idx + 1 })}</span>
-                          </p>
-                          <span className="text-xs text-muted">{formatWhen(m.createdAt)}</span>
+                <div className="relative pl-5">
+                  {history.length > 0 ? (
+                    <div
+                      className="absolute left-[5px] top-2 bottom-2 w-0.5 bg-slate-200"
+                      aria-hidden
+                    />
+                  ) : null}
+                  <div className="space-y-3">
+                    {history.map((m, idx) => {
+                      const isBuyer = m.authorRole === 'procuring_entity';
+                      return (
+                        <div key={m.id} className="relative">
+                          <span
+                            className="absolute -left-[15px] top-2 z-[1] h-2.5 w-2.5 rounded-full bg-slate-400 ring-2 ring-white"
+                            aria-hidden
+                          />
+                          <div className="rounded-lg border border-border bg-slate-50/80 px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                              <p className="text-xs font-semibold uppercase text-muted">
+                                {isBuyer ? t('procedures.qaBuyer') : t('procedures.qaSupplier')}
+                                <span className="normal-case font-normal text-muted">
+                                  {' '}
+                                  · {t('procedures.complementEntry', { n: idx + 1 })}
+                                </span>
+                              </p>
+                              <span className="text-xs text-muted">{formatWhen(m.createdAt)}</span>
+                            </div>
+                            <p className="text-sm text-foreground whitespace-pre-wrap">{m.body}</p>
+                            {(m.attachments || []).length > 0 ? (
+                              <ul className="mt-2 space-y-1">
+                                {(m.attachments || []).map((att) => (
+                                  <li key={att.id}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownload(att)}
+                                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" />
+                                      {att.fileName}
+                                      <Download className="w-3 h-3" />
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
                         </div>
-                        <p className="text-sm text-foreground whitespace-pre-wrap">{m.body}</p>
-                        {(m.attachments || []).length > 0 ? (
-                          <ul className="mt-2 space-y-1">
-                            {(m.attachments || []).map((att) => (
-                              <li key={att.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDownload(att)}
-                                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline"
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                  {att.fileName}
-                                  <Download className="w-3 h-3" />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div className="px-3 py-3 border-t border-border bg-white space-y-2">
@@ -328,23 +344,25 @@ export function ComplementHistoryThread({
                   disabled={disabled || busy}
                   onChange={(files) => setComposer(c.id, { files })}
                 />
-                <button
-                  type="button"
-                  className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1.5"
-                  disabled={disabled || busy || (!composer.text.trim() && composer.files.length === 0)}
-                  onClick={async () => {
-                    try {
-                      setBusy(true);
-                      await onReply(c.id, composer.text.trim(), composer.files);
-                      setComposer(c.id, { text: '', files: [] });
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  {t('procedures.complementSendEntry')}
-                </button>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1.5"
+                    disabled={disabled || busy || (!composer.text.trim() && composer.files.length === 0)}
+                    onClick={async () => {
+                      try {
+                        setBusy(true);
+                        await onReply(c.id, composer.text.trim(), composer.files);
+                        setComposer(c.id, { text: '', files: [] });
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    {t('procedures.complementSendEntry')}
+                  </button>
+                </div>
               </div>
             </div>
           );

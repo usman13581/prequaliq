@@ -592,6 +592,8 @@ const suggestProfileFromDocuments = (req, res) => {
       if (uploadErr) {
         return res.status(400).json({ message: uploadErr.message || 'Upload failed' });
       }
+      const ent = await assertEntitlement(req.user.id, 'ai.profile_assist');
+      if (!ent.ok) return res.status(403).json({ message: ent.message, code: 'FEATURE_DISABLED' });
       if (!req.files?.length) {
         return res.status(400).json({ message: 'No PDF documents uploaded' });
       }
@@ -658,6 +660,9 @@ const suggestProfileFromDocuments = (req, res) => {
 
 const suggestQuestionnaireUnderstand = async (req, res) => {
   try {
+    const ent = await assertEntitlement(req.user.id, 'ai.requirements_builder');
+    if (!ent.ok) return res.status(403).json({ message: ent.message, code: 'FEATURE_DISABLED' });
+
     const entity = await db.ProcuringEntity.findOne({ where: { userId: req.user.id } });
     if (!entity) {
       return res.status(404).json({ message: 'Procuring entity profile not found' });
@@ -683,6 +688,9 @@ const suggestQuestionnaireUnderstand = async (req, res) => {
 
 const suggestQuestionnaireFromDescription = async (req, res) => {
   try {
+    const ent = await assertEntitlement(req.user.id, 'ai.requirements_builder');
+    if (!ent.ok) return res.status(403).json({ message: ent.message, code: 'FEATURE_DISABLED' });
+
     const entity = await db.ProcuringEntity.findOne({ where: { userId: req.user.id } });
     if (!entity) {
       return res.status(404).json({ message: 'Procuring entity profile not found' });

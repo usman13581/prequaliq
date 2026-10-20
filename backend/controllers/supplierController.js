@@ -12,6 +12,19 @@ const {
   getBackendAiEndpointsCatalog
 } = require('../services/aiExtractionService');
 const { processDocumentsForProfile } = require('../services/supplierProfileAiService');
+const { getEffectiveEntitlementsForUser } = require('../services/entitlementService');
+
+async function assertEntitlement(userId, key) {
+  try {
+    const map = await getEffectiveEntitlementsForUser(userId);
+    if (map[key] === false) {
+      return { ok: false, message: `Feature not enabled: ${key}` };
+    }
+  } catch (_e) {
+    /* fail-open on lookup errors — same as other controllers */
+  }
+  return { ok: true };
+}
 
 const insuranceAiUpload = multer({
   storage: multer.diskStorage({
@@ -763,6 +776,8 @@ const suggestInsuranceFromDocument = (req, res) => {
       if (uploadErr) {
         return res.status(400).json({ message: uploadErr.message || 'Upload failed' });
       }
+      const ent = await assertEntitlement(req.user.id, 'ai.profile_assist');
+      if (!ent.ok) return res.status(403).json({ message: ent.message, code: 'FEATURE_DISABLED' });
       if (!req.file) {
         return res.status(400).json({ message: 'No PDF document uploaded' });
       }
@@ -803,6 +818,8 @@ const suggestProfileFromDocuments = (req, res) => {
       if (uploadErr) {
         return res.status(400).json({ message: uploadErr.message || 'Upload failed' });
       }
+      const ent = await assertEntitlement(req.user.id, 'ai.profile_assist');
+      if (!ent.ok) return res.status(403).json({ message: ent.message, code: 'FEATURE_DISABLED' });
       if (!req.files?.length) {
         return res.status(400).json({ message: 'No PDF documents uploaded' });
       }
@@ -855,6 +872,9 @@ const suggestProfileFromDocuments = (req, res) => {
 
 const suggestAnswersForQuestionnaire = async (req, res) => {
   try {
+    const ent = await assertEntitlement(req.user.id, 'ai.bid_suggestions');
+    if (!ent.ok) return res.status(403).json({ message: ent.message, code: 'FEATURE_DISABLED' });
+
     const questionnaireId = req.params.questionnaireId;
     const language = (req.body?.language || 'en').slice(0, 2);
     const { suggestAnswersForQuestionnaire: runSuggest } = require('../services/questionnaireAnswerAiService');

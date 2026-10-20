@@ -24,12 +24,14 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const { token, user } = useAuth();
   const [entitlements, setEntitlements] = useState<EntitlementMap>({});
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Start loading so AI/feature gates stay hidden until /entitlements/me resolves
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!token || !user || user.role === 'admin') {
       setEntitlements({});
       setCatalog([]);
+      setLoading(false);
       return;
     }
     try {
@@ -51,10 +53,11 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const hasEntitlement = useCallback(
     (key: string) => {
       if (!user || user.role === 'admin') return true;
-      if (entitlements[key] === undefined) return true; // fail-open until loaded for live UX
+      if (loading) return false;
+      if (entitlements[key] === undefined) return true; // unknown non-catalog keys
       return !!entitlements[key];
     },
-    [entitlements, user]
+    [entitlements, loading, user]
   );
 
   const value = useMemo(

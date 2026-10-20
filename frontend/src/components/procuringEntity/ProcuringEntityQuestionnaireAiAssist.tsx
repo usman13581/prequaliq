@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useEntitlement } from '../../contexts/EntitlementContext';
 import {
   QUESTIONNAIRE_DESC_MAX,
   QUESTIONNAIRE_DESC_MIN,
@@ -126,6 +127,7 @@ type RootProps = {
 function Root({ onApply, children }: RootProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
+  const { enabled: aiEntitled, loading: entitlementLoading } = useEntitlement('ai.requirements_builder');
   const [loadingPhase, setLoadingPhase] = useState<'understand' | 'generate' | null>(null);
   const [understandModalOpen, setUnderstandModalOpen] = useState(false);
   const [understanding, setUnderstanding] = useState<QuestionnaireUnderstandResponse | null>(null);
@@ -328,6 +330,10 @@ function Root({ onApply, children }: RootProps) {
     canApply,
   };
 
+  if (entitlementLoading || !aiEntitled) {
+    return <>{children}</>;
+  }
+
   return (
     <QuestionnaireAiContext.Provider value={value}>
       {children}
@@ -338,13 +344,15 @@ function Root({ onApply, children }: RootProps) {
 
 function UnderstandConfirmModal() {
   const { t } = useTranslation();
+  const ctx = useContext(QuestionnaireAiContext);
+  if (!ctx) return null;
   const {
     understandModalOpen,
     understanding,
     confirmGenerate,
     dismissUnderstand,
     loadingPhase,
-  } = useQuestionnaireAi();
+  } = ctx;
 
   if (!understandModalOpen || !understanding) return null;
 
@@ -429,6 +437,8 @@ function UnderstandConfirmModal() {
 
 function InputBar() {
   const { t } = useTranslation();
+  const ctx = useContext(QuestionnaireAiContext);
+  if (!ctx) return null;
   const {
     loading,
     loadingPhase,
@@ -444,7 +454,7 @@ function InputBar() {
     generate,
     result,
     selectedQuestionCount,
-  } = useQuestionnaireAi();
+  } = ctx;
 
   const canGenerate =
     description.trim().length >= QUESTIONNAIRE_DESC_MIN &&
@@ -544,6 +554,8 @@ function questionTypeLabel(t: (k: string) => string, type: string) {
 
 function Drawer() {
   const { t } = useTranslation();
+  const ctx = useContext(QuestionnaireAiContext);
+  if (!ctx) return null;
   const {
     result,
     drawerOpen,
@@ -558,7 +570,7 @@ function Drawer() {
     toggleQuestionDocument,
     selectedQuestionCount,
     canApply,
-  } = useQuestionnaireAi();
+  } = ctx;
 
   if (!hasResult || !result) return null;
 

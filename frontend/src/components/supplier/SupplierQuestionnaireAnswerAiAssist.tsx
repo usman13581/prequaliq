@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, Sparkles, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useEntitlement } from '../../contexts/EntitlementContext';
 
 export type AnswerSuggestion = {
   questionId: string;
@@ -32,6 +33,7 @@ export function SupplierQuestionnaireAnswerAiAssist({
 }: Props) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
+  const { enabled: aiEnabled, loading: entitlementLoading } = useEntitlement('ai.bid_suggestions');
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [disclaimer, setDisclaimer] = useState('');
@@ -98,6 +100,10 @@ export function SupplierQuestionnaireAnswerAiAssist({
     showToast(t('supplierPortal.aiAnswersApplied', { count: selected.length }), 'success');
     setOpen(false);
   };
+
+  if (entitlementLoading || !aiEnabled) {
+    return null;
+  }
 
   return (
     <div className="rounded-xl border border-violet-200/80 bg-gradient-to-br from-violet-50/70 to-white p-4 space-y-3">

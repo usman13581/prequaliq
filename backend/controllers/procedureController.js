@@ -262,6 +262,29 @@ const createProcedure = async (req, res) => {
     const title = (req.body.title || '').trim();
     if (!title) return res.status(400).json({ message: 'Title is required' });
 
+    const questionnaireId = req.body.questionnaireId || null;
+    if (questionnaireId) {
+      const q = await db.Questionnaire.findOne({
+        where: { id: questionnaireId, procuringEntityId: entity.id }
+      });
+      if (!q) return res.status(404).json({ message: 'Questionnaire not found' });
+      const { findOtherProcedureUsingQuestionnaire } = require('./questionnaireController');
+      const other = await findOtherProcedureUsingQuestionnaire(questionnaireId, entity.id, null);
+      if (other) {
+        return res.status(409).json({
+          code: 'QUESTIONNAIRE_IN_USE',
+          message:
+            'This questionnaire is already linked to another procedure. Create a copy and link the unused copy instead.',
+          usedBy: {
+            id: other.id,
+            title: other.title,
+            status: other.status,
+            referenceNumber: other.referenceNumber || null
+          }
+        });
+      }
+    }
+
     const procedure = await db.Procedure.create({
       procuringEntityId: entity.id,
       title,
@@ -273,7 +296,7 @@ const createProcedure = async (req, res) => {
       bidDeadline: req.body.bidDeadline || null,
       qaDeadline: req.body.qaDeadline || null,
       notes: req.body.notes?.trim() || null,
-      questionnaireId: req.body.questionnaireId || null,
+      questionnaireId,
       createdBy: req.user.id
     });
 
@@ -400,6 +423,49 @@ const getProcedure = async (req, res) => {
       json.qaThreads = Array.from(threadMap.values()).sort(
         (a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)
       );
+
+      // Submitted bids for evaluation UI (supplier + answer count)
+      if (db.QuestionnaireResponse) {
+        const bidWhere = procedure.questionnaireId
+          ? {
+              questionnaireId: procedure.questionnaireId,
+              status: 'submitted',
+              [Op.or]: [
+                { procedureId: procedure.id },
+                { procedureId: null }
+              ]
+            }
+          : { procedureId: procedure.id, status: 'submitted' };
+        const bids = await db.QuestionnaireResponse.findAll({
+          where: bidWhere,
+          include: [
+            { model: db.Supplier, as: 'supplier', attributes: ['id', 'companyName'] },
+            ...(db.Answer
+              ? [{ model: db.Answer, as: 'answers', attributes: ['id'], required: false }]
+              : [])
+          ],
+          order: [['submittedAt', 'DESC']]
+        });
+        // Prefer procedure-scoped response when both exist
+        const bySupplier = new Map();
+        for (const b of bids) {
+          const sid = b.supplierId;
+          const prev = bySupplier.get(sid);
+          if (!prev || (b.procedureId === procedure.id && prev.procedureId !== procedure.id)) {
+            bySupplier.set(sid, b);
+          }
+        }
+        json.bidResponses = Array.from(bySupplier.values()).map((b) => ({
+          id: b.id,
+          supplierId: b.supplierId,
+          companyName: b.supplier?.companyName || 'Supplier',
+          submittedAt: b.submittedAt,
+          answerCount: Array.isArray(b.answers) ? b.answers.length : 0,
+          procedureId: b.procedureId
+        }));
+      } else {
+        json.bidResponses = [];
+      }
     } else {
       // Strip peer identity from supplier view (only role + own thread)
       json.qaMessages = (json.qaMessages || []).map((m) => ({
@@ -460,6 +526,35 @@ const updateProcedure = async (req, res) => {
     if (updates.title) updates.title = String(updates.title).trim();
     if (updates.bidDeadline !== undefined && (procedure.isSealed || procedure.sealedUntil)) {
       updates.sealedUntil = sealedUntilFromBidDeadline(updates.bidDeadline);
+    }
+    if (
+      updates.questionnaireId !== undefined &&
+      updates.questionnaireId &&
+      updates.questionnaireId !== procedure.questionnaireId
+    ) {
+      const q = await db.Questionnaire.findOne({
+        where: { id: updates.questionnaireId, procuringEntityId: entity.id }
+      });
+      if (!q) return res.status(404).json({ message: 'Questionnaire not found' });
+      const { findOtherProcedureUsingQuestionnaire } = require('./questionnaireController');
+      const other = await findOtherProcedureUsingQuestionnaire(
+        updates.questionnaireId,
+        entity.id,
+        procedure.id
+      );
+      if (other) {
+        return res.status(409).json({
+          code: 'QUESTIONNAIRE_IN_USE',
+          message:
+            'This questionnaire is already linked to another procedure. Create a copy and link the unused copy instead.',
+          usedBy: {
+            id: other.id,
+            title: other.title,
+            status: other.status,
+            referenceNumber: other.referenceNumber || null
+          }
+        });
+      }
     }
     await procedure.update(updates);
     await logAudit({
@@ -737,6 +832,16 @@ const createAward = async (req, res) => {
     }
 
     const { winnerSupplierId, decisionMemo, standstillEndsAt } = req.body;
+    if (winnerSupplierId) {
+      const evaluated = await db.BidEvaluation.findOne({
+        where: { procedureId: procedure.id, supplierId: winnerSupplierId }
+      });
+      if (!evaluated) {
+        return res.status(400).json({
+          message: 'Winner must be a supplier that has been evaluated for this procedure.'
+        });
+      }
+    }
     const now = new Date();
     let award = await db.AwardDecision.findOne({ where: { procedureId: procedure.id } });
     if (award) {
@@ -888,6 +993,29 @@ const linkQuestionnaire = async (req, res) => {
         where: { id: questionnaireId, procuringEntityId: entity.id }
       });
       if (!q) return res.status(404).json({ message: 'Questionnaire not found' });
+
+      // One questionnaire may be linked to only one procedure
+      if (procedure.questionnaireId !== questionnaireId) {
+        const { findOtherProcedureUsingQuestionnaire } = require('./questionnaireController');
+        const other = await findOtherProcedureUsingQuestionnaire(
+          questionnaireId,
+          entity.id,
+          procedure.id
+        );
+        if (other) {
+          return res.status(409).json({
+            code: 'QUESTIONNAIRE_IN_USE',
+            message:
+              'This questionnaire is already linked to another procedure. Create a copy and link the unused copy instead.',
+            usedBy: {
+              id: other.id,
+              title: other.title,
+              status: other.status,
+              referenceNumber: other.referenceNumber || null
+            }
+          });
+        }
+      }
     }
 
     await procedure.update({

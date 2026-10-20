@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, FileText, MessageSquare, Trophy, ClipboardList, AlertCircle, Calendar, ChevronRight, Hash } from 'lucide-react';
+import { Plus, FileText, MessageSquare, Trophy, ClipboardList, AlertCircle, Calendar, ChevronRight, Hash, X, Loader2, Sparkles } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useEntitlement } from '../../contexts/EntitlementContext';
-import { QuestionnaireSlimRow, StatusBadge } from '../questionnaires/QuestionnaireSlimRow';
+import { StatusBadge } from '../questionnaires/QuestionnaireSlimRow';
 import { useListPagination } from '../../hooks/useListPagination';
 import { ListPagination } from '../ui/ListPagination';
 import { SlideOver, CenterModal } from '../ui/SlideOver';
@@ -77,7 +77,7 @@ const STATUS_TONE: Record<string, 'gray' | 'blue' | 'yellow' | 'green' | 'orange
 };
 
 export function ProceduresPanel({ accountApproved = true }: { accountApproved?: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const { enabled } = useEntitlement('tender.procedure_setup');
   const { enabled: canPublish } = useEntitlement('tender.publish');
@@ -88,8 +88,28 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
   const { enabled: canQa } = useEntitlement('tender.qa');
   const { enabled: canAiQa } = useEntitlement('ai.qa_draft_replies');
   const { enabled: canAiEval } = useEntitlement('ai.evaluation_copilot');
+  const { enabled: canAiAwardMemo } = useEntitlement('ai.award_memo');
+  const { enabled: canAiAnnouncement } = useEntitlement('ai.announcement_draft');
   const [procedures, setProcedures] = useState<Procedure[]>([]);
-  const [questionnaires, setQuestionnaires] = useState<Array<{ id: string; title: string }>>([]);
+  const [questionnaires, setQuestionnaires] = useState<
+    Array<{
+      id: string;
+      title: string;
+      description?: string | null;
+      inUse?: boolean;
+      linkedProcedureCount?: number;
+      linkedProcedures?: Array<{ id: string; title: string; status: string }>;
+    }>
+  >([]);
+  const [underlagCopyOpen, setUnderlagCopyOpen] = useState(false);
+  const [underlagCopySource, setUnderlagCopySource] = useState<{
+    id: string;
+    title: string;
+    usedByTitle?: string;
+  } | null>(null);
+  const [underlagCopyTitle, setUnderlagCopyTitle] = useState('');
+  const [underlagCopyNotes, setUnderlagCopyNotes] = useState('');
+  const [underlagCopySaving, setUnderlagCopySaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<any>(null);
   const [tab, setTab] = useState<'plan' | 'underlag' | 'qa' | 'eval' | 'award' | 'complements'>('plan');
@@ -104,7 +124,22 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
   });
   const [qaBody, setQaBody] = useState('');
   const [qaThreadSupplierId, setQaThreadSupplierId] = useState<string | null>(null);
-  const [evalForm, setEvalForm] = useState({ supplierId: '', score: '', notes: '' });
+  const [evalEdits, setEvalEdits] = useState<Record<string, { score: string; notes: string }>>({});
+  const [evalSavingId, setEvalSavingId] = useState<string | null>(null);
+  const [evalAiLoading, setEvalAiLoading] = useState(false);
+  const [evalAiPanel, setEvalAiPanel] = useState<{
+    summary: string;
+    recommendation?: string | null;
+    source?: string;
+    proposals: Array<{
+      supplierId: string;
+      companyName?: string;
+      responseId?: string;
+      score: number | null;
+      notes: string;
+      rationale?: string;
+    }>;
+  } | null>(null);
   const [awardForm, setAwardForm] = useState({ winnerSupplierId: '', decisionMemo: '', standstillEndsAt: '' });
   const [suppliers, setSuppliers] = useState<
     Array<{ id: string; companyName: string; email?: string | null; cpvMatched?: boolean }>
@@ -131,7 +166,16 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         api.get('/questionnaires')
       ]);
       setProcedures(procRes.data.procedures || []);
-      setQuestionnaires((qRes.data.questionnaires || []).map((q: any) => ({ id: q.id, title: q.title })));
+      setQuestionnaires(
+        (qRes.data.questionnaires || []).map((q: any) => ({
+          id: q.id,
+          title: q.title,
+          description: q.description,
+          inUse: Boolean(q.inUse),
+          linkedProcedureCount: q.linkedProcedureCount || 0,
+          linkedProcedures: q.linkedProcedures || [],
+        }))
+      );
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedLoadProcedures'), 'error');
     } finally {
@@ -207,10 +251,16 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
       const res = await api.get(`/procedures/${id}`);
       const procedure = res.data.procedure;
       setDetail(procedure);
-      setTab(preferTab || 'plan');
+      // Opening a different procedure → Plan. Refreshing the same one → stay on current tab
+      // unless a specific tab is requested.
+      const nextTab = preferTab ?? (detail?.id === id ? tab : 'plan');
+      setTab(nextTab);
       setInviteSupplierIds([]);
       setInviteShowAll(false);
       setQaBody('');
+      if (nextTab !== 'eval') {
+        setEvalAiPanel(null);
+      }
       const threads = procedure.qaThreads || [];
       setQaThreadSupplierId((prev) => {
         if (prev && threads.some((th: any) => th.supplierId === prev)) return prev;
@@ -279,13 +329,81 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
 
   const linkUnderlag = async (questionnaireId: string) => {
     if (!detail) return;
+    if (!questionnaireId) {
+      try {
+        await api.put(`/procedures/${detail.id}/underlag`, { questionnaireId: null });
+        showToast(t('msg.underlagLinked'), 'success');
+        await openDetail(detail.id, 'underlag');
+        load();
+      } catch (error: any) {
+        showToast(error.response?.data?.message || t('msg.failedLinkUnderlag'), 'error');
+      }
+      return;
+    }
+
+    const q = questionnaires.find((x) => x.id === questionnaireId);
+    const usedElsewhere =
+      detail.questionnaireId !== questionnaireId &&
+      (q?.linkedProcedures || []).some((p) => p.id !== detail.id);
+    if (usedElsewhere) {
+      const other = (q?.linkedProcedures || []).find((p) => p.id !== detail.id);
+      setUnderlagCopySource({
+        id: questionnaireId,
+        title: q?.title || '',
+        usedByTitle: other?.title,
+      });
+      setUnderlagCopyTitle(`${q?.title || 'Questionnaire'} (copy)`);
+      setUnderlagCopyNotes('');
+      setUnderlagCopyOpen(true);
+      return;
+    }
+
     try {
-      await api.put(`/procedures/${detail.id}/underlag`, { questionnaireId: questionnaireId || null });
+      await api.put(`/procedures/${detail.id}/underlag`, { questionnaireId });
       showToast(t('msg.underlagLinked'), 'success');
-      openDetail(detail.id);
+      await openDetail(detail.id, 'underlag');
+      load();
+    } catch (error: any) {
+      if (error.response?.data?.code === 'QUESTIONNAIRE_IN_USE') {
+        setUnderlagCopySource({
+          id: questionnaireId,
+          title: q?.title || '',
+          usedByTitle: error.response?.data?.usedBy?.title,
+        });
+        setUnderlagCopyTitle(`${q?.title || 'Questionnaire'} (copy)`);
+        setUnderlagCopyNotes('');
+        setUnderlagCopyOpen(true);
+        return;
+      }
+      showToast(error.response?.data?.message || t('msg.failedLinkUnderlag'), 'error');
+    }
+  };
+
+  const copyAndLinkUnderlag = async () => {
+    if (!detail || !underlagCopySource) return;
+    const title = underlagCopyTitle.trim();
+    if (!title) {
+      showToast(t('procedures.copyNeedsTitle', { defaultValue: 'Enter a name for the new questionnaire' }), 'warning');
+      return;
+    }
+    try {
+      setUnderlagCopySaving(true);
+      const copyRes = await api.post(`/questionnaires/${underlagCopySource.id}/copy`, {
+        title,
+        notes: underlagCopyNotes.trim() || undefined,
+      });
+      const newId = copyRes.data.questionnaire?.id;
+      if (!newId) throw new Error('Copy missing id');
+      await api.put(`/procedures/${detail.id}/underlag`, { questionnaireId: newId });
+      showToast(t('procedures.copyLinked', { defaultValue: 'Copied questionnaire and linked as underlag' }), 'success');
+      setUnderlagCopyOpen(false);
+      setUnderlagCopySource(null);
+      await openDetail(detail.id, 'underlag');
       load();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedLinkUnderlag'), 'error');
+    } finally {
+      setUnderlagCopySaving(false);
     }
   };
 
@@ -304,19 +422,143 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
     }
   };
 
-  const saveEval = async () => {
-    if (!detail || !evalForm.supplierId) return;
+  const evalReadOnly = ['awarded', 'standstill', 'closed'].includes(detail?.status || '');
+
+  const evalRows = useMemo(() => {
+    if (!detail) return [] as Array<{
+      key: string;
+      supplierId: string;
+      companyName: string;
+      evaluationId?: string;
+      responseId?: string | null;
+      answerCount?: number;
+      score: string;
+      notes: string;
+    }>;
+    const bySupplier = new Map<string, any>();
+    for (const ev of (detail.evaluations as Evaluation[]) || []) {
+      bySupplier.set(ev.supplierId, {
+        key: ev.id,
+        supplierId: ev.supplierId,
+        companyName: ev.supplier?.companyName || '—',
+        evaluationId: ev.id,
+        score: ev.score != null ? String(ev.score) : '',
+        notes: ev.notes || '',
+      });
+    }
+    for (const bid of detail.bidResponses || []) {
+      const existing = bySupplier.get(bid.supplierId);
+      if (existing) {
+        existing.responseId = bid.id;
+        existing.answerCount = bid.answerCount;
+        if (!existing.companyName || existing.companyName === '—') {
+          existing.companyName = bid.companyName || existing.companyName;
+        }
+      } else {
+        bySupplier.set(bid.supplierId, {
+          key: `bid-${bid.id}`,
+          supplierId: bid.supplierId,
+          companyName: bid.companyName || '—',
+          responseId: bid.id,
+          answerCount: bid.answerCount,
+          score: '',
+          notes: '',
+        });
+      }
+    }
+    return Array.from(bySupplier.values()).sort((a, b) =>
+      String(a.companyName).localeCompare(String(b.companyName))
+    );
+  }, [detail]);
+
+  const evalPager = useListPagination(evalRows, 10);
+
+  const evalSyncKey = useMemo(
+    () => evalRows.map((r) => `${r.supplierId}:${r.score}:${r.notes}`).join('|'),
+    [evalRows]
+  );
+
+  useEffect(() => {
+    if (!detail?.id || tab !== 'eval') return;
+    const next: Record<string, { score: string; notes: string }> = {};
+    for (const row of evalRows) {
+      next[row.supplierId] = { score: row.score, notes: row.notes };
+    }
+    setEvalEdits(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only when saved row values change
+  }, [detail?.id, tab, evalSyncKey]);
+
+  const saveEvalRow = async (supplierId: string, responseId?: string | null) => {
+    if (!detail || evalReadOnly) return;
+    const edit = evalEdits[supplierId] || { score: '', notes: '' };
     try {
+      setEvalSavingId(supplierId);
       await api.put(`/procedures/${detail.id}/evaluations`, {
-        supplierId: evalForm.supplierId,
-        score: evalForm.score === '' ? null : Number(evalForm.score),
-        notes: evalForm.notes
+        supplierId,
+        score: edit.score === '' ? null : Number(edit.score),
+        notes: edit.notes,
+        responseId: responseId || null,
       });
       showToast(t('msg.evaluationSaved'), 'success');
-      setEvalForm({ supplierId: '', score: '', notes: '' });
-      openDetail(detail.id, 'eval');
+      await openDetail(detail.id, 'eval');
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedSaveEvaluation'), 'error');
+    } finally {
+      setEvalSavingId(null);
+    }
+  };
+
+  const runAiEvaluation = async () => {
+    if (!detail || evalReadOnly) return;
+    try {
+      setEvalAiLoading(true);
+      const res = await api.get(`/ai-extras/evaluation/${detail.id}`, {
+        params: { language: (i18n.language || 'en').slice(0, 2) },
+      });
+      setEvalAiPanel({
+        summary: res.data.summary || '',
+        recommendation: res.data.recommendation || null,
+        source: res.data.source,
+        proposals: res.data.proposals || [],
+      });
+      // Prefill editable rows from AI proposals (not saved until user clicks Save / Apply)
+      setEvalEdits((prev) => {
+        const next = { ...prev };
+        for (const p of res.data.proposals || []) {
+          if (!p?.supplierId) continue;
+          next[p.supplierId] = {
+            score: p.score != null && p.score !== '' ? String(p.score) : '',
+            notes: p.notes || '',
+          };
+        }
+        return next;
+      });
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
+    } finally {
+      setEvalAiLoading(false);
+    }
+  };
+
+  const applyAiProposals = async () => {
+    if (!detail || !evalAiPanel?.proposals?.length || evalReadOnly) return;
+    try {
+      setEvalAiLoading(true);
+      for (const p of evalAiPanel.proposals) {
+        await api.put(`/procedures/${detail.id}/evaluations`, {
+          supplierId: p.supplierId,
+          score: p.score,
+          notes: p.notes || '',
+          responseId: p.responseId || null,
+        });
+      }
+      showToast(t('procedures.aiEvalApplied', { defaultValue: 'AI scores applied — review and adjust if needed' }), 'success');
+      setEvalAiPanel(null);
+      await openDetail(detail.id, 'eval');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('msg.failedSaveEvaluation'), 'error');
+    } finally {
+      setEvalAiLoading(false);
     }
   };
 
@@ -336,7 +578,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         res.data.contract ? t('contracts.createdFromAward') : t('msg.awardSaved'),
         'success'
       );
-      openDetail(detail.id);
+      await openDetail(detail.id, 'award');
       load();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedSaveAward'), 'error');
@@ -620,6 +862,79 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         </div>
       </CenterModal>
 
+      <CenterModal
+        open={underlagCopyOpen}
+        onClose={() => {
+          if (underlagCopySaving) return;
+          setUnderlagCopyOpen(false);
+          setUnderlagCopySource(null);
+        }}
+        title={t('procedures.copyQuestionnaireTitle', { defaultValue: 'Create unused copy' })}
+        subtitle={
+          underlagCopySource?.usedByTitle
+            ? t('procedures.copyQuestionnaireBecause', {
+                defaultValue: '“{{title}}” is already used by “{{usedBy}}”. Create a new copy for this procedure.',
+                title: underlagCopySource.title,
+                usedBy: underlagCopySource.usedByTitle,
+              })
+            : t('procedures.copyQuestionnaireHint', {
+                defaultValue: 'Each procedure needs its own questionnaire. Create a copy to link here.',
+              })
+        }
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="btn-cancel px-4 py-2 rounded-xl text-sm font-semibold"
+              disabled={underlagCopySaving}
+              onClick={() => {
+                setUnderlagCopyOpen(false);
+                setUnderlagCopySource(null);
+              }}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn-save px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+              disabled={underlagCopySaving}
+              onClick={copyAndLinkUnderlag}
+            >
+              {underlagCopySaving
+                ? t('common.loading', { defaultValue: 'Saving…' })
+                : t('procedures.copyAndLink', { defaultValue: 'Copy and link' })}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              {t('procedures.copyNewTitle', { defaultValue: 'New questionnaire name' })}
+            </label>
+            <input
+              className="input-brand w-full"
+              value={underlagCopyTitle}
+              onChange={(e) => setUnderlagCopyTitle(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              {t('procedures.copyNotes', { defaultValue: 'Extra notes (optional)' })}
+            </label>
+            <textarea
+              className="input-brand w-full"
+              rows={3}
+              value={underlagCopyNotes}
+              onChange={(e) => setUnderlagCopyNotes(e.target.value)}
+              placeholder={t('procedures.copyNotesPlaceholder', {
+                defaultValue: 'e.g. Variant for Lot A / 2026 standstill package',
+              })}
+            />
+          </div>
+        </div>
+      </CenterModal>
+
       <SlideOver
         open={!!detail}
         onClose={() => { setDetail(null); }}
@@ -873,13 +1188,24 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                   onChange={(e) => linkUnderlag(e.target.value)}
                 >
                   <option value="">{t('procedures.selectQuestionnaire')}</option>
-                  {questionnaires.map((q) => (
-                    <option key={q.id} value={q.id}>{q.title}</option>
-                  ))}
+                  {questionnaires.map((q) => {
+                    const usedElsewhere = (q.linkedProcedures || []).some((p) => p.id !== detail.id);
+                    const label = usedElsewhere
+                      ? `${q.title} (${t('procedures.questionnaireInUse', { defaultValue: 'in use — will offer copy' })})`
+                      : q.title;
+                    return (
+                      <option key={q.id} value={q.id}>{label}</option>
+                    );
+                  })}
                 </BrandSelect>
                 {detail.questionnaire ? (
                   <p className="text-sm font-medium text-foreground">{t('procedures.linked')}: {detail.questionnaire.title}</p>
                 ) : null}
+                <p className="text-xs text-muted">
+                  {t('procedures.underlagUniqueHint', {
+                    defaultValue: 'Each procedure needs its own questionnaire. If one is already linked elsewhere, you can create an unused copy.',
+                  })}
+                </p>
               </>
             )}
 
@@ -898,16 +1224,29 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                   canAiQa
                     ? async () => {
                         try {
+                          if (!qaThreadSupplierId) {
+                            showToast(t('procedures.selectSupplierThread', { defaultValue: 'Select a supplier thread first' }), 'warning');
+                            return;
+                          }
                           const threadMsgs = ((detail.qaMessages as QaMessage[]) || []).filter(
                             (m) => m.threadSupplierId === qaThreadSupplierId
                           );
                           const lastQ = [...threadMsgs].reverse().find((m) => m.authorRole === 'supplier');
                           const res = await api.post('/ai-extras/qa-draft', {
+                            procedureId: detail.id,
+                            threadSupplierId: qaThreadSupplierId,
                             question: lastQ?.body || qaBody,
-                            context: detail.description || detail.title
+                            language: (i18n.language || 'en').slice(0, 2),
                           });
                           setQaBody(res.data.draft || '');
-                          showToast(t('procedures.aiDraftReady'), 'success');
+                          showToast(
+                            res.data.needsClarification
+                              ? t('procedures.aiDraftNeedsClarification', {
+                                  defaultValue: 'AI draft ready — asks the supplier to clarify (review before send)',
+                                })
+                              : t('procedures.aiDraftReady'),
+                            'success'
+                          );
                         } catch (error: any) {
                           showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
                         }
@@ -919,59 +1258,179 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
 
             {tab === 'eval' && (
               <>
-                {['awarded', 'standstill', 'closed'].includes(detail.status) ? (
+                {evalReadOnly ? (
                   <p className="text-xs text-amber-800 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
                     {t('procedures.evalReadOnlyAfterAward')}
                   </p>
                 ) : null}
-                <div className="space-y-1.5">
-                  {(detail.evaluations as Evaluation[] | undefined)?.map((ev) => (
-                    <QuestionnaireSlimRow
-                      key={ev.id}
-                      compact
-                      title={ev.supplier?.companyName || '—'}
-                      description={ev.notes || undefined}
-                      meta={
-                        <StatusBadge tone={ev.score != null ? 'blue' : 'gray'}>
-                          {ev.score != null ? `${t('procedures.score')}: ${ev.score}` : '—'}
-                        </StatusBadge>
-                      }
-                    />
-                  ))}
-                </div>
-                {!['awarded', 'standstill', 'closed'].includes(detail.status) ? (
-                  <>
-                    <div className="grid sm:grid-cols-3 gap-3">
-                      <BrandSelect value={evalForm.supplierId} onChange={(e) => setEvalForm({ ...evalForm, supplierId: e.target.value })}>
-                        <option value="">{t('procedures.selectSupplier')}</option>
-                        {suppliers.map((s) => (
-                          <option key={s.id} value={s.id}>{s.companyName}</option>
-                        ))}
-                      </BrandSelect>
-                      <input className="input-brand" type="number" placeholder={t('procedures.score')} value={evalForm.score} onChange={(e) => setEvalForm({ ...evalForm, score: e.target.value })} />
-                      <input className="input-brand" placeholder={t('procedures.notes')} value={evalForm.notes} onChange={(e) => setEvalForm({ ...evalForm, notes: e.target.value })} />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className="btn-save px-4 py-2 rounded-xl text-sm font-semibold" onClick={saveEval}>{t('procedures.saveEval')}</button>
-                      {canAiEval ? (
+
+                {!evalReadOnly && canAiEval ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={evalAiLoading}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+                      onClick={runAiEvaluation}
+                    >
+                      {evalAiLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                      {t('procedures.aiEvalSummary')}
+                    </button>
+                  </div>
+                ) : null}
+
+                {evalAiPanel ? (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50/80 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-violet-950">
+                          {t('procedures.aiEvalPanelTitle', { defaultValue: 'AI evaluation' })}
+                        </p>
+                        {evalAiPanel.source ? (
+                          <p className="text-[11px] text-violet-700/80 mt-0.5">
+                            {evalAiPanel.source === 'ai'
+                              ? t('procedures.aiEvalSourceAi', { defaultValue: 'Based on submitted answers (GPU)' })
+                              : t('procedures.aiEvalSourceFallback', { defaultValue: 'Draft from answer coverage — review carefully' })}
+                          </p>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
-                        className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700"
-                        onClick={async () => {
-                          try {
-                            const res = await api.get(`/ai-extras/evaluation/${detail.id}`);
-                            showToast(res.data.summary?.slice(0, 180) || t('procedures.aiDraftReady'), 'info');
-                          } catch (error: any) {
-                            showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
-                          }
-                        }}
+                        className="p-1 rounded-lg text-violet-700 hover:bg-violet-100"
+                        aria-label={t('common.cancel')}
+                        onClick={() => setEvalAiPanel(null)}
                       >
-                        {t('procedures.aiEvalSummary')}
+                        <X size={18} />
                       </button>
-                      ) : null}
                     </div>
-                  </>
+                    <p className="text-sm text-violet-950 whitespace-pre-wrap leading-relaxed">
+                      {evalAiPanel.summary}
+                    </p>
+                    {evalAiPanel.recommendation ? (
+                      <p className="text-xs text-violet-900 border-t border-violet-200 pt-2">
+                        <span className="font-semibold">{t('procedures.aiEvalRecommendation', { defaultValue: 'Recommendation' })}: </span>
+                        {evalAiPanel.recommendation}
+                      </p>
+                    ) : null}
+                    {evalAiPanel.proposals.length > 0 ? (
+                      <ul className="space-y-2 text-xs text-violet-950">
+                        {evalAiPanel.proposals.map((p) => (
+                          <li key={p.supplierId} className="rounded-lg border border-violet-200 bg-white/70 px-3 py-2">
+                            <span className="font-semibold">{p.companyName || p.supplierId}</span>
+                            {p.score != null ? (
+                              <span className="ml-2 text-violet-700">{t('procedures.score')}: {p.score}</span>
+                            ) : null}
+                            {(p.notes || p.rationale) ? (
+                              <p className="mt-1 text-violet-800/90 whitespace-pre-wrap">{p.notes || p.rationale}</p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {!evalReadOnly ? (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={evalAiLoading || !evalAiPanel.proposals.length}
+                          className="btn-save px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                          onClick={applyAiProposals}
+                        >
+                          {t('procedures.aiEvalApply', { defaultValue: 'Apply AI scores' })}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-cancel px-4 py-2 rounded-xl text-sm font-semibold"
+                          onClick={() => setEvalAiPanel(null)}
+                        >
+                          {t('common.cancel')}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
+
+                {evalRows.length === 0 ? (
+                  <p className="text-sm text-muted py-4">
+                    {t('procedures.evalEmpty', { defaultValue: 'No submitted bids to score yet.' })}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {evalPager.paginatedItems.map((row) => {
+                      const edit = evalEdits[row.supplierId] || { score: row.score, notes: row.notes };
+                      return (
+                        <div
+                          key={row.key}
+                          className="rounded-xl border border-border bg-white p-3 space-y-2"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">{row.companyName}</p>
+                              {row.answerCount != null ? (
+                                <p className="text-[11px] text-muted">
+                                  {t('procedures.evalAnswersCount', {
+                                    defaultValue: '{{count}} answers submitted',
+                                    count: row.answerCount,
+                                  })}
+                                </p>
+                              ) : null}
+                            </div>
+                            {!evalReadOnly ? (
+                              <button
+                                type="button"
+                                disabled={evalSavingId === row.supplierId}
+                                className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+                                onClick={() => saveEvalRow(row.supplierId, row.responseId)}
+                              >
+                                {evalSavingId === row.supplierId ? (
+                                  <Loader2 size={14} className="animate-spin inline" />
+                                ) : (
+                                  t('procedures.saveEval')
+                                )}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="grid sm:grid-cols-[7rem_1fr] gap-2">
+                            <input
+                              className="input-brand"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.5}
+                              disabled={evalReadOnly}
+                              placeholder={t('procedures.score')}
+                              value={edit.score}
+                              onChange={(e) =>
+                                setEvalEdits((prev) => ({
+                                  ...prev,
+                                  [row.supplierId]: { ...edit, score: e.target.value },
+                                }))
+                              }
+                            />
+                            <input
+                              className="input-brand"
+                              disabled={evalReadOnly}
+                              placeholder={t('procedures.notes')}
+                              value={edit.notes}
+                              onChange={(e) =>
+                                setEvalEdits((prev) => ({
+                                  ...prev,
+                                  [row.supplierId]: { ...edit, notes: e.target.value },
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <ListPagination
+                      page={evalPager.page}
+                      pageSize={evalPager.pageSize}
+                      total={evalPager.total}
+                      onPageChange={evalPager.setPage}
+                      onPageSizeChange={evalPager.setPageSize}
+                      itemLabel={t('procedures.evalRowsLabel', { defaultValue: 'suppliers' })}
+                    />
+                  </div>
+                )}
               </>
             )}
 
@@ -1002,22 +1461,83 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                   <>
                     <BrandSelect disabled={detail.isSealed} value={awardForm.winnerSupplierId} onChange={(e) => setAwardForm({ ...awardForm, winnerSupplierId: e.target.value })}>
                       <option value="">{t('procedures.selectSupplier')}</option>
-                      {suppliers.map((s) => (
-                        <option key={s.id} value={s.id}>{s.companyName}</option>
+                      {((detail.evaluations as Evaluation[]) || []).map((ev) => (
+                        <option key={ev.supplierId} value={ev.supplierId}>
+                          {ev.supplier?.companyName || '—'}
+                          {ev.score != null ? ` (${t('procedures.score')}: ${ev.score})` : ''}
+                        </option>
                       ))}
                     </BrandSelect>
-                    <textarea className="input-brand disabled:opacity-60" rows={3} disabled={detail.isSealed} placeholder={t('procedures.decisionMemo')} value={awardForm.decisionMemo} onChange={(e) => setAwardForm({ ...awardForm, decisionMemo: e.target.value })} />
+                    {!((detail.evaluations as Evaluation[]) || []).length ? (
+                      <p className="text-xs text-muted">
+                        {t('procedures.awardNeedsEvaluations', {
+                          defaultValue: 'Score suppliers on the Eval tab before awarding.',
+                        })}
+                      </p>
+                    ) : null}
+                    <textarea className="input-brand disabled:opacity-60" rows={5} disabled={detail.isSealed} placeholder={t('procedures.decisionMemo')} value={awardForm.decisionMemo} onChange={(e) => setAwardForm({ ...awardForm, decisionMemo: e.target.value })} />
                     <DateOnlyPicker className="input-brand w-full disabled:opacity-60" disabled={detail.isSealed} value={awardForm.standstillEndsAt} onChange={(standstillEndsAt) => setAwardForm({ ...awardForm, standstillEndsAt })} />
                     <div className="flex flex-wrap gap-2">
                       <button type="button" className="btn-approve px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50" disabled={!accountApproved || detail.isSealed} onClick={saveAward}>{t('procedures.saveAward')}</button>
+                      {canAiAwardMemo ? (
                       <button
                         type="button"
                         className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700"
                         onClick={async () => {
+                          const evals = (detail.evaluations as Evaluation[]) || [];
+                          if (!evals.length) {
+                            showToast(
+                              t('procedures.awardNeedsEvaluations', {
+                                defaultValue: 'Score suppliers on the Eval tab before awarding.',
+                              }),
+                              'warning'
+                            );
+                            return;
+                          }
+                          // Prefer highest score; on tie, keep current selection if it is tied, else alphabetical
+                          const ranked = [...evals].sort((a, b) => {
+                            const sa = a.score != null ? Number(a.score) : -Infinity;
+                            const sb = b.score != null ? Number(b.score) : -Infinity;
+                            if (sb !== sa) return sb - sa;
+                            return String(a.supplier?.companyName || '').localeCompare(
+                              String(b.supplier?.companyName || '')
+                            );
+                          });
+                          const topScore =
+                            ranked[0].score != null ? Number(ranked[0].score) : null;
+                          const tiedForTop = ranked.filter(
+                            (e) =>
+                              topScore != null &&
+                              e.score != null &&
+                              Number(e.score) === topScore
+                          );
+                          const pick =
+                            tiedForTop.find((e) => e.supplierId === awardForm.winnerSupplierId) ||
+                            ranked[0];
+                          const winnerSupplierId = pick.supplierId;
+                          const winnerName = pick.supplier?.companyName || '';
+                          setAwardForm((prev) => ({ ...prev, winnerSupplierId }));
                           try {
-                            const res = await api.get(`/ai-extras/award-memo/${detail.id}`);
-                            setAwardForm((prev) => ({ ...prev, decisionMemo: res.data.draft || prev.decisionMemo }));
-                            showToast(t('procedures.aiDraftReady'), 'success');
+                            const res = await api.get(`/ai-extras/award-memo/${detail.id}`, {
+                              params: {
+                                language: (i18n.language || 'en').slice(0, 2),
+                                winnerSupplierId,
+                                winnerName,
+                                standstillEndsAt: awardForm.standstillEndsAt || undefined,
+                              },
+                            });
+                            setAwardForm((prev) => ({
+                              ...prev,
+                              winnerSupplierId,
+                              decisionMemo: res.data.draft || prev.decisionMemo,
+                            }));
+                            showToast(
+                              t('procedures.aiAwardMemoPickedWinner', {
+                                defaultValue: 'Selected highest score ({{name}}) and drafted memo — review before save',
+                                name: winnerName || '—',
+                              }),
+                              'success'
+                            );
                           } catch (error: any) {
                             showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
                           }
@@ -1025,12 +1545,34 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                       >
                         {t('procedures.aiAwardMemo')}
                       </button>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+
+                {canAiAnnouncement || detail.announcementText ? (
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <label className="text-xs font-semibold text-muted">
+                      {t('procedures.announcementText', { defaultValue: 'Announcement text' })}
+                    </label>
+                    <textarea
+                      className="input-brand"
+                      rows={4}
+                      placeholder={t('procedures.announcementPlaceholder', {
+                        defaultValue: 'Public announcement / after-announce text…',
+                      })}
+                      value={detail.announcementText || ''}
+                      onChange={(e) => setDetail({ ...detail, announcementText: e.target.value })}
+                    />
+                    {canAiAnnouncement ? (
                       <button
                         type="button"
                         className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-50 text-violet-700 border border-violet-200"
                         onClick={async () => {
                           try {
-                            const res = await api.get(`/ai-extras/announcement/${detail.id}`);
+                            const res = await api.get(`/ai-extras/announcement/${detail.id}`, {
+                              params: { language: (i18n.language || 'en').slice(0, 2) },
+                            });
                             setDetail({ ...detail, announcementText: res.data.draft });
                             showToast(t('procedures.aiDraftReady'), 'success');
                           } catch (error: any) {
@@ -1040,27 +1582,9 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                       >
                         {t('procedures.aiAnnonsDraft')}
                       </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-50 text-violet-700 border border-violet-200"
-                      onClick={async () => {
-                        try {
-                          const res = await api.get(`/ai-extras/announcement/${detail.id}`);
-                          setDetail({ ...detail, announcementText: res.data.draft });
-                          showToast(t('procedures.aiDraftReady'), 'success');
-                        } catch (error: any) {
-                          showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
-                        }
-                      }}
-                    >
-                      {t('procedures.aiAnnonsDraft')}
-                    </button>
+                    ) : null}
                   </div>
-                )}
+                ) : null}
               </>
             )}
 

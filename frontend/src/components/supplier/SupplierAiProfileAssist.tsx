@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useEntitlement } from '../../contexts/EntitlementContext';
 
 export type ProfileAiSuggestion = {
   value: string;
@@ -134,6 +135,7 @@ function Root({
 }: RootProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
+  const { enabled: aiEntitled, loading: entitlementLoading } = useEntitlement('ai.profile_assist');
   const fileRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ProfileAiResponse | null>(null);
@@ -277,7 +279,7 @@ function Root({
     hasNoSuggestions,
   };
 
-  if (!enabled) {
+  if (!enabled || entitlementLoading || !aiEntitled) {
     return <>{children}</>;
   }
 
@@ -298,7 +300,9 @@ function Root({
 
 function UploadBar() {
   const { t } = useTranslation();
-  const { loading, hasResult, drawerOpen, openDrawer, closeDrawer, triggerUpload, suggestionCount } = useAiAssist();
+  const ctx = useContext(AiAssistContext);
+  if (!ctx) return null;
+  const { loading, hasResult, drawerOpen, openDrawer, closeDrawer, triggerUpload, suggestionCount } = ctx;
 
   return (
     <div className="rounded-lg border border-violet-200/70 bg-violet-50/40">
@@ -349,6 +353,8 @@ function UploadBar() {
 
 function Drawer() {
   const { t } = useTranslation();
+  const drawerCtx = useContext(AiAssistContext);
+  if (!drawerCtx) return null;
   const {
     result,
     drawerOpen,
@@ -367,7 +373,7 @@ function Drawer() {
     suggestionCount,
     canApply,
     hasNoSuggestions,
-  } = useAiAssist();
+  } = drawerCtx;
 
   if (!hasResult || !result) return null;
 

@@ -12,6 +12,7 @@ import api from '../../services/api';
 import { PortalLayout } from '../../components/ui/PortalLayout';
 import { ListPagination } from '../../components/ui/ListPagination';
 import { useListPagination } from '../../hooks/useListPagination';
+import { usePortalTab } from '../../hooks/usePortalTab';
 import { AdminHomeTab, AdminSupplierStatsStrip, AdminEntityStatsStrip } from '../../components/admin/AdminHomeTab';
 import { AdminEntitlementsModal } from '../../components/admin/AdminEntitlementsModal';
 import type { AdminDashboardStats } from '../../lib/adminStats';
@@ -67,10 +68,18 @@ const getTurnoverValueForSelect = (val: string | number | undefined): string => 
   return range ? String(range.value) : '';
 };
 
+const ADMIN_PORTAL_TABS = [
+  'home',
+  'suppliers',
+  'entities',
+  'ai-controls',
+  'lookups',
+] as const;
+
 const AdminDashboard = () => {
   const { t } = useTranslation();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = usePortalTab('home', ADMIN_PORTAL_TABS);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [procuringEntities, setProcuringEntities] = useState<ProcuringEntity[]>([]);
   const [dashboardStats, setDashboardStats] = useState<AdminDashboardStats | null>(null);

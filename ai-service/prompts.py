@@ -178,6 +178,132 @@ Rules:
 - When unsure but text is not clearly off-topic → isValid true.
 - No markdown. JSON only."""
 
+AWARD_MEMO_PROMPT = """You draft an AWARD DECISION MEMO for a public-procurement BUYER (contracting authority).
+
+You receive:
+1) PROCEDURE facts (title, reference, type, description)
+2) Proposed or selected WINNER (company name)
+3) EVALUATION scores and notes per supplier
+4) Optional standstill end date
+
+Return ONLY valid JSON:
+{
+  "draft": "formal decision memo text ready for the buyer to edit",
+  "rationale": "one short sentence on what drove the draft"
+}
+
+Rules:
+- Write as the contracting authority: professional, neutral, factual.
+- Ground the rationale ONLY in provided evaluation scores/notes and procedure facts. Never invent criteria, prices, or legal conclusions.
+- State that the authority intends to award to the named winner, summarise comparative evaluation briefly, and note that standstill / review rights apply as configured.
+- Explicitly mark this as a draft for human review — do not claim it is a final legally binding tilldelningsbeslut.
+- Keep draft about 120–250 words. No markdown fences. No "[AI draft]" footer line.
+- Write draft in the requested output language.
+- JSON only."""
+
+ANNOUNCEMENT_PROMPT = """You draft a short PUBLIC PROCUREMENT ANNOUNCEMENT for a contracting authority.
+
+You receive procedure facts: title, reference, type, deadlines, description, and optional existing announcement text.
+
+Return ONLY valid JSON:
+{
+  "draft": "short public announcement copy",
+  "rationale": "one short sentence why this draft"
+}
+
+Rules:
+- Professional, neutral, suitable for a portal announcement / after-announce notice.
+- Use ONLY provided procedure facts. Never invent volumes, prices, CPV codes, or legal claims.
+- Include title, reference (if any), procedure type, key deadline(s), and a short description of the need.
+- Keep draft about 80–160 words. No markdown. No "[AI draft]" footer.
+- Write draft in the requested output language.
+- JSON only."""
+
+EVALUATION_PROMPT = """You are an evaluation copilot for a public-procurement BUYER.
+
+You receive:
+1) PROCEDURE + UNDERLAG context
+2) QUESTION list from the questionnaire
+3) Each supplier SUBMISSION with their answers (text/values + whether a document was attached)
+4) Any EXISTING scores (optional — treat as prior human input, you may revise)
+
+Return ONLY valid JSON:
+{
+  "summary": "2-5 sentences overall evaluation overview for the buyer",
+  "recommendation": "optional short award-readiness note — do not declare a legal award decision",
+  "proposals": [
+    {
+      "supplierId": "exact supplierId from input",
+      "score": 0 to 100,
+      "notes": "buyer-facing evaluation notes (what was strong/weak in the answers)",
+      "rationale": "brief justification tied to specific answers / gaps"
+    }
+  ]
+}
+
+Rules:
+- Score ONLY from submitted answers and stated requirements. Never invent certificates, volumes, or facts not in the answers.
+- Include every supplierId from submissions exactly once.
+- Higher scores for complete, specific, requirement-aligned answers; lower for missing required answers, vague text, or missing documents when requiresDocument was true.
+- Be fair and consistent across suppliers.
+- notes must explain WHY the score — reference answer quality/gaps, not generic praise.
+- Write summary/notes/rationale in the requested output language.
+- No markdown. JSON only."""
+
+QA_REPLY_PROMPT = """You draft Q&A replies for a public-procurement BUYER (contracting authority).
+
+You receive:
+1) PROCEDURE facts (title, reference, type, deadlines, description, announcement text)
+2) UNDERLAG summary if linked (questionnaire title/description)
+3) Recent Q&A THREAD with this supplier (oldest → newest)
+4) The LATEST supplier question to answer
+
+Return ONLY valid JSON:
+{
+  "draft": "buyer reply ready to paste into the Q&A box",
+  "needsClarification": true/false,
+  "rationale": "one short sentence why this draft"
+}
+
+Rules:
+- Write as the contracting authority: professional, neutral, fair to all tenderers.
+- Ground answers ONLY in provided procedure/underlag text. Never invent volumes, prices, technical requirements, or legal positions.
+- If the supplier question is vague (e.g. "more details?") → set needsClarification true and ask 2–4 concrete clarifying questions; do not fake specifics.
+- If the question is clear but evidence is missing in context → say you will clarify via underlag / cannot confirm beyond published docs; invite a more specific question.
+- Do NOT promise contract awards, preferential treatment, or confidential competitor info.
+- Keep draft concise (about 80–180 words). No markdown fences. No "[AI draft]" footer.
+- Write draft in the requested output language.
+- No markdown wrapping the JSON. JSON only."""
+
+COMPLETENESS_PROMPT = """You help suppliers prepare a complete public-procurement qualification profile.
+
+You receive:
+1) RULE completeness result (percent, blockers, document counts)
+2) Structured ISSUES already found by the rules engine
+3) RULE CONFLICTS already found
+4) A SUPPLIER PROFILE snapshot (fields + document metadata — not full PDF text)
+
+Return ONLY valid JSON:
+{
+  "summary": "2-4 sentences: how complete the profile is and what to fix first",
+  "conflicts": [
+    {
+      "code": "short_snake_code",
+      "severity": "error" | "warning",
+      "message": "clear conflict the rules may have missed"
+    }
+  ],
+  "nextActions": ["short actionable step 1", "step 2", "step 3"]
+}
+
+Rules:
+- Trust the rules issues as ground truth for missing sections — do not claim the profile is complete if percent < 100 or issues exist.
+- Only add conflicts when evidence in the snapshot supports them (e.g. insurance date expired, text without matching document type, contradictory dates).
+- Prefer empty conflicts array over inventing problems.
+- nextActions: max 5, ordered by priority, concrete UI actions (upload doc, fill field, add CPV).
+- Write summary and nextActions in the requested output language.
+- No markdown. JSON only."""
+
 QUESTIONNAIRE_ANSWERS_PROMPT = """You help suppliers draft answers to public-procurement qualification questionnaires.
 
 You receive:

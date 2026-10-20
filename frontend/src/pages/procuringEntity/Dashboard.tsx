@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useEntitlement } from '../../contexts/EntitlementContext';
 import { uploadsUrl } from '../../utils/uploadsUrl';
 import api from '../../services/api';
+import { usePortalTab } from '../../hooks/usePortalTab';
 import { PortalLayout } from '../../components/ui/PortalLayout';
 import { AccountStatusBanner } from '../../components/ui/AccountStatusBanner';
 import { ProceduresPanel } from '../../components/procuringEntity/ProceduresPanel';
@@ -42,11 +43,12 @@ import { BrandSelect } from '../../components/ui/BrandSelect';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
 import { DynamicFilterBar } from '../../components/search/DynamicFilterBar';
 import { emptyFilters, filterValueAsString, type FilterFieldDef, type FilterValues } from '../../components/search/filterTypes';
+import { CenterModal } from '../../components/ui/SlideOver';
 import { 
   FileText, Search, User, Plus, Edit2, Trash2, Eye, 
   Upload, X, Calendar, Building2, Save, XCircle, Camera,
   CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Users, Power, PowerOff,
-  LayoutDashboard, Briefcase, ScrollText, Sparkles, Wallet, Award, Shield
+  LayoutDashboard, Briefcase, ScrollText, Sparkles, Wallet, Award, Shield, Copy
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -110,6 +112,9 @@ interface Questionnaire {
   createdAt: string;
   isActive?: boolean;
   editLocked?: boolean;
+  inUse?: boolean;
+  linkedProcedureCount?: number;
+  linkedProcedures?: Array<{ id: string; title: string; status: string; referenceNumber?: string | null }>;
 }
 
 // Turnover range options for supplier search: { value, minTurnover, maxTurnover }
@@ -135,11 +140,21 @@ function formatSupplierTurnoverLabel(raw: unknown, t: (key: string) => string): 
   return String(raw);
 }
 
+const ENTITY_PORTAL_TABS = [
+  'home',
+  'procedures',
+  'contracts',
+  'questionnaires',
+  'suppliers',
+  'profile',
+  'ai-preferences',
+] as const;
+
 const ProcuringEntityDashboard = () => {
   const { t } = useTranslation();
   const { user, refreshUser } = useAuth();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = usePortalTab('home', ENTITY_PORTAL_TABS);
   const [loading, setLoading] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<EntityDashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -183,6 +198,10 @@ const ProcuringEntityDashboard = () => {
   const [editingQuestionnaire, setEditingQuestionnaire] = useState<Questionnaire | null>(null);
   const [viewingResponses, setViewingResponses] = useState<Questionnaire | null>(null);
   const [questionnaireResponses, setQuestionnaireResponses] = useState<any[]>([]);
+  const [copySourceQuestionnaire, setCopySourceQuestionnaire] = useState<Questionnaire | null>(null);
+  const [copyTitle, setCopyTitle] = useState('');
+  const [copyNotes, setCopyNotes] = useState('');
+  const [copySaving, setCopySaving] = useState(false);
 
   // Search Suppliers state
   const { enabled: canDiscoverSuppliers } = useEntitlement('marketplace.supplier_discovery');
@@ -805,6 +824,39 @@ const ProcuringEntityDashboard = () => {
     }
   };
 
+  const openCopyQuestionnaire = (questionnaire: Questionnaire) => {
+    setCopySourceQuestionnaire(questionnaire);
+    setCopyTitle(`${questionnaire.title} (copy)`);
+    setCopyNotes('');
+  };
+
+  const handleCopyQuestionnaire = async () => {
+    if (!copySourceQuestionnaire) return;
+    const title = copyTitle.trim();
+    if (!title) {
+      showToast(t('questionnaires.copyNeedsTitle', { defaultValue: 'Enter a name for the new questionnaire' }), 'warning');
+      return;
+    }
+    try {
+      setCopySaving(true);
+      const res = await api.post(`/questionnaires/${copySourceQuestionnaire.id}/copy`, {
+        title,
+        notes: copyNotes.trim() || undefined,
+      });
+      showToast(t('questionnaires.copySuccess', { defaultValue: 'Questionnaire copied — unused copy ready to link' }), 'success');
+      setCopySourceQuestionnaire(null);
+      setCopyTitle('');
+      setCopyNotes('');
+      await fetchQuestionnaires();
+      const created = res.data.questionnaire;
+      if (created) openQuestionnaireEditor(created);
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
+    } finally {
+      setCopySaving(false);
+    }
+  };
+
   // Toggle questionnaire status
   const handleToggleQuestionnaireStatus = async (questionnaireId: string, currentStatus: boolean) => {
     try {
@@ -1020,9 +1072,23 @@ const ProcuringEntityDashboard = () => {
                         title={questionnaire.title}
                         description={questionnaire.description}
                         badges={
-                          <StatusBadge tone={questionnaire.isActive !== false ? 'green' : 'gray'}>
-                            {questionnaire.isActive !== false ? t('nav.active') : t('common.inactive')}
-                          </StatusBadge>
+                          <>
+                            <StatusBadge tone={questionnaire.isActive !== false ? 'green' : 'gray'}>
+                              {questionnaire.isActive !== false ? t('nav.active') : t('common.inactive')}
+                            </StatusBadge>
+                            {questionnaire.inUse ? (
+                              <StatusBadge tone="orange">
+                                {t('questionnaires.inUseBadge', {
+                                  defaultValue: 'Linked to procedure',
+                                  count: questionnaire.linkedProcedureCount || 1,
+                                })}
+                              </StatusBadge>
+                            ) : (
+                              <StatusBadge tone="blue">
+                                {t('questionnaires.unusedBadge', { defaultValue: 'Unused' })}
+                              </StatusBadge>
+                            )}
+                          </>
                         }
                         meta={
                           <>
@@ -1056,6 +1122,13 @@ const ProcuringEntityDashboard = () => {
                             >
                               <Eye size={14} />
                               {t('buttons.view')}
+                            </RowActionButton>
+                            <RowActionButton
+                              variant="muted"
+                              onClick={() => openCopyQuestionnaire(questionnaire)}
+                            >
+                              <Copy size={14} />
+                              {t('questionnaires.copyAsNew', { defaultValue: 'Copy as new' })}
                             </RowActionButton>
                             <RowActionButton
                               variant="muted"
@@ -1694,6 +1767,79 @@ const ProcuringEntityDashboard = () => {
               </div>
             )}
       </PortalLayout>
+
+      <CenterModal
+        open={!!copySourceQuestionnaire}
+        onClose={() => {
+          if (copySaving) return;
+          setCopySourceQuestionnaire(null);
+        }}
+        title={t('questionnaires.copyAsNew', { defaultValue: 'Copy as new' })}
+        subtitle={
+          copySourceQuestionnaire
+            ? t('questionnaires.copySubtitle', {
+                defaultValue: 'Create an unused copy of “{{title}}” for another procedure.',
+                title: copySourceQuestionnaire.title,
+              })
+            : undefined
+        }
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="btn-cancel px-4 py-2 rounded-xl text-sm font-semibold"
+              disabled={copySaving}
+              onClick={() => setCopySourceQuestionnaire(null)}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn-save px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+              disabled={copySaving}
+              onClick={handleCopyQuestionnaire}
+            >
+              {copySaving
+                ? t('common.loading', { defaultValue: 'Saving…' })
+                : t('questionnaires.copyConfirm', { defaultValue: 'Create copy' })}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              {t('questionnaires.copyNewTitle', { defaultValue: 'New questionnaire name' })}
+            </label>
+            <input
+              className="input-brand w-full"
+              value={copyTitle}
+              onChange={(e) => setCopyTitle(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              {t('questionnaires.copyNotes', { defaultValue: 'Extra notes (optional)' })}
+            </label>
+            <textarea
+              className="input-brand w-full"
+              rows={3}
+              value={copyNotes}
+              onChange={(e) => setCopyNotes(e.target.value)}
+              placeholder={t('questionnaires.copyNotesPlaceholder', {
+                defaultValue: 'Optional notes appended to the description',
+              })}
+            />
+          </div>
+          {copySourceQuestionnaire?.inUse ? (
+            <p className="text-xs text-amber-800 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+              {t('questionnaires.copyInUseHint', {
+                defaultValue: 'Original stays linked to its procedure. This creates a separate unused copy.',
+              })}
+            </p>
+          ) : null}
+        </div>
+      </CenterModal>
 
       {/* Create Questionnaire Modal */}
       {showCreateQuestionnaire && (
