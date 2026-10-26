@@ -12,6 +12,7 @@ const {
   notifyContractUpdated,
   notifyContractActivity
 } = require('../services/supplierNotificationService');
+const { contractIsWritable } = require('../utils/contractWriteAccess');
 
 const contractStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -66,10 +67,6 @@ const contractMessageInclude = [
   { model: db.User, as: 'sender', attributes: ['id', 'firstName', 'lastName', 'role'] },
   { model: db.ContractAttachment, as: 'attachments', required: false }
 ];
-
-function contractIsWritable(contract) {
-  return contract && contract.status === 'active';
-}
 
 async function loadContractForDetail(contractId) {
   return db.Contract.findByPk(contractId, {
@@ -524,13 +521,27 @@ const postContractMessage = async (req, res) => {
       meta: { messageId: msg.id }
     });
     const summary = senderRole === 'supplier' ? 'New message from supplier' : 'New message from buyer';
-    if (senderRole === 'supplier') {
-      await notifyBuyerContractActivity(contract, summary);
-    } else {
-      await notifySupplierOnContract(contract, summary);
+    // Notifications must not fail the post — message is already saved
+    try {
+      if (senderRole === 'supplier') {
+        await notifyBuyerContractActivity(contract, summary);
+      } else {
+        await notifySupplierOnContract(contract, summary);
+      }
+    } catch (notifyErr) {
+      console.warn('[contracts] notify after message failed:', notifyErr.message);
     }
-    const full = await loadContractForDetail(contract.id);
-    res.status(201).json({ message: 'Message posted', contract: serializeContractDetail(full) });
+
+    let full = null;
+    try {
+      full = await loadContractForDetail(contract.id);
+    } catch (loadErr) {
+      console.warn('[contracts] reload after message failed:', loadErr.message);
+    }
+    res.status(201).json({
+      message: 'Message posted',
+      contract: full ? serializeContractDetail(full) : { id: contract.id }
+    });
   } catch (error) {
     console.error('Post contract message error:', error);
     res.status(500).json({ message: 'Error posting message', error: error.message });

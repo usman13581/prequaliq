@@ -78,8 +78,13 @@ export function ContractThread({
       });
       setText('');
       setFiles([]);
-      onUpdated();
       showToast(t('contracts.thread.messageSent'), 'success');
+      // Refresh after success toast — refresh failures must not look like send failures
+      try {
+        await Promise.resolve(onUpdated());
+      } catch {
+        /* ignore refresh errors */
+      }
     } catch (error: unknown) {
       const message =
         (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||

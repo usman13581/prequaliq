@@ -6,6 +6,7 @@ const { sendSupplierProfileSubmittedToAdminEmail, sendSupplierProfileSubmittedCo
 const { getDocumentStatus } = require('../services/supplierCompleteness');
 const { notifyDocumentExpiring } = require('../services/supplierNotificationService');
 const { reapprovalAfterMaterialChange } = require('./supplierController');
+const { isProfileMaterialDocumentType } = require('../utils/profileMaterialDocs');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -113,7 +114,10 @@ const uploadDocument = async (req, res) => {
       notifyDocumentExpiring(supplier, 1).catch(() => {});
     }
 
-    await reapprovalAfterMaterialChange(supplier);
+    // Bid / questionnaire answer attachments must NOT un-approve the supplier profile
+    if (isProfileMaterialDocumentType(documentType)) {
+      await reapprovalAfterMaterialChange(supplier);
+    }
 
     res.status(201).json({
       message: 'Document uploaded successfully',

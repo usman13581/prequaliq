@@ -94,6 +94,23 @@ TEXT_FIELD_FOR_SECTION = {
     "q8": "ohsManagementSystem",
 }
 
+PROFILE_CPV_PROMPT = """You map a supplier document excerpt to official CPV (Common Procurement Vocabulary) codes.
+
+The user message includes DOCUMENT EXCERPT and an ALLOWED CPV CODE LIST.
+Return ONLY valid JSON:
+{
+  "selectedCpvCodes": [
+    { "code": "exact 8-digit code copied from ALLOWED CPV CODE LIST only", "reason": "why this CPV fits the supplier" }
+  ]
+}
+
+Rules:
+- Pick 1-3 codes that best match the supplier's business / services / works from the document.
+- Use ONLY codes from the ALLOWED list (exact code strings). Never invent codes.
+- Prefer more specific codes over broad XX000000 divisions when both fit.
+- If nothing fits, return an empty selectedCpvCodes array.
+- No markdown. JSON only."""
+
 QUESTIONNAIRE_GENERATE_PROMPT = """You help public procurement officers draft supplier qualification questionnaires.
 
 The user message contains INTERNAL procurement notes for your context only. Suppliers will NOT see those notes.

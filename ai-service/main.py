@@ -16,6 +16,7 @@ from prompts import (
     CLASSIFY_PROMPT,
     PROMPTS_BY_TYPE,
     SECTION_FOR_TYPE,
+    PROFILE_CPV_PROMPT,
     QUESTIONNAIRE_GENERATE_PROMPT,
     QUESTIONNAIRE_UNDERSTAND_PROMPT,
     QUESTIONNAIRE_ANSWERS_PROMPT,
@@ -54,6 +55,7 @@ ENDPOINTS_CATALOG = [
     {"method": "POST", "path": "/generate/questionnaire", "auth": True, "description": "Generate questionnaire draft from procurement description"},
     {"method": "POST", "path": "/generate/questionnaire/understand", "auth": True, "description": "Validate procurement intent and summarize for user confirmation"},
     {"method": "POST", "path": "/generate/questionnaire/answers", "auth": True, "description": "Suggest supplier answers from profile context"},
+    {"method": "POST", "path": "/generate/profile/cpv", "auth": True, "description": "Suggest CPV codes from supplier document excerpt"},
     {"method": "POST", "path": "/generate/completeness", "auth": True, "description": "Summarize profile gaps and flag conflicts"},
     {"method": "POST", "path": "/generate/qa-reply", "auth": True, "description": "Draft buyer Q&A reply from procedure context"},
     {"method": "POST", "path": "/generate/evaluation", "auth": True, "description": "Score submitted bids from questionnaire answers"},
@@ -125,6 +127,17 @@ class QuestionnaireAnswersRequest(BaseModel):
     language: Optional[str] = Field(default="en")
     questionnaire: dict[str, Any] = Field(default_factory=dict)
     supplierProfile: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProfileCpvRequest(BaseModel):
+    documentText: str = Field(..., min_length=20, max_length=8000)
+    language: Optional[str] = Field(default="en")
+    cpvCandidates: list[dict[str, str]] = Field(default_factory=list)
+
+
+class ProfileCpvResponse(BaseModel):
+    selectedCpvCodes: list[dict[str, Any]]
+    raw: Optional[dict[str, Any]] = None
 
 
 class CompletenessRequest(BaseModel):
@@ -957,6 +970,63 @@ async def generate_completeness_review(
         nextActions=next_actions,
         raw=parsed,
     )
+
+
+@app.post("/generate/profile/cpv", response_model=ProfileCpvResponse)
+async def generate_profile_cpv(
+    body: ProfileCpvRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    verify_api_key(x_api_key)
+    if not body.cpvCandidates:
+        return ProfileCpvResponse(selectedCpvCodes=[], raw={"note": "no_candidates"})
+
+    allowed: dict[str, dict[str, str]] = {}
+    for c in body.cpvCandidates[:25]:
+        code = _normalize_cpv_code(c.get("code"))
+        if code:
+            allowed[code] = {
+                "code": code,
+                "description": str(c.get("description") or "")[:200],
+            }
+
+    if not allowed:
+        return ProfileCpvResponse(selectedCpvCodes=[], raw={"note": "no_valid_candidates"})
+
+    parts = [
+        "DOCUMENT EXCERPT (supplier materials):",
+        (body.documentText or "")[:6000],
+        "",
+        "ALLOWED CPV CODE LIST (select 1-3 from this list ONLY, use exact code):",
+    ]
+    for code, meta in list(allowed.items())[:25]:
+        parts.append(f"- {code}: {meta['description']}")
+    user_text = "\n".join(parts)
+
+    lang = (body.language or "en").strip()[:2]
+    parsed = await generate_with_prompt(PROFILE_CPV_PROMPT, user_text, lang)
+
+    raw_selected = parsed.get("selectedCpvCodes") if isinstance(parsed.get("selectedCpvCodes"), list) else []
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw_selected:
+        if not isinstance(item, dict):
+            continue
+        code = _normalize_cpv_code(item.get("code"))
+        if not code or code not in allowed or code in seen:
+            continue
+        seen.add(code)
+        selected.append(
+            {
+                "code": code,
+                "reason": str(item.get("reason") or "").strip()[:300],
+                "description": allowed[code]["description"],
+            }
+        )
+        if len(selected) >= 3:
+            break
+
+    return ProfileCpvResponse(selectedCpvCodes=selected, raw=parsed)
 
 
 @app.post("/generate/questionnaire/answers", response_model=QuestionnaireAnswersResponse)

@@ -749,8 +749,12 @@ const submitResponse = async (req, res) => {
     const procedureId = bodyProcedureId || req.query.procedureId || null;
 
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
-    if (!supplier || supplier.status !== 'approved') {
-      return res.status(403).json({ message: 'Supplier not approved' });
+    if (!supplier || !['approved', 'requalification_required'].includes(supplier.status)) {
+      return res.status(403).json({
+        message: 'Supplier not approved',
+        code: 'SUPPLIER_NOT_APPROVED',
+        status: supplier?.status || null
+      });
     }
 
     // Check if questionnaire exists and matches supplier's CPV codes

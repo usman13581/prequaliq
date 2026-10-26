@@ -2,7 +2,17 @@
  * Merge multi-document AI extractions into supplier profile field suggestions.
  * Human review required — never auto-saves.
  */
-const { extractAuto, getGpuEndpointsCatalog, SECTION_TEXT_FIELD } = require('./aiExtractionService');
+const {
+  extractAuto,
+  getGpuEndpointsCatalog,
+  callAi,
+  SECTION_TEXT_FIELD,
+} = require('./aiExtractionService');
+const {
+  searchCpvCandidatesFromDb,
+  resolveAiCpvPicks,
+} = require('./cpvSearchService');
+const { searchNutsCandidatesFromDb } = require('./nutsSearchService');
 
 const PROFILE_FIELDS = [
   'companyName', 'registrationNumber', 'taxId', 'address', 'city', 'country', 'phone', 'website',
@@ -138,6 +148,65 @@ function mergeProfileSuggestions(extractions, currentProfile = {}) {
   return { suggestions, conflicts, documents: perDocument };
 }
 
+function buildCpvContextText(documents, extractions) {
+  const parts = [];
+  for (const doc of documents) {
+    if (doc.text && String(doc.text).trim().length >= 20) {
+      parts.push(String(doc.text).trim().slice(0, 4000));
+    }
+  }
+  for (const ext of extractions) {
+    const fields = ext.fields || {};
+    for (const key of ['companyName', 'qualityManagementSystem', 'financialStability']) {
+      if (fields[key]) parts.push(String(fields[key]));
+    }
+  }
+  return parts.join('\n\n').slice(0, 6000);
+}
+
+/**
+ * Suggest CPV codes from document text — catalog codes only.
+ * Tries GPU ranking when available; falls back to DB keyword matches.
+ */
+async function suggestCpvFromDocuments(documents, extractions, language = 'en') {
+  const contextText = buildCpvContextText(documents, extractions);
+  if (contextText.length < 20) return [];
+
+  const candidates = await searchCpvCandidatesFromDb(contextText, [], 12);
+  if (!candidates.length) return [];
+
+  let picks = [];
+  try {
+    const aiData = await callAi(
+      '/generate/profile/cpv',
+      {
+        documentText: contextText.slice(0, 6000),
+        language: (language || 'en').slice(0, 2),
+        cpvCandidates: candidates.map((c) => ({
+          code: c.code,
+          description: c.description,
+        })),
+      },
+      90000
+    );
+    picks = resolveAiCpvPicks(aiData.selectedCpvCodes || [], candidates);
+  } catch (err) {
+    // Older GPU without /generate/profile/cpv — use catalog matches
+    if (err.status !== 404 && err.code !== 'AI_NOT_CONFIGURED' && err.code !== 'AI_UNAVAILABLE') {
+      console.warn('[profile-ai] CPV AI ranking skipped:', err.message);
+    }
+  }
+
+  const selected = picks.length ? picks : candidates.slice(0, 3);
+  return selected.slice(0, 3).map((c) => ({
+    cpvCodeId: c.cpvCodeId,
+    code: c.code,
+    description: c.description,
+    reason: c.reason || 'Matched from uploaded document',
+    confidence: c.confidence ?? 0.7,
+  }));
+}
+
 async function processDocumentsForProfile(documents, options = {}) {
   const { language = 'en', currentProfile = {} } = options;
   const extractions = [];
@@ -183,15 +252,32 @@ async function processDocumentsForProfile(documents, options = {}) {
   }
 
   const merged = mergeProfileSuggestions(extractions, currentProfile);
+  let cpvSuggestions = [];
+  let nutsSuggestions = [];
+  try {
+    cpvSuggestions = await suggestCpvFromDocuments(documents, extractions, language);
+  } catch (err) {
+    console.warn('[profile-ai] CPV suggest failed:', err.message);
+  }
+  try {
+    const contextText = buildCpvContextText(documents, extractions);
+    nutsSuggestions = await searchNutsCandidatesFromDb(contextText, 3);
+  } catch (err) {
+    console.warn('[profile-ai] NUTS suggest failed:', err.message);
+  }
+
   const allFailed = extractions.length > 0 && extractions.every((ext) => ext.error);
   const anyGpuOutdated = extractions.some((ext) => ext.code === 'AI_GPU_OUTDATED');
 
   return {
     ...merged,
+    cpvSuggestions,
+    nutsSuggestions,
     gpuV2,
     allFailed,
     gpuUpgradeRecommended: !gpuV2 || anyGpuOutdated,
-    disclaimer: 'AI suggestions require human review before saving.',
+    disclaimer:
+      'AI suggestions require human review before saving. CPV and NUTS codes are from the system catalog only.',
   };
 }
 
@@ -199,5 +285,6 @@ module.exports = {
   PROFILE_FIELDS,
   mapExtractionToProfileFields,
   mergeProfileSuggestions,
+  suggestCpvFromDocuments,
   processDocumentsForProfile,
 };

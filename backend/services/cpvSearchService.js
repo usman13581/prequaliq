@@ -6,10 +6,21 @@ const { Op } = require('sequelize');
 
 const STOP_WORDS = new Set([
   'the', 'and', 'for', 'with', 'from', 'that', 'this', 'your', 'have', 'will',
-  'need', 'must', 'should', 'including', 'required', 'services', 'service',
+  'need', 'must', 'should', 'including', 'required',
   'supplier', 'suppliers', 'procurement', 'contract', 'contracts', 'work',
-  'och', 'för', 'med', 'som', 'att', 'ska', 'behöver', 'leverantör', 'tjänster',
+  'och', 'för', 'med', 'som', 'att', 'ska', 'behöver', 'leverantör',
+  // Company-registration boilerplate (must not dominate CPV search)
+  'company', 'name', 'registration', 'extract', 'bolagsverket', 'number',
+  'address', 'city', 'country', 'postal', 'code', 'phone', 'website', 'https',
+  'www', 'example', 'year', 'established', 'employees', 'annual', 'turnover',
+  'directors', 'status', 'active', 'sample', 'test', 'document', 'profile',
+  'legal', 'form', 'aktiebolag', 'issued', 'purposes', 'real', 'not',
+  'organisation', 'organization', 'org', 'momsregistreringsnummer', 'tax',
+  'vat', 'ab', 'ceo', 'limited',
 ]);
+
+/** Short tokens that are meaningful for CPV (normally filtered by length < 3). */
+const SHORT_KEEP = new Set(['it', 'ict', 'hvac', 'iso']);
 
 const TERM_SYNONYMS = {
   construction: ['construction', 'building', 'civil'],
@@ -18,9 +29,17 @@ const TERM_SYNONYMS = {
   electrical: ['electrical', 'installation'],
   hvac: ['installation', 'ventilation', 'heating'],
   cleaning: ['cleaning', 'environmental', 'refuse'],
-  software: ['software', 'information systems', 'it services'],
-  it: ['it services', 'software', 'consulting'],
+  software: ['software', 'information systems', 'it services', 'computer'],
+  it: ['it services', 'software', 'consulting', 'information technology', 'computer'],
+  information: ['information technology', 'it services', 'software'],
+  technology: ['information technology', 'it services', 'software'],
   consulting: ['consultancy', 'business services', 'research'],
+  consultancy: ['consulting', 'business services'],
+  cloud: ['software', 'it services', 'information systems'],
+  helpdesk: ['it services', 'support', 'computer'],
+  managed: ['it services', 'support'],
+  programming: ['software', 'it services'],
+  internet: ['it services', 'software'],
   transport: ['transport'],
   catering: ['hotel', 'restaurant', 'food'],
   food: ['food', 'beverages'],
@@ -30,6 +49,8 @@ const TERM_SYNONYMS = {
   printing: ['printed', 'printing'],
   maintenance: ['repair', 'maintenance'],
   insurance: ['insurance'],
+  facility: ['facility', 'cleaning', 'sanitation'],
+  sanitation: ['cleaning', 'facility'],
 };
 
 function normalizeCpvCode(raw) {
@@ -43,20 +64,75 @@ function isBroadDivisionCode(code) {
   return /^\d{2}000000$/.test(String(code || ''));
 }
 
+function extractExplicitCpvCodes(description) {
+  const text = String(description || '');
+  // Prefer digits listed in a CPV section (avoids picking turnover amounts like 42000000 SEK)
+  const cpvSection = text.match(/cpv[^:]{0,40}:?\s*([\s\S]{0,900})/i)?.[1] || '';
+  const scan = cpvSection || text;
+  const found = [];
+  const re = /\b(\d{8})\b/g;
+  let m;
+  while ((m = re.exec(scan)) !== null) {
+    const idx = m.index;
+    const window = scan.slice(Math.max(0, idx - 30), idx + 20).toLowerCase();
+    if (/turnover|omsättning|sek|eur|usd|amount|coverage|employees|anställda/.test(window)) {
+      continue;
+    }
+    const code = normalizeCpvCode(m[1]);
+    if (code && !found.includes(code)) found.push(code);
+  }
+  return found.slice(0, 8);
+}
+
+/**
+ * Prefer the "business activities / CPV" portion of company extracts so
+ * registration boilerplate does not fill the term budget.
+ */
+function prioritizeBusinessText(description) {
+  const text = String(description || '');
+  const markers = [
+    /business activities[:\s]+([\s\S]{20,1200})/i,
+    /verksamhet[:\s]+([\s\S]{20,1200})/i,
+    /primary cpv[^\n]*:?([\s\S]{10,800})/i,
+    /cpv[^\n]*:?([\s\S]{10,800})/i,
+  ];
+  const chunks = [];
+  for (const re of markers) {
+    const m = text.match(re);
+    if (m?.[1]) chunks.push(m[1]);
+  }
+  if (chunks.length) return `${chunks.join(' ')} ${text}`.slice(0, 8000);
+  return text;
+}
+
 function extractSearchTerms(description, extraKeywords = []) {
+  const prioritized = prioritizeBusinessText(description);
   const raw = [
-    ...String(description || '').toLowerCase().split(/[\s,.;:!?()\-/]+/),
+    ...String(prioritized || '').toLowerCase().split(/[\s,.;:!?()\-/]+/),
     ...extraKeywords.map((k) => String(k).toLowerCase()),
   ];
+
+  // Phrase boosts for common multi-word CPV intents
+  const lower = prioritized.toLowerCase();
+  if (/\bit\s+services?\b/.test(lower)) {
+    raw.unshift('it', 'software', 'information', 'technology');
+  }
+  if (/\binformation\s+technology\b/.test(lower)) {
+    raw.unshift('information', 'technology', 'software', 'it');
+  }
+
   const terms = new Set();
   for (let word of raw) {
     word = word.trim();
-    if (word.length < 3 || STOP_WORDS.has(word)) continue;
+    if (!word || STOP_WORDS.has(word)) continue;
+    if (word.length < 3 && !SHORT_KEEP.has(word)) continue;
+    // Skip pure org numbers / noisy digit tokens unless 8-digit CPV
+    if (/^\d+$/.test(word) && word.length !== 8) continue;
     terms.add(word);
     const syns = TERM_SYNONYMS[word];
     if (syns) syns.forEach((s) => terms.add(s));
   }
-  return [...terms].slice(0, 20);
+  return [...terms].slice(0, 40);
 }
 
 async function getSupplierCpvUsageCounts() {
@@ -138,6 +214,7 @@ function refineByDivision(scored) {
 
 async function searchCpvCandidatesFromDb(description, extraKeywords = [], limit = 10) {
   const terms = extractSearchTerms(description, extraKeywords);
+  const explicitCodes = extractExplicitCpvCodes(description);
   const usage = await getSupplierCpvUsageCounts();
 
   const allCodes = await db.CPVCode.findAll({
@@ -150,14 +227,31 @@ async function searchCpvCandidatesFromDb(description, extraKeywords = [], limit 
   const scored = [];
   for (const row of allCodes) {
     const hit = scoreCpvRow(row, terms, description, usage);
+    if (explicitCodes.includes(String(row.code))) {
+      const boost = hit || {
+        row,
+        score: 0,
+        matched: ['explicit-cpv'],
+        supplierCount: usage[row.id] || 0,
+      };
+      boost.score += 40;
+      boost.matched = [...new Set([...(boost.matched || []), 'explicit-cpv'])];
+      scored.push(boost);
+      continue;
+    }
     if (hit) scored.push(hit);
   }
 
   let ranked = refineByDivision(scored);
 
-  const withSuppliers = ranked.filter((s) => s.supplierCount > 0);
-  if (withSuppliers.length >= 2) {
-    ranked = [...withSuppliers, ...ranked.filter((s) => s.supplierCount === 0)];
+  // Explicit document CPV codes always rank first
+  if (explicitCodes.length) {
+    ranked.sort((a, b) => {
+      const aEx = explicitCodes.includes(String(a.row.code)) ? 1 : 0;
+      const bEx = explicitCodes.includes(String(b.row.code)) ? 1 : 0;
+      if (bEx !== aEx) return bEx - aEx;
+      return b.score - a.score || b.supplierCount - a.supplierCount;
+    });
   }
 
   if (ranked.length === 0 && terms.length > 0) {
@@ -219,4 +313,8 @@ module.exports = {
   resolveAiCpvPicks,
   normalizeCpvCode,
   extractSearchTerms,
+  extractExplicitCpvCodes,
+  prioritizeBusinessText,
+  refineByDivision,
+  isBroadDivisionCode,
 };

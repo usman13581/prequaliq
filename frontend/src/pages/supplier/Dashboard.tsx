@@ -533,6 +533,53 @@ const SupplierDashboard = () => {
     }
   };
 
+  const handleAiProfileApplyCpv = async (cpvCodeIds: string[]) => {
+    if (!cpvCodeIds.length) return;
+    const merged = [...selectedCPVCodes];
+    for (const id of cpvCodeIds) {
+      if (!merged.includes(id)) merged.push(id);
+    }
+    setSelectedCPVCodes(merged);
+    cpvCatalog.fetchCodes('', merged);
+    if (!editingProfile) setEditingProfile(true);
+    setActiveProfileTab('scope');
+    try {
+      const res = await api.put('/supplier/cpv-codes', { cpvCodeIds: merged });
+      if (res.data?.supplier) {
+        setProfile(res.data.supplier);
+        setSelectedCPVCodes(res.data.supplier.cpvCodes?.map((c: CPVCode) => c.id) || merged);
+      } else {
+        await fetchProfile();
+      }
+      fetchCompleteness();
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('msg.failedUpdateCPV'), 'error');
+    }
+  };
+
+  const handleAiProfileApplyNuts = async (nutsCodeIds: string[]) => {
+    if (!nutsCodeIds.length) return;
+    const merged = [...selectedNUTSCodes];
+    for (const id of nutsCodeIds) {
+      if (!merged.includes(id)) merged.push(id);
+    }
+    setSelectedNUTSCodes(merged);
+    if (!editingProfile) setEditingProfile(true);
+    setActiveProfileTab('scope');
+    try {
+      const res = await api.put('/supplier/nuts-codes', { nutsCodeIds: merged });
+      if (res.data?.supplier) {
+        setProfile(res.data.supplier);
+        setSelectedNUTSCodes(res.data.supplier.nutsCodes?.map((n: NUTSCode) => n.id) || merged);
+      } else {
+        await fetchProfile();
+      }
+      fetchCompleteness();
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('msg.failedUpdateNUTS'), 'error');
+    }
+  };
+
   // Update profile
   const handleUpdateProfile = async () => {
     try {
@@ -766,11 +813,10 @@ const SupplierDashboard = () => {
       const documentIds: Record<string, string> = {};
       for (const [questionId, file] of Object.entries(responseDocuments)) {
         if (file instanceof File) {
-          // Upload new file selected by user
+          // Upload new file selected by user — never use profile doc types (avoids re-approval)
           const formData = new FormData();
           formData.append('file', file);
-          const question = selectedQuestionnaire.questions.find((q: Question) => q.id === questionId);
-          formData.append('documentType', question?.documentType || 'questionnaire_answer');
+          formData.append('documentType', 'questionnaire_answer');
           
           const docResponse = await api.post('/documents/supplier', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
@@ -833,11 +879,10 @@ const SupplierDashboard = () => {
       const documentIds: Record<string, string> = {};
       for (const [questionId, file] of Object.entries(responseDocuments)) {
         if (file instanceof File) {
-          // Upload new file selected by user
+          // Upload new file selected by user — never use profile doc types (avoids re-approval)
           const formData = new FormData();
           formData.append('file', file);
-          const question = selectedQuestionnaire.questions.find((q: Question) => q.id === questionId);
-          formData.append('documentType', question?.documentType || 'questionnaire_answer');
+          formData.append('documentType', 'questionnaire_answer');
           
           const docResponse = await api.post('/documents/supplier', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
@@ -1276,6 +1321,8 @@ const SupplierDashboard = () => {
                         <SupplierAiProfileAssist.Root
                           enabled={editingProfile}
                           onApply={handleAiProfileApply}
+                          onApplyCpv={handleAiProfileApplyCpv}
+                          onApplyNuts={handleAiProfileApplyNuts}
                           onStartEdit={() => { if (!editingProfile) setEditingProfile(true); }}
                         >
                           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -1547,19 +1594,18 @@ const SupplierDashboard = () => {
                                 <div className="flex items-center gap-2">
                                   <h4 className="text-base font-bold text-gray-900">{t('commonQuestions.q3Label')}</h4>
                                 </div>
-                                {!editingProfile && (
-                                  <button
-                                    onClick={() => {
-                                      if (profile?.nutsCodes) setSelectedNUTSCodes(profile.nutsCodes.map((nuts: NUTSCode) => nuts.id));
-                                      setShowNUTSSelector(true);
-                                      fetchNUTSCodes();
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-all duration-200 font-medium text-sm"
-                                  >
-                                    <Edit2 size={16} />
-                                    {t('nutsCodes.editButton')}
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (profile?.nutsCodes) setSelectedNUTSCodes(profile.nutsCodes.map((nuts: NUTSCode) => nuts.id));
+                                    setShowNUTSSelector(true);
+                                    fetchNUTSCodes();
+                                  }}
+                                  className="flex items-center gap-2 px-4 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg transition-all duration-200 font-medium text-sm"
+                                >
+                                  <Edit2 size={16} />
+                                  {t('nutsCodes.editButton')}
+                                </button>
                               </div>
                               <p className="text-xs text-gray-500 mb-4">{t('commonQuestions.q3Help')}</p>
                               {profile?.nutsCodes && profile.nutsCodes.length > 0 ? (
@@ -1575,25 +1621,24 @@ const SupplierDashboard = () => {
                               )}
                             </div>
 
-                            {/* Q4 – Goods and Services (CPV Codes) - card */}
+                            {/* Q4 – Goods and Services (CPV Codes) */}
                             <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-gray-200/50">
                               <div className="flex justify-between items-center mb-2">
                                 <div className="flex items-center gap-2">
                                   <h4 className="text-base font-bold text-gray-900">{t('commonQuestions.q4Label')}</h4>
                                 </div>
-                                {!editingProfile && (
-                                  <button
-                                    onClick={() => {
-                                      setCpvSearchTerm('');
-                                      setShowCPVSelector(true);
-                                      cpvCatalog.fetchCodes('', selectedCPVCodes);
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm"
-                                  >
-                                    <Edit2 size={16} />
-                                    {t('cpvCodes.editButton')}
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCpvSearchTerm('');
+                                    setShowCPVSelector(true);
+                                    cpvCatalog.fetchCodes('', selectedCPVCodes);
+                                  }}
+                                  className="flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm"
+                                >
+                                  <Edit2 size={16} />
+                                  {t('cpvCodes.editButton')}
+                                </button>
                               </div>
                               <p className="text-xs text-gray-500 mb-4">{t('commonQuestions.q4Help')}</p>
                               {profile?.cpvCodes && profile.cpvCodes.length > 0 ? (

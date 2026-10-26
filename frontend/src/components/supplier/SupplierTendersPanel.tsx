@@ -247,7 +247,7 @@ export function SupplierTendersPanel({
   };
 
   const postQa = async () => {
-    if (!selected || !qaBody.trim()) return;
+    if (!selected || !qaBody.trim() || isHistory) return;
     if (!accountApproved) {
       showToast(t('accountStatus.actionBlocked'), 'warning');
       return;
@@ -263,7 +263,7 @@ export function SupplierTendersPanel({
   };
 
   const toggleFollow = async () => {
-    if (!selected) return;
+    if (!selected || isHistory) return;
     try {
       const res = await api.post(`/procedures/${selected.id}/watch`);
       const watching = Boolean(res.data.watching);
@@ -278,7 +278,7 @@ export function SupplierTendersPanel({
   };
 
   const submitEspd = async () => {
-    if (!selected) return;
+    if (!selected || isHistory) return;
     if (!accountApproved) {
       showToast(t('accountStatus.actionBlocked'), 'warning');
       return;
@@ -320,6 +320,10 @@ export function SupplierTendersPanel({
   };
 
   const replyComplement = async (complementId: string, message: string, files: File[]) => {
+    if (isHistory) {
+      showToast(t('procedures.historyReadOnly'), 'warning');
+      throw new Error('blocked');
+    }
     if (!accountApproved) {
       showToast(t('accountStatus.actionBlocked'), 'warning');
       throw new Error('blocked');
@@ -541,23 +545,46 @@ export function SupplierTendersPanel({
       >
         {selected ? (
           <div className="space-y-4">
+            {isHistory ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {t('procedures.historyReadOnly')}
+              </div>
+            ) : null}
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm text-foreground whitespace-pre-wrap flex-1 min-w-0">
                 {selected.description || selected.procuringEntity?.entityName || '—'}
               </p>
-              <RowActionButton
-                variant={selected.watching ? 'secondary' : 'muted'}
-                onClick={() => toggleFollow()}
-              >
-                {selected.watching ? <Bell className="w-3.5 h-3.5 fill-current" /> : <BellOff className="w-3.5 h-3.5" />}
-                {selected.watching ? t('procedures.unfollow') : t('procedures.follow')}
-              </RowActionButton>
+              {!isHistory ? (
+                <RowActionButton
+                  variant={selected.watching ? 'secondary' : 'muted'}
+                  onClick={() => toggleFollow()}
+                >
+                  {selected.watching ? <Bell className="w-3.5 h-3.5 fill-current" /> : <BellOff className="w-3.5 h-3.5" />}
+                  {selected.watching ? t('procedures.unfollow') : t('procedures.follow')}
+                </RowActionButton>
+              ) : selected.watching ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted shrink-0">
+                  <Bell className="w-3.5 h-3.5 fill-current" />
+                  {t('procedures.watchingBadge')}
+                </span>
+              ) : null}
             </div>
-            {pendingComplementsForProcedure(myComplements, selected.id).length > 0 ? (
+            {!isHistory && pendingComplementsForProcedure(myComplements, selected.id).length > 0 ? (
               <div>{complementButton(selected.id, selected.title)}</div>
             ) : null}
+            {isHistory && myComplements.some((c) => c.procedure?.id === selected.id) ? (
+              <div>
+                <button
+                  type="button"
+                  className="btn-cancel px-3 py-2 rounded-xl text-xs font-semibold"
+                  onClick={() => openComplementSlideOver(selected.id, selected.title)}
+                >
+                  {t('procedures.complementRequests')}
+                </button>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2">
-              {selected.questionnaireId && onOpenQuestionnaire ? (
+              {!isHistory && selected.questionnaireId && onOpenQuestionnaire ? (
                 <button
                   type="button"
                   className="btn-save px-4 py-2 rounded-xl text-sm font-semibold"
@@ -587,20 +614,22 @@ export function SupplierTendersPanel({
                         : ''}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    className="btn-cancel px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-50"
-                    disabled={espdSaving}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      submitEspd();
-                    }}
-                  >
-                    {t('procedures.espdResubmit')}
-                  </button>
+                  {!isHistory ? (
+                    <button
+                      type="button"
+                      className="btn-cancel px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-50"
+                      disabled={espdSaving}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        submitEspd();
+                      }}
+                    >
+                      {t('procedures.espdResubmit')}
+                    </button>
+                  ) : null}
                   <p className="text-xs text-muted sm:max-w-xs">{t('procedures.espdSubmittedHint')}</p>
                 </div>
-              ) : (
+              ) : !isHistory ? (
                 <button
                   type="button"
                   className="btn-approve px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
@@ -612,8 +641,8 @@ export function SupplierTendersPanel({
                 >
                   {espdSaving ? t('common.loading') : t('procedures.submitEspd')}
                 </button>
-              )}
-              {selected.procedureType === 'dis' ? (
+              ) : null}
+              {!isHistory && selected.procedureType === 'dis' ? (
                 <button
                   type="button"
                   className="btn-save px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
@@ -640,7 +669,9 @@ export function SupplierTendersPanel({
                 messages={selected.qaMessages || []}
                 body={qaBody}
                 onBodyChange={setQaBody}
+                disabled={isHistory}
                 onSend={() => {
+                  if (isHistory) return;
                   if (!accountApproved) {
                     showToast(t('accountStatus.actionBlocked'), 'warning');
                     return;
@@ -665,7 +696,7 @@ export function SupplierTendersPanel({
             mode="supplier"
             complements={myComplements.filter((c) => c.procedure?.id === complementFocus.procedureId)}
             onReply={replyComplement}
-            disabled={!accountApproved}
+            disabled={isHistory || !accountApproved}
           />
         ) : null}
       </SlideOver>

@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: true, // listen on LAN (0.0.0.0) so phones/tablets on same Wi‑Fi can connect
     port: 5173,
     proxy: {
       '/api': {
@@ -18,6 +19,10 @@ export default defineConfig({
         changeOrigin: true
       },
       '/api-docs': {
+        target: 'http://localhost:5001',
+        changeOrigin: true
+      },
+      '/uploads': {
         target: 'http://localhost:5001',
         changeOrigin: true
       }

@@ -1,7 +1,4 @@
-const UPLOADS_BASE = (import.meta.env.VITE_UPLOADS_URL || 'http://localhost:5001/uploads').replace(
-  /\/$/,
-  ''
-);
+const UPLOADS_BASE = (import.meta.env.VITE_UPLOADS_URL || '/uploads').replace(/\/$/, '');
 
 /** Build authenticated upload URL (JWT query token for <img>/<a> without headers). */
 export function uploadsUrl(filePathOrName: string | null | undefined): string | null {

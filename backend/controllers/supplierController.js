@@ -13,6 +13,7 @@ const {
 } = require('../services/aiExtractionService');
 const { processDocumentsForProfile } = require('../services/supplierProfileAiService');
 const { getEffectiveEntitlementsForUser } = require('../services/entitlementService');
+const { valuesDiffer, supplierMaterialFieldsChanged } = require('../utils/supplierMaterialDiff');
 
 async function assertEntitlement(userId, key) {
   try {
@@ -126,16 +127,6 @@ async function sendSubmissionEmails(supplier, user) {
         .catch((err) => console.error('Failed to send profile submitted to admin:', err));
     }
   }
-}
-
-function valuesDiffer(a, b) {
-  if (a == null && (b === '' || b == null)) return false;
-  if (b == null && (a === '' || a == null)) return false;
-  return String(a ?? '') !== String(b ?? '');
-}
-
-function supplierMaterialFieldsChanged(supplier, updateData) {
-  return Object.entries(updateData).some(([key, val]) => valuesDiffer(supplier.getDataValue(key), val));
 }
 
 /** After material profile change: re-submit for admin review when previously approved. */

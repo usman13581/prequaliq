@@ -198,46 +198,52 @@ export function ProcedureQaChat({
           <div ref={bottomRef} />
         </div>
 
-        <div className="relative z-20 border-t border-border p-2.5 bg-white space-y-2 shrink-0">
-          <textarea
-            className="input-brand w-full text-sm resize-none"
-            rows={2}
-            value={body}
-            onChange={(e) => onBodyChange(e.target.value)}
-            placeholder={t('procedures.qaPlaceholder')}
-            disabled={disabled || (mode === 'buyer' && !selectedSupplierId)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (canSend) onSend();
-              }
-            }}
-          />
-          <div className="flex flex-wrap gap-2 justify-end">
-            {onAiDraft ? (
+        {disabled ? (
+          <div className="relative z-20 border-t border-border px-3 py-2 bg-slate-50 text-xs text-muted shrink-0">
+            {t('procedures.qaReadOnly')}
+          </div>
+        ) : (
+          <div className="relative z-20 border-t border-border p-2.5 bg-white space-y-2 shrink-0">
+            <textarea
+              className="input-brand w-full text-sm resize-none"
+              rows={2}
+              value={body}
+              onChange={(e) => onBodyChange(e.target.value)}
+              placeholder={t('procedures.qaPlaceholder')}
+              disabled={mode === 'buyer' && !selectedSupplierId}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (canSend) onSend();
+                }
+              }}
+            />
+            <div className="flex flex-wrap gap-2 justify-end">
+              {onAiDraft ? (
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-xl text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={mode === 'buyer' && !selectedSupplierId}
+                  onClick={onAiDraft}
+                >
+                  {t('procedures.aiQaDraft')}
+                </button>
+              ) : null}
               <button
                 type="button"
-                className="px-3 py-2 rounded-xl text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={disabled || (mode === 'buyer' && !selectedSupplierId)}
-                onClick={onAiDraft}
+                className="btn-save px-4 py-2 rounded-xl text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                disabled={!canSend}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (canSend) onSend();
+                }}
               >
-                {t('procedures.aiQaDraft')}
+                <Send className="w-4 h-4" />
+                {t('procedures.postQa')}
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="btn-save px-4 py-2 rounded-xl text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-              disabled={!canSend}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (canSend) onSend();
-              }}
-            >
-              <Send className="w-4 h-4" />
-              {t('procedures.postQa')}
-            </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

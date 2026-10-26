@@ -31,6 +31,24 @@ export type ProfileAiSuggestion = {
   differsFromCurrent: boolean;
 };
 
+export type ProfileAiCpvSuggestion = {
+  cpvCodeId: string;
+  code: string;
+  description: string;
+  reason?: string;
+  confidence?: number;
+};
+
+export type ProfileAiNutsSuggestion = {
+  nutsCodeId: string;
+  code: string;
+  name: string;
+  nameSwedish?: string;
+  level?: number;
+  reason?: string;
+  confidence?: number;
+};
+
 export type ProfileAiResponse = {
   suggestions: Record<string, ProfileAiSuggestion>;
   conflicts: Array<{
@@ -46,6 +64,8 @@ export type ProfileAiResponse = {
     error?: string | null;
     code?: string | null;
   }>;
+  cpvSuggestions?: ProfileAiCpvSuggestion[];
+  nutsSuggestions?: ProfileAiNutsSuggestion[];
   disclaimer: string;
   gpuV2?: boolean;
   allFailed?: boolean;
@@ -97,7 +117,11 @@ type AiAssistContextValue = {
   result: ProfileAiResponse | null;
   selectedFields: Record<string, string>;
   conflictChoices: Record<string, string>;
+  selectedCpvIds: Set<string>;
+  selectedNutsIds: Set<string>;
   toggleField: (field: string, value: string, checked: boolean) => void;
+  toggleCpv: (cpvCodeId: string, checked: boolean) => void;
+  toggleNuts: (nutsCodeId: string, checked: boolean) => void;
   setConflictChoice: (field: string, value: string) => void;
   fieldLabel: (field: string) => string;
   sectionLabel: (section: string) => string;
@@ -115,6 +139,10 @@ type RootProps = {
   suggestEndpoint?: string;
   fieldLabelKeys?: Record<string, string>;
   onApply: (fields: Record<string, string>) => void;
+  /** When set, applying also selects suggested CPV codes (supplier profile). */
+  onApplyCpv?: (cpvCodeIds: string[]) => void;
+  /** When set, applying also selects suggested NUTS regions (supplier profile). */
+  onApplyNuts?: (nutsCodeIds: string[]) => void;
   onStartEdit?: () => void;
   children: ReactNode;
 };
@@ -124,6 +152,8 @@ function Root({
   suggestEndpoint = '/supplier/profile/ai-suggest',
   fieldLabelKeys,
   onApply,
+  onApplyCpv,
+  onApplyNuts,
   onStartEdit,
   children,
 }: RootProps) {
@@ -136,6 +166,8 @@ function Root({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Record<string, string>>({});
   const [conflictChoices, setConflictChoices] = useState<Record<string, string>>({});
+  const [selectedCpvIds, setSelectedCpvIds] = useState<Set<string>>(new Set());
+  const [selectedNutsIds, setSelectedNutsIds] = useState<Set<string>>(new Set());
 
   const mergedFieldLabels = { ...FIELD_LABEL_KEYS, ...fieldLabelKeys };
 
@@ -176,6 +208,8 @@ function Root({
       setLoading(true);
       setResult(null);
       setDrawerOpen(false);
+      setSelectedCpvIds(new Set());
+      setSelectedNutsIds(new Set());
       const formData = new FormData();
       for (const f of files) formData.append('documents', f);
       const res = await api.post<ProfileAiResponse>(suggestEndpoint, formData, {
@@ -196,6 +230,8 @@ function Root({
       }
       setSelectedFields(initialSelected);
       setConflictChoices(initialConflicts);
+      setSelectedCpvIds(new Set((data.cpvSuggestions || []).map((c) => c.cpvCodeId)));
+      setSelectedNutsIds(new Set((data.nutsSuggestions || []).map((n) => n.nutsCodeId)));
       onStartEdit?.();
 
       if (data.allFailed) {
@@ -220,13 +256,36 @@ function Root({
     });
   };
 
+  const toggleCpv = (cpvCodeId: string, checked: boolean) => {
+    setSelectedCpvIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(cpvCodeId);
+      else next.delete(cpvCodeId);
+      return next;
+    });
+  };
+
+  const toggleNuts = (nutsCodeId: string, checked: boolean) => {
+    setSelectedNutsIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(nutsCodeId);
+      else next.delete(nutsCodeId);
+      return next;
+    });
+  };
+
   const handleApply = () => {
     const toApply: Record<string, string> = { ...selectedFields };
     for (const [field, value] of Object.entries(conflictChoices)) {
       if (value) toApply[field] = value;
     }
-    if (!Object.keys(toApply).length) {
-      const hasSuggestions = Object.keys(result?.suggestions || {}).length > 0;
+    const cpvIds = [...selectedCpvIds];
+    const nutsIds = [...selectedNutsIds];
+    if (!Object.keys(toApply).length && !cpvIds.length && !nutsIds.length) {
+      const hasSuggestions =
+        Object.keys(result?.suggestions || {}).length > 0 ||
+        (result?.cpvSuggestions || []).length > 0 ||
+        (result?.nutsSuggestions || []).length > 0;
       showToast(
         hasSuggestions
           ? t('supplierPortal.aiProfileNothingSelected')
@@ -235,19 +294,35 @@ function Root({
       );
       return;
     }
-    onApply(toApply);
+    if (Object.keys(toApply).length) onApply(toApply);
+    if (cpvIds.length && onApplyCpv) onApplyCpv(cpvIds);
+    if (nutsIds.length && onApplyNuts) onApplyNuts(nutsIds);
     setResult(null);
     setDrawerOpen(false);
     setSelectedFields({});
     setConflictChoices({});
-    showToast(t('supplierPortal.aiProfileApplied'), 'success');
+    setSelectedCpvIds(new Set());
+    setSelectedNutsIds(new Set());
+    showToast(
+      cpvIds.length || nutsIds.length
+        ? t('supplierPortal.aiProfileAppliedWithCpv', {
+            defaultValue: 'Suggestions applied — CPV/NUTS selected. Review and save.',
+          })
+        : t('supplierPortal.aiProfileApplied'),
+      'success'
+    );
   };
 
-  const suggestionCount = Object.keys(result?.suggestions || {}).length;
+  const fieldSuggestionCount = Object.keys(result?.suggestions || {}).length;
+  const cpvSuggestionCount = (result?.cpvSuggestions || []).length;
+  const nutsSuggestionCount = (result?.nutsSuggestions || []).length;
+  const suggestionCount = fieldSuggestionCount + cpvSuggestionCount + nutsSuggestionCount;
   const nonConflictCount = Object.entries(result?.suggestions || {}).filter(([, sug]) => !sug.conflict).length;
   const selectedCount =
     Object.keys(selectedFields).length +
-    Object.entries(conflictChoices).filter(([field, value]) => value && !(field in selectedFields)).length;
+    Object.entries(conflictChoices).filter(([field, value]) => value && !(field in selectedFields)).length +
+    selectedCpvIds.size +
+    selectedNutsIds.size;
   const canApply = selectedCount > 0;
   const hasNoSuggestions = Boolean(result && suggestionCount === 0 && !result.allFailed);
 
@@ -262,7 +337,11 @@ function Root({
     result,
     selectedFields,
     conflictChoices,
+    selectedCpvIds,
+    selectedNutsIds,
     toggleField,
+    toggleCpv,
+    toggleNuts,
     setConflictChoice: (field, value) => setConflictChoices((prev) => ({ ...prev, [field]: value })),
     fieldLabel,
     sectionLabel,
@@ -351,7 +430,11 @@ function Drawer() {
     sectionLabel,
     selectedFields,
     conflictChoices,
+    selectedCpvIds,
+    selectedNutsIds,
     toggleField,
+    toggleCpv,
+    toggleNuts,
     setConflictChoice,
     nonConflictCount,
     selectedCount,
@@ -495,6 +578,70 @@ function Drawer() {
                             </span>
                           )}
                           <span className="block text-xs text-muted">{sug.sources.join(', ')}</span>
+                        </div>
+                        <CheckCircle2 size={14} className="text-green-600 shrink-0 mt-1" />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {(result.cpvSuggestions || []).length > 0 && (
+              <div className="rounded-lg bg-white border border-violet-200 p-3">
+                <p className="text-xs font-semibold text-gray-700 mb-1">
+                  {t('supplierPortal.aiProfileCpvSuggestions')}
+                </p>
+                <p className="text-xs text-muted mb-2">{t('supplierPortal.aiProfileCpvHint')}</p>
+                <ul className="space-y-2">
+                  {(result.cpvSuggestions || []).map((cpv) => {
+                    const checked = selectedCpvIds.has(cpv.cpvCodeId);
+                    return (
+                      <li key={cpv.cpvCodeId} className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => toggleCpv(cpv.cpvCodeId, e.target.checked)}
+                          className="mt-1"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium text-gray-900">{cpv.code}</span>
+                          <span className="text-gray-800"> — {cpv.description}</span>
+                          {cpv.reason && (
+                            <span className="block text-xs text-muted mt-0.5">{cpv.reason}</span>
+                          )}
+                        </div>
+                        <CheckCircle2 size={14} className="text-green-600 shrink-0 mt-1" />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {(result.nutsSuggestions || []).length > 0 && (
+              <div className="rounded-lg bg-white border border-violet-200 p-3">
+                <p className="text-xs font-semibold text-gray-700 mb-1">
+                  {t('supplierPortal.aiProfileNutsSuggestions')}
+                </p>
+                <p className="text-xs text-muted mb-2">{t('supplierPortal.aiProfileNutsHint')}</p>
+                <ul className="space-y-2">
+                  {(result.nutsSuggestions || []).map((nuts) => {
+                    const checked = selectedNutsIds.has(nuts.nutsCodeId);
+                    return (
+                      <li key={nuts.nutsCodeId} className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => toggleNuts(nuts.nutsCodeId, e.target.checked)}
+                          className="mt-1"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium text-gray-900">{nuts.code}</span>
+                          <span className="text-gray-800"> — {nuts.name}</span>
+                          {nuts.reason && (
+                            <span className="block text-xs text-muted mt-0.5">{nuts.reason}</span>
+                          )}
                         </div>
                         <CheckCircle2 size={14} className="text-green-600 shrink-0 mt-1" />
                       </li>
