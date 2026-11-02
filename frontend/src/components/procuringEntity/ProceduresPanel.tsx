@@ -14,6 +14,7 @@ import { procedureStatusLabelKey } from '../../utils/procedureStatus';
 import { DateOnlyPicker } from '../DateOnlyPicker';
 import { BrandSelect } from '../ui/BrandSelect';
 import { AiBusyButton } from '../ai/AiBusyButton';
+import { SearchField } from '../ui/SearchField';
 
 type Procedure = {
   id: string;
@@ -150,6 +151,30 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
   const [inviteCpvId, setInviteCpvId] = useState<string | null>(null);
   const [complements, setComplements] = useState<Complement[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [listSearch, setListSearch] = useState('');
+  const [appliedListSearch, setAppliedListSearch] = useState('');
+
+  const runListSearch = () => setAppliedListSearch(listSearch.trim());
+
+  const filteredProcedures = useMemo(() => {
+    const q = appliedListSearch.trim().toLowerCase();
+    if (!q) return procedures;
+    return procedures.filter((p) => {
+      const typeLabel = t(`procedures.types.${p.procedureType}`, { defaultValue: p.procedureType }).toLowerCase();
+      const statusLabel = t(procedureStatusLabelKey(p.status)).toLowerCase();
+      return (
+        p.title?.toLowerCase().includes(q) ||
+        (p.referenceNumber || '').toLowerCase().includes(q) ||
+        (p.description || '').toLowerCase().includes(q) ||
+        (p.procedureType || '').toLowerCase().includes(q) ||
+        typeLabel.includes(q) ||
+        (p.status || '').toLowerCase().includes(q) ||
+        statusLabel.includes(q) ||
+        (p.awardDecision?.winner?.companyName || '').toLowerCase().includes(q)
+      );
+    });
+  }, [procedures, appliedListSearch, t]);
+
   const {
     page,
     setPage,
@@ -157,7 +182,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
     setPageSize,
     paginatedItems,
     total
-  } = useListPagination(procedures);
+  } = useListPagination(filteredProcedures);
 
   const load = async () => {
     try {
@@ -396,7 +421,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
       const newId = copyRes.data.questionnaire?.id;
       if (!newId) throw new Error('Copy missing id');
       await api.put(`/procedures/${detail.id}/underlag`, { questionnaireId: newId });
-      showToast(t('procedures.copyLinked', { defaultValue: 'Copied questionnaire and linked as underlag' }), 'success');
+      showToast(t('procedures.copyLinked'), 'success');
       setUnderlagCopyOpen(false);
       setUnderlagCopySource(null);
       await openDetail(detail.id, 'underlag');
@@ -472,7 +497,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
     );
   }, [detail]);
 
-  const evalPager = useListPagination(evalRows, 10);
+  const evalPager = useListPagination(evalRows, 5);
 
   const evalSyncKey = useMemo(
     () => evalRows.map((r) => `${r.supplierId}:${r.score}:${r.notes}`).join('|'),
@@ -489,17 +514,19 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only when saved row values change
   }, [detail?.id, tab, evalSyncKey]);
 
-  const saveEvalRow = async (supplierId: string, responseId?: string | null) => {
-    if (!detail || evalReadOnly) return;
-    const edit = evalEdits[supplierId] || { score: '', notes: '' };
+  const saveAllEvaluations = async () => {
+    if (!detail || evalReadOnly || evalRows.length === 0) return;
     try {
-      setEvalSavingId(supplierId);
-      await api.put(`/procedures/${detail.id}/evaluations`, {
-        supplierId,
-        score: edit.score === '' ? null : Number(edit.score),
-        notes: edit.notes,
-        responseId: responseId || null,
-      });
+      setEvalSavingId('all');
+      for (const row of evalRows) {
+        const edit = evalEdits[row.supplierId] || { score: row.score, notes: row.notes };
+        await api.put(`/procedures/${detail.id}/evaluations`, {
+          supplierId: row.supplierId,
+          score: edit.score === '' ? null : Number(edit.score),
+          notes: edit.notes,
+          responseId: row.responseId || null,
+        });
+      }
       showToast(t('msg.evaluationSaved'), 'success');
       await openDetail(detail.id, 'eval');
     } catch (error: any) {
@@ -756,11 +783,32 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         </div>
       ) : null}
 
+      <div className="flex flex-col sm:flex-row gap-2 sm:items-center max-w-xl">
+        <SearchField
+          wrapperClassName="flex-1 min-w-0"
+          value={listSearch}
+          onChange={(e) => setListSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') runListSearch();
+          }}
+          placeholder={t('procedures.searchPlaceholder')}
+        />
+        <button
+          type="button"
+          onClick={runListSearch}
+          className="btn-save px-4 py-2 rounded-lg text-xs font-semibold shrink-0"
+        >
+          {t('buttons.search')}
+        </button>
+      </div>
+
       <div className="space-y-3">
         {loading ? (
           <p className="text-sm text-muted">{t('common.loading')}</p>
         ) : procedures.length === 0 ? (
           <div className="text-center py-10 rounded-xl border-2 border-dashed border-border text-sm text-muted">{t('procedures.empty')}</div>
+        ) : filteredProcedures.length === 0 ? (
+          <div className="text-center py-10 rounded-xl border-2 border-dashed border-border text-sm text-muted">{t('common.noResults')}</div>
         ) : (
           <>
             {paginatedItems.map((p) => (
@@ -943,7 +991,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         onClose={() => { setDetail(null); }}
         title={detail?.title || t('procedures.title')}
         subtitle={detail ? t(procedureStatusLabelKey(detail.status)) : undefined}
-        widthClass="max-w-2xl"
+        widthClass="max-w-[50%]"
         footer={
           detail ? (
             <div className="flex flex-wrap gap-2 justify-end">
@@ -1356,71 +1404,62 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                     {t('procedures.evalEmpty', { defaultValue: 'No submitted bids to score yet.' })}
                   </p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-[minmax(0,1.1fr)_4.75rem_minmax(0,1.6fr)] gap-2 px-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                      <span className="truncate">{t('procedures.supplier', { defaultValue: 'Supplier' })}</span>
+                      <span className="text-center">{t('procedures.score')}</span>
+                      <span>{t('procedures.notes')}</span>
+                    </div>
                     {evalPager.paginatedItems.map((row) => {
                       const edit = evalEdits[row.supplierId] || { score: row.score, notes: row.notes };
                       return (
                         <div
                           key={row.key}
-                          className="rounded-xl border border-border bg-white p-3 space-y-2"
+                          className="grid grid-cols-[minmax(0,1.1fr)_4.75rem_minmax(0,1.6fr)] gap-2 items-center px-2.5 py-1 rounded-md border border-border bg-white min-h-[2.15rem]"
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-foreground">{row.companyName}</p>
-                              {row.answerCount != null ? (
-                                <p className="text-[11px] text-muted">
-                                  {t('procedures.evalAnswersCount', {
-                                    defaultValue: '{{count}} answers submitted',
-                                    count: row.answerCount,
-                                  })}
-                                </p>
-                              ) : null}
-                            </div>
-                            {!evalReadOnly ? (
-                              <button
-                                type="button"
-                                disabled={evalSavingId === row.supplierId}
-                                className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
-                                onClick={() => saveEvalRow(row.supplierId, row.responseId)}
-                              >
-                                {evalSavingId === row.supplierId ? (
-                                  <Loader2 size={14} className="animate-spin inline" />
-                                ) : (
-                                  t('procedures.saveEval')
-                                )}
-                              </button>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate leading-snug">
+                              {row.companyName}
+                            </p>
+                            {row.answerCount != null ? (
+                              <p className="text-[10px] text-muted truncate leading-tight">
+                                {t('procedures.evalAnswersCount', {
+                                  defaultValue: '{{count}} answers submitted',
+                                  count: row.answerCount,
+                                })}
+                              </p>
                             ) : null}
                           </div>
-                          <div className="grid sm:grid-cols-[7rem_1fr] gap-2">
-                            <input
-                              className="input-brand"
-                              type="number"
-                              min={0}
-                              max={100}
-                              step={0.5}
-                              disabled={evalReadOnly}
-                              placeholder={t('procedures.score')}
-                              value={edit.score}
-                              onChange={(e) =>
-                                setEvalEdits((prev) => ({
-                                  ...prev,
-                                  [row.supplierId]: { ...edit, score: e.target.value },
-                                }))
-                              }
-                            />
-                            <input
-                              className="input-brand"
-                              disabled={evalReadOnly}
-                              placeholder={t('procedures.notes')}
-                              value={edit.notes}
-                              onChange={(e) =>
-                                setEvalEdits((prev) => ({
-                                  ...prev,
-                                  [row.supplierId]: { ...edit, notes: e.target.value },
-                                }))
-                              }
-                            />
-                          </div>
+                          <input
+                            className="field-control field-compact w-full min-w-0 text-center"
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            disabled={evalReadOnly}
+                            placeholder={t('procedures.score')}
+                            aria-label={t('procedures.score')}
+                            value={edit.score}
+                            onChange={(e) =>
+                              setEvalEdits((prev) => ({
+                                ...prev,
+                                [row.supplierId]: { ...edit, score: e.target.value },
+                              }))
+                            }
+                          />
+                          <input
+                            className="field-control field-compact w-full min-w-0"
+                            disabled={evalReadOnly}
+                            placeholder={t('procedures.notes')}
+                            aria-label={t('procedures.notes')}
+                            value={edit.notes}
+                            onChange={(e) =>
+                              setEvalEdits((prev) => ({
+                                ...prev,
+                                [row.supplierId]: { ...edit, notes: e.target.value },
+                              }))
+                            }
+                          />
                         </div>
                       );
                     })}
@@ -1432,6 +1471,21 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                       onPageSizeChange={evalPager.setPageSize}
                       itemLabel={t('procedures.evalRowsLabel', { defaultValue: 'suppliers' })}
                     />
+                    {!evalReadOnly ? (
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          disabled={evalSavingId === 'all'}
+                          className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1.5"
+                          onClick={saveAllEvaluations}
+                        >
+                          {evalSavingId === 'all' ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : null}
+                          {t('procedures.saveEval')}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </>

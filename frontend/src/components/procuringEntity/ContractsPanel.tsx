@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, ClipboardList, FileText, Trophy, Building2, Calendar, ChevronRight, Hash } from 'lucide-react';
 import api from '../../services/api';
@@ -12,6 +12,7 @@ import { DateOnlyPicker } from '../DateOnlyPicker';
 import { BrandSelect } from '../ui/BrandSelect';
 import { AdminStatCard, AdminStatsGrid } from '../admin/AdminStatCards';
 import { ContractThread, type ContractThreadMessage } from '../contracts/ContractThread';
+import { SearchField } from '../ui/SearchField';
 
 function contractStatusTone(status: string): 'green' | 'yellow' | 'red' | 'gray' | 'blue' {
   if (status === 'active') return 'green';
@@ -83,6 +84,30 @@ export function ContractsPanel() {
   }>>([]);
   const [suppliers, setSuppliers] = useState<Array<{ id: string; companyName: string }>>([]);
   const [procedures, setProcedures] = useState<Array<{ id: string; title: string; status: string }>>([]);
+  const [listSearch, setListSearch] = useState('');
+  const [appliedListSearch, setAppliedListSearch] = useState('');
+
+  const runListSearch = () => setAppliedListSearch(listSearch.trim());
+
+  const filteredContracts = useMemo(() => {
+    const q = appliedListSearch.trim().toLowerCase();
+    if (!q) return contracts;
+    return contracts.filter((c) => {
+      const typeLabel = t(`contracts.types.${c.contractType}`, { defaultValue: c.contractType }).toLowerCase();
+      const statusLabel = t(STATUS_LABEL[c.status] || 'contracts.status.draft').toLowerCase();
+      return (
+        c.title?.toLowerCase().includes(q) ||
+        (c.contractNumber || '').toLowerCase().includes(q) ||
+        (c.notes || '').toLowerCase().includes(q) ||
+        (c.supplier?.companyName || '').toLowerCase().includes(q) ||
+        (c.procedure?.title || '').toLowerCase().includes(q) ||
+        (c.contractType || '').toLowerCase().includes(q) ||
+        typeLabel.includes(q) ||
+        (c.status || '').toLowerCase().includes(q) ||
+        statusLabel.includes(q)
+      );
+    });
+  }, [contracts, appliedListSearch, t]);
 
   const {
     page,
@@ -91,7 +116,7 @@ export function ContractsPanel() {
     setPageSize,
     paginatedItems,
     total
-  } = useListPagination(contracts);
+  } = useListPagination(filteredContracts);
 
   const disPager = useListPagination(disMemberships);
 
@@ -338,9 +363,30 @@ export function ContractsPanel() {
         </AdminStatsGrid>
       ) : null}
 
+      <div className="flex flex-col sm:flex-row gap-2 sm:items-center max-w-xl">
+        <SearchField
+          wrapperClassName="flex-1 min-w-0"
+          value={listSearch}
+          onChange={(e) => setListSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') runListSearch();
+          }}
+          placeholder={t('contracts.searchPlaceholder')}
+        />
+        <button
+          type="button"
+          onClick={runListSearch}
+          className="btn-save px-4 py-2 rounded-lg text-xs font-semibold shrink-0"
+        >
+          {t('buttons.search')}
+        </button>
+      </div>
+
       <div className="space-y-3">
         {contracts.length === 0 ? (
           <div className="text-center py-10 rounded-xl border-2 border-dashed border-border text-sm text-muted">{t('contracts.empty')}</div>
+        ) : filteredContracts.length === 0 ? (
+          <div className="text-center py-10 rounded-xl border-2 border-dashed border-border text-sm text-muted">{t('common.noResults')}</div>
         ) : (
           <>
             {paginatedItems.map((c) => (

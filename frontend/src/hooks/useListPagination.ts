@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-export const LIST_PAGE_SIZE_OPTIONS = [5, 10, 50, 100] as const;
+export const LIST_PAGE_SIZE_OPTIONS = [5, 8, 10, 50, 100] as const;
 export const DEFAULT_LIST_PAGE_SIZE = 10;
 
 /** Client-side pagination: slices a full in-memory list. */

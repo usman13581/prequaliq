@@ -223,6 +223,7 @@ const ProcuringEntityDashboard = () => {
     canDiscoverSuppliers && supplierScope === 'discover' ? 'discover' : 'mine';
 
   const supplierPager = useServerListPagination({
+    initialPageSize: 8,
     resetKey: [
       activeSupplierScope,
       appliedSupplierSearch,
