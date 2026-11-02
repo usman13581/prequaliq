@@ -1,6 +1,9 @@
 /**
  * Optionally reset + reload demo/E2E test data on backend start.
- * Enable with: SEED_DEMO_DATA=1 (or true)
+ *
+ * Enable:
+ *   SEED_DEMO_DATA=1          (+ CONFIRM_PROD_SEED=YES in production)
+ *   SEED_DEMO_DATA=wipe       (production one-shot: enable + confirm in one var)
  *
  * Runs seedRichDemoData in a child process so process.exit there does not
  * stop the rest of `npm start`.
@@ -11,15 +14,31 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 
-const flag = String(process.env.SEED_DEMO_DATA || '').trim().toLowerCase();
-const wantSeed = flag === '1' || flag === 'true' || flag === 'yes';
+const rawSeed = String(process.env.SEED_DEMO_DATA || '').trim();
+const rawConfirm = String(process.env.CONFIRM_PROD_SEED || '').trim();
+const flag = rawSeed.toLowerCase();
+const confirmUp = rawConfirm.toUpperCase();
+
+// wipe = single-var production confirm (easier on Railway)
+const wantSeed = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'wipe';
 const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
-const confirmed = ['YES', '1', 'TRUE'].includes(String(process.env.CONFIRM_PROD_SEED || '').trim().toUpperCase());
+const confirmed =
+  flag === 'wipe' ||
+  confirmUp === 'YES' ||
+  confirmUp === '1' ||
+  confirmUp === 'TRUE';
 
 if (wantSeed) {
   if (isProd && !confirmed) {
+    console.error('[seedDemoIfEnabled] Refusing production wipe.');
     console.error(
-      '[seedDemoIfEnabled] Refusing production wipe: set CONFIRM_PROD_SEED=YES together with SEED_DEMO_DATA=1'
+      `[seedDemoIfEnabled] Saw SEED_DEMO_DATA=${JSON.stringify(rawSeed || '(empty)')} CONFIRM_PROD_SEED=${JSON.stringify(rawConfirm || '(empty)')}`
+    );
+    console.error(
+      '[seedDemoIfEnabled] On backend service Variables set EITHER:\n' +
+        '  A) SEED_DEMO_DATA=wipe\n' +
+        '  B) SEED_DEMO_DATA=1  AND  CONFIRM_PROD_SEED=YES\n' +
+        'Then redeploy. Remove the flag(s) after Demo seed complete.'
     );
     process.exit(1);
   }
@@ -38,8 +57,7 @@ if (wantSeed) {
 }
 
 console.log(
-  '[seedDemoIfEnabled] Skipping demo seed (set SEED_DEMO_DATA=1' +
-    (isProd ? ' and CONFIRM_PROD_SEED=YES' : '') +
-    ' to wipe & reload test data).'
+  '[seedDemoIfEnabled] Skipping demo seed. To wipe & reload on production set SEED_DEMO_DATA=wipe (then remove after seed).'
 );
 process.exit(0);
+}
