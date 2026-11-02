@@ -117,6 +117,7 @@ async function safeDestroy(model) {
 
 async function cleanup() {
   console.log('Cleaning previous demo / E2E / portal test data…');
+  console.log('[seed] cleanup: deleting transactional tables…');
   const order = [
     db.ContractAttachment,
     db.ContractMessage,
@@ -151,10 +152,12 @@ async function cleanup() {
   for (const m of order) await safeDestroy(m);
   await db.sequelize.query('DELETE FROM supplier_nuts').catch(() => {});
   await db.sequelize.query('DELETE FROM supplier_cpv').catch(() => {});
+  console.log('[seed] cleanup: deleting suppliers / entities / companies…');
   await safeDestroy(db.Supplier);
   await safeDestroy(db.ProcuringEntity);
   await safeDestroy(db.Company);
   // Remove all buyer/supplier users (keeps admin). Also catches legacy entreprenor* emails.
+  console.log('[seed] cleanup: deleting buyer/supplier users…');
   await db.User.destroy({
     where: {
       [Op.or]: [
@@ -165,6 +168,7 @@ async function cleanup() {
       ]
     }
   });
+  console.log('[seed] cleanup done');
 }
 
 /** Create a questionnaire with questions cloned from a template (or QUESTION_BANK). */
@@ -244,6 +248,7 @@ async function run() {
   const hashed = await hashPassword(PASSWORD);
 
   // -------- Buyers (22–23) --------
+  console.log('[seed] creating buyers…');
   // Mix: ~16 approved+active, ~2 approved+inactive user, ~2 pending, ~2 rejected
   const buyerSpecs = BUYER_NAMES.slice(0, 22).map((row, i) => {
     let status = 'approved';
@@ -280,6 +285,7 @@ async function run() {
   }
 
   // -------- Suppliers (12+) --------
+  console.log('[seed] creating suppliers…');
   // Most approved+active; last few cover inactive / pending / rejected
   const supplierSpecs = SUPPLIER_COMPANIES.slice(0, 12).map((row, i) => {
     let status = 'approved';

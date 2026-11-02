@@ -50,6 +50,15 @@ async function run() {
     console.log('CPV seed from EU Open Data (Sweden uses EU CPV)');
     console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Not set');
 
+    // Fast path: DB already has a full catalog — skip multi-minute API crawl on every deploy
+    const existingCount = await db.CPVCode.count();
+    if (existingCount >= 1000 && process.env.FORCE_CPV_REFRESH !== '1') {
+      console.log(`CPV catalog already present (${existingCount} codes) — skipping API fetch.`);
+      console.log('Set FORCE_CPV_REFRESH=1 to re-fetch from Open Data.');
+      await db.sequelize.close();
+      return;
+    }
+
     console.log('Fetching CPV codes from API...');
     const rows = await fetchAllCpvFromApi();
     console.log(`\nFetched ${rows.length} codes. Deduplicating by code...`);
