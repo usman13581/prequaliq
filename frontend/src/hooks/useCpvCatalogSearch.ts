@@ -25,14 +25,14 @@ export function useCpvCatalogSearch() {
 
       let list: CpvCodeOption[] = [];
       try {
-        const response = await api.get('/lookups/cpv', { params });
+        const response = await api.get('/lookups/cpv', { params, silentBusy: true });
         list = (response.data.items || []).map((row: { id: string; code: string; description?: string }) => ({
           id: row.id,
           code: row.code,
           description: row.description || row.code
         }));
       } catch {
-        const response = await api.get('/cpv', { params });
+        const response = await api.get('/cpv', { params, silentBusy: true });
         list = response.data.cpvCodes || [];
       }
 
@@ -42,7 +42,7 @@ export function useCpvCatalogSearch() {
       for (const selectedId of ids) {
         if (!list.find((c) => c.id === selectedId)) {
           try {
-            const one = await api.get(`/cpv/${selectedId}`);
+            const one = await api.get(`/cpv/${selectedId}`, { silentBusy: true });
             if (one.data.cpvCode) {
               list = [one.data.cpvCode, ...list];
             }

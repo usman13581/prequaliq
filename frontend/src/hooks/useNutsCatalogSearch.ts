@@ -26,7 +26,7 @@ export function useNutsCatalogSearch() {
 
       let list: NutsCodeOption[] = [];
       try {
-        const response = await api.get('/nuts', { params });
+        const response = await api.get('/nuts', { params, silentBusy: true });
         list = (response.data.nutsCodes || []).map(
           (row: { id: string; code: string; name?: string; nameSwedish?: string | null }) => ({
             id: row.id,
@@ -37,7 +37,10 @@ export function useNutsCatalogSearch() {
         );
       } catch {
         try {
-          const response = await api.get('/lookups/nuts', { params: { ...params, limit: 500 } });
+          const response = await api.get('/lookups/nuts', {
+            params: { ...params, limit: 500 },
+            silentBusy: true
+          });
           list = (response.data.items || []).map(
             (row: {
               id: string;

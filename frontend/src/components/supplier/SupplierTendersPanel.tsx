@@ -214,7 +214,7 @@ export function SupplierTendersPanel({
     let cancelled = false;
     const refreshQa = async () => {
       try {
-        const res = await api.get(`/procedures/${selected.id}`);
+        const res = await api.get(`/procedures/${selected.id}`, { silentBusy: true });
         if (cancelled) return;
         const qaMessages = res.data.procedure?.qaMessages;
         setSelected((prev: any) => (prev && prev.id === selected.id ? { ...prev, qaMessages } : prev));

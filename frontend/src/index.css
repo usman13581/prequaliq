@@ -835,6 +835,66 @@ input.field-bare:focus-visible,
   @apply max-w-md w-full bg-card/95 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/60 relative z-10;
 }
 
+/* Global processing overlay — blocks interaction while API work runs */
+.global-busy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 18, 32, 0.28);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: globalBusyIn 160ms ease-out both;
+  cursor: wait;
+}
+.global-busy-card {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 10.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--card);
+  box-shadow:
+    0 12px 32px rgba(15, 39, 68, 0.16),
+    0 2px 8px rgba(15, 39, 68, 0.08);
+  font-family: var(--font-app);
+}
+.global-busy-spinner {
+  color: var(--accent);
+  animation: globalBusySpin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+.global-busy-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+@keyframes globalBusyIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes globalBusySpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .global-busy-overlay,
+  .global-busy-spinner {
+    animation: none !important;
+  }
+}
+
 /* Toast — top-right mature notification */
 .toast-viewport {
   position: fixed;

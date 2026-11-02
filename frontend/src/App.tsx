@@ -12,6 +12,7 @@ import AdminDashboard from './pages/admin/Dashboard';
 import SupplierDashboard from './pages/supplier/Dashboard';
 import ProcuringEntityDashboard from './pages/procuringEntity/Dashboard';
 import Developer from './pages/Developer';
+import { GlobalBusyOverlay } from './components/ui/GlobalBusyOverlay';
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -56,6 +57,7 @@ function App() {
                 <Route path="/" element={<Navigate to="/login" replace />} />
               </Routes>
             </Router>
+            <GlobalBusyOverlay />
           </EntitlementProvider>
         </AuthProvider>
       </ToastProvider>

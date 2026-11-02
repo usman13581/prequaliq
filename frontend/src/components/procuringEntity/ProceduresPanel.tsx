@@ -194,7 +194,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
     let cancelled = false;
     const refreshQa = async () => {
       try {
-        const res = await api.get(`/procedures/${detail.id}`);
+        const res = await api.get(`/procedures/${detail.id}`, { silentBusy: true });
         if (cancelled) return;
         const procedure = res.data.procedure;
         setDetail((prev: any) =>
@@ -660,15 +660,17 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
     }
   };
 
-  const refreshComplements = async (procedureId: string) => {
-    const cRes = await api.get(`/procedures/${procedureId}/complements`);
+  const refreshComplements = async (procedureId: string, opts?: { silentBusy?: boolean }) => {
+    const cRes = await api.get(`/procedures/${procedureId}/complements`, {
+      silentBusy: opts?.silentBusy
+    });
     setComplements(cRes.data.complements || []);
   };
 
   useEffect(() => {
     if (!detail?.id || tab !== 'complements') return;
     const refresh = () => {
-      refreshComplements(detail.id).catch(() => {});
+      refreshComplements(detail.id, { silentBusy: true }).catch(() => {});
     };
     refresh();
     const intervalId = window.setInterval(refresh, 15000);
