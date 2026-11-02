@@ -11,8 +11,9 @@ import {
   type SelectHTMLAttributes
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { useFixedDropdownPosition } from '../search/useFixedDropdownPosition';
+import { SearchField } from './SearchField';
 
 type Props = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children'> & {
   wrapperClassName?: string;
@@ -120,21 +121,13 @@ export function BrandSelect({
             }}
           >
             <div className="p-2 border-b border-border bg-surface/80">
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
-                  size={14}
-                  aria-hidden
-                />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="field-control !pl-8 !min-h-8 !py-1.5 !text-[0.78rem]"
-                  autoFocus
-                />
-              </div>
+              <SearchField
+                compact
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={searchPlaceholder}
+                autoFocus
+              />
             </div>
             <div className="max-h-56 overflow-y-auto py-1">
               {filtered.length === 0 ? (

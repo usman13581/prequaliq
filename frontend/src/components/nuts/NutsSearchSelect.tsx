@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Loader2, Search } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { NutsCodeOption } from '../../hooks/useNutsCatalogSearch';
 import { useFixedDropdownPosition } from '../search/useFixedDropdownPosition';
+import { SearchField } from '../ui/SearchField';
 
 type Props = {
   nutsCodes: NutsCodeOption[];
@@ -78,20 +79,14 @@ export function NutsSearchSelect({
             }}
           >
             <div className="p-2 border-b border-border bg-surface/80">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t('placeholders.searchByCodeOrDescription')}
-                  className="field-control !pl-8 !pr-8 !min-h-8 !py-1.5"
-                  autoFocus
-                />
-                {loading ? (
-                  <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent animate-spin" />
-                ) : null}
-              </div>
+              <SearchField
+                compact
+                loading={loading}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t('placeholders.searchByCodeOrDescription')}
+                autoFocus
+              />
             </div>
             <div className="max-h-56 overflow-y-auto py-1">
               {nutsCodes.length === 0 && loading ? (

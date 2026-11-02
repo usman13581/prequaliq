@@ -754,13 +754,50 @@ input[class*='w-24'] {
   padding-bottom: 0.25rem !important;
 }
 
-/* SearchField icon clearance */
+/* SearchField — icon gutter that beats the global padding shorthand */
+.field-search-icon {
+  width: 2.35rem;
+}
+.field-search-trailing {
+  width: 2.25rem;
+}
+input.field-search,
+.field-control.field-search {
+  padding-left: 2.35rem !important;
+  padding-right: 0.75rem !important;
+}
+input.field-search.field-search--loading,
+.field-control.field-search.field-search--loading {
+  padding-right: 2.25rem !important;
+}
+input.field-search.field-search--compact,
+.field-control.field-search.field-search--compact {
+  min-height: 2rem !important;
+  padding-top: 0.3rem !important;
+  padding-bottom: 0.3rem !important;
+  font-size: 0.78rem !important;
+}
+/* Kill native search chrome that steals space / shifts placeholder */
+input[type='search'].field-search {
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type='search'].field-search::-webkit-search-decoration,
+input[type='search'].field-search::-webkit-search-cancel-button,
+input[type='search'].field-search::-webkit-search-results-button,
+input[type='search'].field-search::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/* Legacy Tailwind pl-* on icon inputs (if any remain) */
 .field-control.pl-8,
 .field-control.\!pl-8,
 input.\!pl-8,
 input[class*='pl-8'],
 input[class*='pl-11'] {
-  padding-left: 2.15rem !important;
+  padding-left: 2.35rem !important;
 }
 input[class*='pr-10'],
 input[class*='pr-12'] {
