@@ -25,8 +25,11 @@ export function SearchField({
 }: Props) {
   return (
     <div className={`relative min-w-0 w-full ${wrapperClassName}`}>
-      <span className="field-search-icon pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center text-muted">
-        {icon ?? <Search size={compact ? 14 : 15} strokeWidth={2} aria-hidden />}
+      <span
+        className="field-search-icon pointer-events-none absolute inset-y-0 left-0 z-[1] flex items-center justify-center text-muted"
+        aria-hidden
+      >
+        {icon ?? <Search size={compact ? 14 : 15} strokeWidth={2} />}
       </span>
       <input
         type="search"
