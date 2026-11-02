@@ -192,7 +192,7 @@ export function SavedSearchesSlideOver({
           />
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <input
-              className="w-full min-w-0 flex-1 px-4 py-3 border border-gray-300 rounded-xl bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="field-control w-full min-w-0 flex-1"
               placeholder={t('savedSearch.namePlaceholder')}
               value={saveName}
               onChange={(e) => setSaveName(e.target.value)}

@@ -184,18 +184,20 @@ export function AdminHomeTab({
 export function AdminSupplierStatsStrip({ stats }: { stats: ReturnType<typeof import('../../lib/adminStats').statsFromSuppliers> }) {
   const { t } = useTranslation();
   return (
-    <AdminStatsGrid>
-      <AdminStatCard label={t('nav.totalSuppliers')} value={stats.total} icon={Users} accent="blue" />
-      <AdminStatCard label={t('common.approved')} value={stats.approved} icon={CheckCircle} accent="green" />
-      <AdminStatCard label={t('common.pending')} value={stats.pending} icon={Clock} accent="amber" />
+    <AdminStatsGrid compact>
+      <AdminStatCard compact label={t('nav.totalSuppliers')} value={stats.total} icon={Users} accent="blue" />
+      <AdminStatCard compact label={t('common.approved')} value={stats.approved} icon={CheckCircle} accent="green" />
+      <AdminStatCard compact label={t('common.pending')} value={stats.pending} icon={Clock} accent="amber" />
       <AdminStatCard
+        compact
         label={t('adminPortal.requalification')}
         value={stats.requalification_required}
         icon={AlertTriangle}
         accent="orange"
       />
-      <AdminStatCard label={t('common.rejected')} value={stats.rejected} icon={AlertTriangle} accent="red" />
+      <AdminStatCard compact label={t('common.rejected')} value={stats.rejected} icon={AlertTriangle} accent="red" />
       <AdminStatCard
+        compact
         label={t('nav.active')}
         value={stats.active}
         hint={`${stats.inactive} ${t('common.inactive')}`}
@@ -203,6 +205,7 @@ export function AdminSupplierStatsStrip({ stats }: { stats: ReturnType<typeof im
         accent="slate"
       />
       <AdminStatCard
+        compact
         label={t('adminPortal.newThisMonth')}
         value={stats.newThisMonth}
         icon={Activity}
@@ -215,11 +218,11 @@ export function AdminSupplierStatsStrip({ stats }: { stats: ReturnType<typeof im
 export function AdminEntityStatsStrip({ stats }: { stats: ReturnType<typeof import('../../lib/adminStats').statsFromEntities> }) {
   const { t } = useTranslation();
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-      <AdminStatCard label={t('nav.procuringEntities')} value={stats.total} icon={Building2} accent="slate" />
-      <AdminStatCard label={t('nav.active')} value={stats.active} icon={CheckCircle} accent="green" />
-      <AdminStatCard label={t('common.inactive')} value={stats.inactive} icon={Clock} accent="amber" />
-      <AdminStatCard label={t('adminPortal.newThisMonth')} value={stats.newThisMonth} icon={Activity} accent="violet" />
-    </div>
+    <AdminStatsGrid compact>
+      <AdminStatCard compact label={t('nav.procuringEntities')} value={stats.total} icon={Building2} accent="slate" />
+      <AdminStatCard compact label={t('nav.active')} value={stats.active} icon={CheckCircle} accent="green" />
+      <AdminStatCard compact label={t('common.inactive')} value={stats.inactive} icon={Clock} accent="amber" />
+      <AdminStatCard compact label={t('adminPortal.newThisMonth')} value={stats.newThisMonth} icon={Activity} accent="violet" />
+    </AdminStatsGrid>
   );
 }

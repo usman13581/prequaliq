@@ -479,7 +479,7 @@ export function SupplierTendersPanel({
                 key={p.id}
                 type="button"
                 onClick={() => open(p.id)}
-                className="w-full text-left rounded-2xl border border-border bg-white hover:border-primary-300 hover:shadow-md transition-all p-4 sm:p-5 group"
+                className="w-full text-left panel-card hover:border-primary-300 transition-all p-3.5 sm:p-4 group"
               >
                 <div className="flex items-start gap-3 sm:gap-4">
                   <div className="flex-1 min-w-0 space-y-2">

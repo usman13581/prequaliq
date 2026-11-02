@@ -178,6 +178,21 @@ const templates = {
     `, { showLoginButton: true, titleColor: '#1e3a8a' })
   }),
 
+  passwordResetLink: ({ recipientName, resetUrl }) => ({
+    subject: `Reset your ${APP_NAME} password`,
+    html: emailLayout(`
+      <h2 style="margin: 0 0 20px 0; font-size: 20px; color: #1e3a8a;">Reset your password</h2>
+      <p style="margin: 0 0 16px 0;">Dear ${recipientName},</p>
+      <p style="margin: 0 0 20px 0;">We received a request to reset your password. Click the button below to choose a new password. This link expires in <strong>1 hour</strong>.</p>
+      <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 14px;">If you did not request this, you can ignore this email — your password will stay the same.</p>
+    `, {
+      showLoginButton: true,
+      buttonText: 'Reset password',
+      buttonHref: resetUrl,
+      titleColor: '#1e3a8a'
+    })
+  }),
+
   accountDeleted: ({ recipientName, role }) => ({
     subject: `Your ${APP_NAME} account has been removed`,
     html: emailLayout(`
@@ -374,6 +389,12 @@ const sendPasswordResetByAdminEmail = async (email, firstName, lastName, role) =
   return sendEmail(email, subject, html);
 };
 
+const sendPasswordResetLinkEmail = async (email, firstName, lastName, resetUrl) => {
+  const recipientName = `${firstName || ''} ${lastName || ''}`.trim() || 'User';
+  const { subject, html } = templates.passwordResetLink({ recipientName, resetUrl });
+  return sendEmail(email, subject, html);
+};
+
 /**
  * Send account deleted email (when admin deletes account)
  */
@@ -500,6 +521,7 @@ module.exports = {
   sendAccountDeactivatedEmail,
   sendAccountLockedEmail,
   sendPasswordResetByAdminEmail,
+  sendPasswordResetLinkEmail,
   sendAccountDeletedEmail,
   sendSupplierApprovedEmail,
   sendSupplierRejectedEmail,

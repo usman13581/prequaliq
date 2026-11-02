@@ -121,7 +121,7 @@ function buildFallbackUnderstanding(trimmed, category, language = 'en') {
       ? 'Du vill kvalificera leverantörer för bygg- eller anläggningsarbeten.'
       : 'You want to qualify suppliers for construction or building works.';
   }
-  if (/\b(clean|städ)\b/i.test(lower)) {
+  if (/\b(clean|städ|lokalvård|rengöring|facility)\b/i.test(lower)) {
     return language === 'sv'
       ? 'Du vill kvalificera leverantörer för städ- eller lokalvårdstjänster.'
       : 'You want to qualify suppliers for cleaning or facility services.';
@@ -137,9 +137,9 @@ function fallbackUnderstand(description, language = 'en') {
   let category = language === 'sv' ? 'Upphandling' : 'Procurement';
   if (/\b(bridge|construct|build|civil|road|bro|bygg|anlägg)\b/i.test(trimmed)) {
     category = language === 'sv' ? 'Bygg / anläggningsarbeten' : 'Construction / civil works';
-  } else if (/\b(clean|städ|facility)\b/i.test(trimmed)) {
+  } else if (/\b(clean|städ|lokalvård|rengöring|facility)\b/i.test(trimmed)) {
     category = language === 'sv' ? 'Städtjänster' : 'Cleaning services';
-  } else if (/\b(it |software|system|support)\b/i.test(trimmed)) {
+  } else if (/\b(it |software|system|support|mjukvara)\b/i.test(trimmed)) {
     category = language === 'sv' ? 'IT-tjänster' : 'IT services';
   }
 
@@ -271,8 +271,38 @@ function normalizeQuestions(rawQuestions = []) {
   return out;
 }
 
+/** Turn understand category / free text into EN catalog search seeds. */
+function keywordsFromCategoryHint(category = '', understanding = '') {
+  const blob = `${category} ${understanding}`.toLowerCase();
+  const seeds = [];
+  if (/städ|lokalvård|clean|facility|sanitation|rengör/.test(blob)) {
+    seeds.push('cleaning', 'facility', 'sanitation');
+  }
+  if (/bygg|anlägg|construct|civil|renovat|bridge|bro/.test(blob)) {
+    seeds.push('construction', 'building', 'civil');
+  }
+  if (/\bit\b|software|mjukvara|information technology|system/.test(blob)) {
+    seeds.push('it', 'software', 'information', 'technology');
+  }
+  if (/konsult|consult/.test(blob)) seeds.push('consultancy', 'consulting');
+  if (/transport/.test(blob)) seeds.push('transport');
+  if (/catering|livsmedel|food/.test(blob)) seeds.push('food', 'catering');
+  if (/vård|medical|health|sjuk/.test(blob)) seeds.push('health', 'medical');
+  if (/utbild|train|educat/.test(blob)) seeds.push('education', 'training');
+  if (/säker|secur/.test(blob)) seeds.push('security');
+  if (/tesla|car|cars|bil|vehicle|motor|passenger|electric|elbil|personbil|saloon|sedan/.test(blob)) {
+    seeds.push('passenger cars', 'saloon cars', 'electric vehicles', 'motor vehicles', 'passenger', 'saloon');
+  }
+  // Also split category words as raw extras (SV synonyms resolve in cpvSearchService)
+  for (const w of blob.split(/[\s,/|]+/)) {
+    const t = w.trim();
+    if (t.length >= 3) seeds.push(t);
+  }
+  return [...new Set(seeds)].slice(0, 24);
+}
+
 async function generateQuestionnaireDraft(description, options = {}) {
-  const { language = 'en' } = options;
+  const { language = 'en', category = '', understanding = '', extraKeywords = [] } = options;
   const trimmed = String(description || '').trim();
 
   const validation = validateQuestionnaireDescription(trimmed, language);
@@ -282,8 +312,14 @@ async function generateQuestionnaireDraft(description, options = {}) {
     throw err;
   }
 
+  const hintKeywords = [
+    ...keywordsFromCategoryHint(category, understanding),
+    ...extraKeywords.map((k) => String(k || '').trim()).filter(Boolean),
+  ];
+
   // 1) CPV candidates from DB catalog only (supplier-selectable codes)
-  const cpvCandidates = await searchCpvCandidatesFromDb(trimmed, [], 12);
+  // Pass understand-category seeds so Swedish buyer text still hits EN CPV descriptions.
+  const cpvCandidates = await searchCpvCandidatesFromDb(trimmed, hintKeywords, 12);
 
   let aiData;
   try {

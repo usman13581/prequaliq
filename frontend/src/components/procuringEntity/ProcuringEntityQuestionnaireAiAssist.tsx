@@ -160,12 +160,17 @@ function Root({ onApply, children }: RootProps) {
     }
   };
 
-  const runFullGeneration = async (trimmed: string) => {
+  const runFullGeneration = async (
+    trimmed: string,
+    hints?: { category?: string; understanding?: string }
+  ) => {
     setResult(null);
     setDrawerOpen(false);
     const res = await api.post<QuestionnaireAiResponse>('/procuring-entity/questionnaires/ai-suggest', {
       description: trimmed,
       language: (i18n.language || 'en').slice(0, 2),
+      category: hints?.category || '',
+      understanding: hints?.understanding || '',
     });
     const data = res.data;
     setResult(data);
@@ -228,10 +233,14 @@ function Root({ onApply, children }: RootProps) {
   const confirmGenerate = async () => {
     const trimmed = (understanding?.userDescription || description).trim();
     if (!trimmed) return;
+    const hints = {
+      category: understanding?.category || '',
+      understanding: understanding?.understanding || '',
+    };
     try {
       setLoadingPhase('generate');
       setUnderstandModalOpen(false);
-      await runFullGeneration(trimmed);
+      await runFullGeneration(trimmed, hints);
     } catch (error: any) {
       const msg = error.response?.data?.message || t('entityPortal.aiQuestionnaireFailed');
       showToast(msg, 'error');

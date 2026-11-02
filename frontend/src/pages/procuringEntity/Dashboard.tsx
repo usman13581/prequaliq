@@ -48,7 +48,7 @@ import {
   FileText, Search, User, Plus, Edit2, Trash2, Eye, 
   Upload, X, Calendar, Building2, Save, XCircle, Camera,
   CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Users, Power, PowerOff,
-  LayoutDashboard, Briefcase, ScrollText, Sparkles, Wallet, Award, Shield, Copy, Bell
+  LayoutDashboard, Briefcase, ScrollText, Wallet, Award, Shield, Copy
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { NotificationsBell } from '../../components/notifications/NotificationsBell';
@@ -987,9 +987,6 @@ const ProcuringEntityDashboard = () => {
     { id: 'contracts', label: t('contracts.nav'), icon: ScrollText },
     { id: 'questionnaires', label: t('nav.questionnaires'), icon: FileText },
     { id: 'suppliers', label: t('nav.searchSuppliers'), icon: Search },
-    { id: 'notifications', label: t('nav.notifications'), icon: Bell },
-    { id: 'profile', label: t('nav.profile'), icon: User },
-    { id: 'ai-preferences', label: t('common.aiPreferences'), icon: Sparkles },
   ];
 
   return (
@@ -1002,6 +999,7 @@ const ProcuringEntityDashboard = () => {
         activeTab={activeTab}
         onTabSelect={setActiveTab}
         onProfileClick={() => setActiveTab('profile')}
+        onAiPreferencesClick={() => setActiveTab('ai-preferences')}
         sidebarVariant="wide"
         headerExtra={<NotificationsBell onNavigate={setActiveTab} />}
       >
@@ -1191,7 +1189,7 @@ const ProcuringEntityDashboard = () => {
             )}
 
             {activeTab === 'ai-preferences' && (
-              <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 p-4 sm:p-6">
+              <div className="panel-card p-4 sm:p-5">
                 <AiPreferencesPanel />
               </div>
             )}
@@ -1328,52 +1326,52 @@ const ProcuringEntityDashboard = () => {
                                   {activeProfileTab === 'contact' && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                       <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.firstName')}</label>
                                         {editingProfile ? (
                                           <input
                                             type="text"
                                             value={profileData.firstName}
                                             onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                            className="field-control w-full"
                                           />
                                         ) : (
-                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                          <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                             {profileData.firstName || t('common.na')}
                                           </div>
                                         )}
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.lastName')}</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.lastName')}</label>
                                         {editingProfile ? (
                                           <input
                                             type="text"
                                             value={profileData.lastName}
                                             onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                            className="field-control w-full"
                                           />
                                         ) : (
-                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                          <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                             {profileData.lastName || t('common.na')}
                                           </div>
                                         )}
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.email')}</label>
-                                        <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.email')}</label>
+                                        <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                           {profileData.email || t('common.na')}
                                         </div>
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.phone')}</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.phone')}</label>
                                         {editingProfile ? (
                                           <input
                                             type="tel"
                                             value={profileData.phone}
                                             onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                            className="field-control w-full"
                                           />
                                         ) : (
-                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                          <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                             {profileData.phone || t('common.na')}
                                           </div>
                                         )}
@@ -1384,61 +1382,61 @@ const ProcuringEntityDashboard = () => {
                                   {activeProfileTab === 'organization' && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                       <div className="md:col-span-2">
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.entityName')}</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.entityName')}</label>
                                         {editingProfile ? (
                                           <input
                                             type="text"
                                             value={profileData.entityName}
                                             onChange={(e) => setProfileData({ ...profileData, entityName: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                            className="field-control w-full"
                                           />
                                         ) : (
-                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                          <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                             {profileData.entityName || t('common.na')}
                                           </div>
                                         )}
                                       </div>
                                       <div className="md:col-span-2">
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.address')}</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.address')}</label>
                                         {editingProfile ? (
                                           <input
                                             type="text"
                                             value={profileData.address}
                                             onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                            className="field-control w-full"
                                           />
                                         ) : (
-                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                          <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                             {profileData.address || t('common.na')}
                                           </div>
                                         )}
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.city')}</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.city')}</label>
                                         {editingProfile ? (
                                           <input
                                             type="text"
                                             value={profileData.city}
                                             onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                            className="field-control w-full"
                                           />
                                         ) : (
-                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                          <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                             {profileData.city || t('common.na')}
                                           </div>
                                         )}
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.country')}</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.country')}</label>
                                         {editingProfile ? (
                                           <input
                                             type="text"
                                             value={profileData.country}
                                             onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
-                                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                            className="field-control w-full"
                                           />
                                         ) : (
-                                          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                          <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                             {profileData.country || t('common.na')}
                                           </div>
                                         )}
@@ -1817,7 +1815,7 @@ const ProcuringEntityDashboard = () => {
       >
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+            <label className="block text-xs font-semibold text-muted mb-1.5">
               {t('questionnaires.copyNewTitle', { defaultValue: 'New questionnaire name' })}
             </label>
             <input
@@ -1827,7 +1825,7 @@ const ProcuringEntityDashboard = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+            <label className="block text-xs font-semibold text-muted mb-1.5">
               {t('questionnaires.copyNotes', { defaultValue: 'Extra notes (optional)' })}
             </label>
             <textarea
@@ -1994,12 +1992,13 @@ const DateOnlyPicker = ({
     <div className="relative" ref={containerRef}>
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-3 min-h-[52px] hover:border-primary-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 text-left"
+        className="field-trigger w-full flex items-center gap-2.5 text-left"
       >
-        <Calendar className="text-primary-600 flex-shrink-0" size={24} />
-        <span className={value ? 'text-gray-900 font-medium' : 'text-gray-500'}>{displayLabel}</span>
-        <ChevronDown className={`w-5 h-5 text-gray-400 ml-auto flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <Calendar className="text-accent flex-shrink-0" size={16} />
+        <span className={`min-w-0 truncate ${value ? 'text-foreground' : 'text-muted-light'}`}>{displayLabel}</span>
+        <ChevronDown className={`w-4 h-4 text-muted ml-auto flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       <PortaledDropdown
         open={open}
@@ -2113,11 +2112,12 @@ const QuestionTypeSelect = ({
     <div className="relative" ref={containerRef}>
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="w-full px-4 py-3 flex items-center justify-between gap-2 rounded-xl border border-gray-300 bg-white hover:border-primary-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 text-left"
+        className="field-trigger w-full flex items-center justify-between gap-2 text-left"
       >
-        <span className="text-gray-900 font-medium">{t(`questionTypes.${selected.value}`)}</span>
-        <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="min-w-0 truncate text-foreground">{t(`questionTypes.${selected.value}`)}</span>
+        <ChevronDown className={`w-4 h-4 text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       <PortaledDropdown
         open={open}
@@ -2194,30 +2194,30 @@ const CreateQuestionnaireModal = ({
           <div className="space-y-4">
             <h4 className="text-base font-bold text-gray-900">{t('sections.basicInformation')}</h4>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-xs font-semibold text-muted mb-1.5">
                 {t('columns.title')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={questionnaire.title || ''}
                 onChange={(e) => setQuestionnaire({ ...questionnaire, title: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                className="field-control w-full"
                 placeholder={t('placeholders.enterQuestionnaireTitle')}
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.description')}</label>
+              <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.description')}</label>
               <textarea
                 value={questionnaire.description || ''}
                 onChange={(e) => setQuestionnaire({ ...questionnaire, description: e.target.value })}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                className="field-control w-full"
                 placeholder={t('placeholders.enterQuestionnaireDescription')}
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-xs font-semibold text-muted mb-1.5">
                   {t('forms.selectCPVCode')} <span className="text-red-500">*</span>
                 </label>
                 <CpvSearchSelect
@@ -2230,7 +2230,7 @@ const CreateQuestionnaireModal = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-xs font-semibold text-muted mb-1.5">
                   {t('forms.deadlineDateOnly')} <span className="text-red-500">*</span>
                 </label>
                 <DateOnlyPicker
@@ -2263,18 +2263,18 @@ const CreateQuestionnaireModal = ({
             ) : (
               <div className="space-y-4">
                 {questionnaire.questions.map((question: Question, index: number) => (
-                  <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                    <div className="flex justify-between items-start mb-4">
+                  <div key={index} className="rounded-lg border border-border bg-card p-3 space-y-0">
+                    <div className="flex justify-between items-start mb-2.5">
                       <div className="flex flex-col gap-1">
-                        <span className="text-sm font-semibold text-gray-700">
+                        <span className="text-xs font-semibold text-muted uppercase tracking-wide">
                           {t('sections.questionNumber', { n: index + 1 })}
                         </span>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-2 text-xs text-muted">
                           <span>{t('sections.sortNo')}</span>
                           <input
                             type="number"
                             min={1}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded"
+                            className="field-control field-compact w-16"
                             value={question.order ?? index + 1}
                             onChange={(e) =>
                               updateQuestion(index, 'order', Number(e.target.value) || index + 1)
@@ -2289,20 +2289,20 @@ const CreateQuestionnaireModal = ({
                         <Trash2 size={16} />
                       </button>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.questionText')}</label>
+                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.questionText')}</label>
                         <input
                           type="text"
                           value={question.questionText || ''}
                           onChange={(e) => updateQuestion(index, 'questionText', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                          className="field-control w-full"
                           placeholder={t('placeholders.enterQuestionText')}
                         />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.questionType')}</label>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.questionType')}</label>
                           <QuestionTypeSelect
                             value={question.questionType || 'text'}
                             onChange={(v) => updateQuestion(index, 'questionType', v)}
@@ -2314,7 +2314,7 @@ const CreateQuestionnaireModal = ({
                               type="checkbox"
                               checked={question.isRequired !== undefined ? question.isRequired : true}
                               onChange={(e) => updateQuestion(index, 'isRequired', e.target.checked)}
-                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              className="field-check"
                             />
                             <span className="text-sm font-semibold text-gray-700">{t('forms.required')}</span>
                           </label>
@@ -2323,7 +2323,7 @@ const CreateQuestionnaireModal = ({
                               type="checkbox"
                               checked={question.requiresDocument || false}
                               onChange={(e) => updateQuestion(index, 'requiresDocument', e.target.checked)}
-                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              className="field-check"
                             />
                             <span className="text-sm font-semibold text-gray-700">{t('forms.requiresDocument')}</span>
                           </label>
@@ -2331,18 +2331,18 @@ const CreateQuestionnaireModal = ({
                       </div>
                       {question.requiresDocument && (
                         <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.documentType')}</label>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.documentType')}</label>
                           <input
                             type="text"
                             value={question.documentType || ''}
                             onChange={(e) => updateQuestion(index, 'documentType', e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                            className="field-control w-full"
                             placeholder={t('placeholders.documentTypeExample')}
                           />
                         </div>
                       )}
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('questionnaire.attachDocumentToQuestion')}</label>
+                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('questionnaire.attachDocumentToQuestion')}</label>
                         {question.attachedDocument ? (
                           <div className="flex items-center justify-between gap-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
                             <div className="flex items-center gap-2 text-gray-700">
@@ -2388,7 +2388,7 @@ const CreateQuestionnaireModal = ({
                               }
                               e.target.value = '';
                             }}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                            className="field-control w-full"
                           />
                         )}
                         <p className="mt-1 text-xs text-gray-500">{t('questionnaire.attachDocumentHint')}</p>
@@ -2396,7 +2396,7 @@ const CreateQuestionnaireModal = ({
                       {(question.questionType === 'radio' || question.questionType === 'checkbox' || question.questionType === 'dropdown' || question.questionType === 'multiple_choice') && (
                         <div>
                           <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-semibold text-gray-700">{t('forms.options')}</label>
+                            <label className="block text-xs font-semibold text-muted">{t('forms.options')}</label>
                             <button
                               onClick={() => addOption(index)}
                               className="flex items-center gap-1 px-3 py-1 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 text-sm font-medium"
@@ -2412,7 +2412,7 @@ const CreateQuestionnaireModal = ({
                                   type="text"
                                   value={option || ''}
                                   onChange={(e) => updateOption(index, optIndex, e.target.value)}
-                                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control flex-1"
                                   placeholder={t('placeholders.optionNumber', { n: optIndex + 1 })}
                                 />
                                 <button
@@ -2496,7 +2496,7 @@ const ViewQuestionnaireModal = ({ questionnaire, onClose }: { questionnaire: Que
           )}
           <div className="space-y-4">
             {questionnaire.questions?.map((question, index) => (
-              <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+              <div key={index} className="rounded-lg border border-border bg-card p-3 space-y-0">
                 <div className="flex items-start gap-3">
                   <span className="flex-shrink-0 w-8 h-8 bg-primary-100 text-primary-700 rounded-lg flex items-center justify-center font-bold text-sm">
                     {index + 1}
@@ -2627,7 +2627,7 @@ const EditQuestionnaireModal = ({
           <div className="space-y-4">
             <h4 className="text-base font-bold text-gray-900">{t('sections.basicInformation')}</h4>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-xs font-semibold text-muted mb-1.5">
                 {t('columns.title')} <span className="text-red-500">*</span>
               </label>
               <input
@@ -2635,23 +2635,23 @@ const EditQuestionnaireModal = ({
                 value={safeQuestionnaire.title}
                 disabled={editLocked}
                 onChange={(e) => setQuestionnaire({ ...safeQuestionnaire, title: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="field-control w-full"
                 placeholder={t('placeholders.enterQuestionnaireTitle')}
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.description')}</label>
+              <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.description')}</label>
               <textarea
                 value={safeQuestionnaire.description}
                 onChange={(e) => setQuestionnaire({ ...safeQuestionnaire, description: e.target.value })}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                className="field-control w-full"
                 placeholder={t('placeholders.enterQuestionnaireDescription')}
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-xs font-semibold text-muted mb-1.5">
                   {t('forms.selectCPVCode')} <span className="text-red-500">*</span>
                 </label>
                 <CpvSearchSelect
@@ -2664,7 +2664,7 @@ const EditQuestionnaireModal = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-xs font-semibold text-muted mb-1.5">
                   {t('forms.deadlineDateOnly')} <span className="text-red-500">*</span>
                 </label>
                 <DateOnlyPicker
@@ -2697,18 +2697,18 @@ const EditQuestionnaireModal = ({
             ) : (
               <div className="space-y-4">
                 {safeQuestionnaire.questions.map((question: Question, index: number) => (
-                  <div key={index} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                    <div className="flex justify-between items-start mb-4">
+                  <div key={index} className="rounded-lg border border-border bg-card p-3 space-y-0">
+                    <div className="flex justify-between items-start mb-2.5">
                       <div className="flex flex-col gap-1">
-                        <span className="text-sm font-semibold text-gray-700">
+                        <span className="text-xs font-semibold text-muted uppercase tracking-wide">
                           {t('sections.questionNumber', { n: index + 1 })}
                         </span>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-2 text-xs text-muted">
                           <span>{t('sections.sortNo')}</span>
                           <input
                             type="number"
                             min={1}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded"
+                            className="field-control field-compact w-16"
                             value={question.order ?? index + 1}
                             onChange={(e) =>
                               safeUpdateQuestion(index, 'order', Number(e.target.value) || index + 1)
@@ -2723,20 +2723,20 @@ const EditQuestionnaireModal = ({
                         <Trash2 size={16} />
                       </button>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.questionText')}</label>
+                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.questionText')}</label>
                         <input
                           type="text"
                           value={question.questionText || ''}
                           onChange={(e) => safeUpdateQuestion(index, 'questionText', e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                          className="field-control w-full"
                           placeholder={t('placeholders.enterQuestionText')}
                         />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.questionType')}</label>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.questionType')}</label>
                           <QuestionTypeSelect
                             value={question.questionType || 'text'}
                             onChange={(v) => safeUpdateQuestion(index, 'questionType', v)}
@@ -2748,7 +2748,7 @@ const EditQuestionnaireModal = ({
                               type="checkbox"
                               checked={question.isRequired !== undefined ? question.isRequired : true}
                               onChange={(e) => safeUpdateQuestion(index, 'isRequired', e.target.checked)}
-                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              className="field-check"
                             />
                             <span className="text-sm font-semibold text-gray-700">{t('forms.required')}</span>
                           </label>
@@ -2757,7 +2757,7 @@ const EditQuestionnaireModal = ({
                               type="checkbox"
                               checked={question.requiresDocument || false}
                               onChange={(e) => safeUpdateQuestion(index, 'requiresDocument', e.target.checked)}
-                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              className="field-check"
                             />
                             <span className="text-sm font-semibold text-gray-700">{t('forms.requiresDocument')}</span>
                           </label>
@@ -2765,18 +2765,18 @@ const EditQuestionnaireModal = ({
                       </div>
                       {question.requiresDocument && (
                         <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.documentType')}</label>
+                          <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.documentType')}</label>
                           <input
                             type="text"
                             value={question.documentType || ''}
                             onChange={(e) => safeUpdateQuestion(index, 'documentType', e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                            className="field-control w-full"
                             placeholder={t('placeholders.documentTypeExample')}
                           />
                         </div>
                       )}
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{t('questionnaire.attachDocumentToQuestion')}</label>
+                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('questionnaire.attachDocumentToQuestion')}</label>
                         {(question.attachedDocument || question.attachedDocumentId) ? (
                           <div className="flex items-center justify-between gap-2 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
                             <div className="flex items-center gap-2 text-gray-700">
@@ -2836,7 +2836,7 @@ const EditQuestionnaireModal = ({
                               }
                               e.target.value = '';
                             }}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                            className="field-control w-full"
                           />
                         )}
                         <p className="mt-1 text-xs text-gray-500">{t('questionnaire.attachDocumentHint')}</p>
@@ -2844,7 +2844,7 @@ const EditQuestionnaireModal = ({
                       {(question.questionType === 'radio' || question.questionType === 'checkbox' || question.questionType === 'dropdown' || question.questionType === 'multiple_choice') && (
                         <div>
                           <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-semibold text-gray-700">{t('forms.options')}</label>
+                            <label className="block text-xs font-semibold text-muted">{t('forms.options')}</label>
                             <button
                               onClick={() => safeAddOption(index)}
                               className="flex items-center gap-1 px-3 py-1 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 text-sm font-medium"
@@ -2860,7 +2860,7 @@ const EditQuestionnaireModal = ({
                                   type="text"
                                   value={option || ''}
                                   onChange={(e) => safeUpdateOption(index, optIndex, e.target.value)}
-                                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control flex-1"
                                   placeholder={t('placeholders.optionNumber', { n: optIndex + 1 })}
                                 />
                                 <button

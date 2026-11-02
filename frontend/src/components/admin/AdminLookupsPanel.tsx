@@ -284,7 +284,7 @@ export function AdminLookupsPanel() {
   };
 
   return (
-    <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 overflow-hidden">
+    <div className="panel-card overflow-hidden">
       <div className="px-3 sm:px-4 py-4 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
@@ -338,7 +338,7 @@ export function AdminLookupsPanel() {
           <div className="flex items-center gap-2 bg-white rounded-lg border border-border px-3 py-2 flex-1 min-w-0">
             <Search size={16} className="text-muted shrink-0" />
             <input
-              className="input-brand flex-1 min-w-0 !py-1.5 !text-sm !border-0 !shadow-none focus:!ring-0"
+              className="input-brand field-bare flex-1 min-w-0 !py-1.5 !text-sm"
               placeholder={t('adminPortal.lookups.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}

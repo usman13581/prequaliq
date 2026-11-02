@@ -698,6 +698,11 @@ const suggestQuestionnaireFromDescription = async (req, res) => {
 
     const description = String(req.body?.description || '').trim();
     const language = (req.body?.language || 'en').slice(0, 2);
+    const category = String(req.body?.category || '').trim().slice(0, 200);
+    const understanding = String(req.body?.understanding || '').trim().slice(0, 2000);
+    const extraKeywords = Array.isArray(req.body?.extraKeywords)
+      ? req.body.extraKeywords.map((k) => String(k || '').trim()).filter(Boolean).slice(0, 24)
+      : [];
 
     const validation = validateQuestionnaireDescription(description, language);
     if (!validation.valid) {
@@ -707,7 +712,12 @@ const suggestQuestionnaireFromDescription = async (req, res) => {
       });
     }
 
-    const result = await generateQuestionnaireDraft(description, { language });
+    const result = await generateQuestionnaireDraft(description, {
+      language,
+      category,
+      understanding,
+      extraKeywords,
+    });
     return res.json(result);
   } catch (error) {
     console.error('Questionnaire AI suggest error:', error);

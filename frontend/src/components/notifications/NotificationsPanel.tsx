@@ -96,11 +96,11 @@ export function NotificationsPanel({ onNavigate }: Props) {
   };
 
   return (
-    <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 p-4 sm:p-6 space-y-4">
+    <div className="panel-card p-4 sm:p-5 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">{t('notifications.title')}</h2>
-          <p className="text-sm text-muted mt-0.5">
+          <h2 className="page-title">{t('notifications.title')}</h2>
+          <p className="text-sm text-muted mt-1">
             {unreadCount > 0
               ? t('notifications.unreadCount', { count: unreadCount })
               : t('notifications.allCaughtUp')}
@@ -110,7 +110,7 @@ export function NotificationsPanel({ onNavigate }: Props) {
           type="button"
           onClick={markAll}
           disabled={unreadCount === 0}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <CheckCheck size={16} />
           {t('notifications.markAllRead')}

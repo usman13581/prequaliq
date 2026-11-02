@@ -31,11 +31,12 @@ import { useListPagination } from '../../hooks/useListPagination';
 import { usePortalTab } from '../../hooks/usePortalTab';
 import { useCpvCatalogSearch } from '../../hooks/useCpvCatalogSearch';
 import { ListPagination } from '../../components/ui/ListPagination';
+import { BrandSelect } from '../../components/ui/BrandSelect';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
 import { 
-  FileText, History, User, Upload, Edit2, Eye, 
+  FileText, History, Upload, Edit2, Eye, 
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
-  ChevronDown, LayoutDashboard, Download, Briefcase, ScrollText, Sparkles, Bell
+  LayoutDashboard, Download, Briefcase, ScrollText
 } from 'lucide-react';
 import type { AnswerSuggestion } from '../../components/supplier/SupplierQuestionnaireAnswerAiAssist';
 import { uploadsUrl } from '../../utils/uploadsUrl';
@@ -927,12 +928,9 @@ const SupplierDashboard = () => {
 
   const sidebarItems = [
     { id: 'overview', label: t('supplierPortal.navOverview'), icon: LayoutDashboard },
-    { id: 'profile', label: t('supplierPortal.navProfile'), icon: User },
     { id: 'tenders', label: t('procedures.navTenders'), icon: Briefcase },
     { id: 'contracts', label: t('contracts.nav'), icon: ScrollText },
     { id: 'history', label: t('supplierPortal.navHistory'), icon: History },
-    { id: 'notifications', label: t('nav.notifications'), icon: Bell },
-    { id: 'ai-preferences', label: t('common.aiPreferences'), icon: Sparkles },
   ];
 
   return (
@@ -944,6 +942,8 @@ const SupplierDashboard = () => {
         sidebarItems={sidebarItems}
         activeTab={activeTab}
         onTabSelect={setActiveTab}
+        onProfileClick={() => setActiveTab('profile')}
+        onAiPreferencesClick={() => setActiveTab('ai-preferences')}
         headerExtra={<NotificationsBell onNavigate={handleNavigateTab} />}
       >
             <AccountStatusBanner
@@ -1144,7 +1144,7 @@ const SupplierDashboard = () => {
             )}
 
             {activeTab === 'ai-preferences' && (
-              <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 p-4 sm:p-6">
+              <div className="panel-card p-4 sm:p-5">
                 <AiPreferencesPanel />
               </div>
             )}
@@ -1329,187 +1329,187 @@ const SupplierDashboard = () => {
                           {activeProfileTab === 'basic' && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.firstName')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.firstName')}</label>
                             {editingProfile ? (
                               <input
                                 type="text"
                                 value={profileData.firstName}
                                 onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.firstName || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.lastName')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.lastName')}</label>
                             {editingProfile ? (
                               <input
                                 type="text"
                                 value={profileData.lastName}
                                 onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.lastName || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.email')}</label>
-                            <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.email')}</label>
+                            <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                               {profileData.email || t('common.na')}
                             </div>
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.phone')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.phone')}</label>
                             {editingProfile ? (
                               <input
                                 type="tel"
                                 value={profileData.phone}
                                 onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.phone || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.companyName')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.companyName')}</label>
                             {editingProfile ? (
                               <input
                                 type="text"
                                 value={profileData.companyName}
                                 onChange={(e) => setProfileData({ ...profileData, companyName: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.companyName || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.registrationNumber')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.registrationNumber')}</label>
                             {editingProfile ? (
                               <input
                                 type="text"
                                 value={profileData.registrationNumber}
                                 onChange={(e) => setProfileData({ ...profileData, registrationNumber: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.registrationNumber || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.taxId')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.taxId')}</label>
                             {editingProfile ? (
                               <input
                                 type="text"
                                 value={profileData.taxId}
                                 onChange={(e) => setProfileData({ ...profileData, taxId: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.taxId || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div className="md:col-span-2">
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.address')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.address')}</label>
                             {editingProfile ? (
                               <input
                                 type="text"
                                 value={profileData.address}
                                 onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.address || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.city')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.city')}</label>
                             {editingProfile ? (
                               <input
                                 type="text"
                                 value={profileData.city}
                                 onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.city || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.country')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.country')}</label>
                             {editingProfile ? (
                               <input
                                 type="text"
                                 value={profileData.country}
                                 onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.country || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.website')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.website')}</label>
                             {editingProfile ? (
                               <input
                                 type="url"
                                 value={profileData.website}
                                 onChange={(e) => setProfileData({ ...profileData, website: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.website || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.employeeCount')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.employeeCount')}</label>
                             {editingProfile ? (
                               <input
                                 type="number"
                                 value={profileData.employeeCount}
                                 onChange={(e) => setProfileData({ ...profileData, employeeCount: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.employeeCount || t('common.na')}
                               </div>
                             )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('forms.yearEstablished')}</label>
+                            <label className="block text-xs font-semibold text-muted mb-1.5">{t('forms.yearEstablished')}</label>
                             {editingProfile ? (
                               <input
                                 type="number"
                                 value={profileData.yearEstablished}
                                 onChange={(e) => setProfileData({ ...profileData, yearEstablished: e.target.value })}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                className="field-control w-full"
                               />
                             ) : (
-                              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                              <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                 {profileData.yearEstablished || t('common.na')}
                               </div>
                             )}
@@ -1522,28 +1522,24 @@ const SupplierDashboard = () => {
                             {/* Q1 – Turnover */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q1Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q1Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q1Help')}</p>
                               {editingProfile ? (
-                                <div className="relative">
-                                  <select
-                                    value={getTurnoverValueForSelect(profileData.turnover)}
-                                    onChange={(e) => setProfileData({ ...profileData, turnover: e.target.value })}
-                                    className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white appearance-none cursor-pointer text-gray-900 hover:border-primary-400"
-                                    style={{ minHeight: '48px' }}
-                                  >
-                                    <option value="">{t('commonQuestions.turnoverSelectPlaceholder')}</option>
-                                    {TURNOVER_OPTIONS.map((opt) => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {t(opt.labelKey)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" aria-hidden />
-                                </div>
+                                <BrandSelect
+                                  value={getTurnoverValueForSelect(profileData.turnover)}
+                                  onChange={(e) => setProfileData({ ...profileData, turnover: e.target.value })}
+                                  searchPlaceholder={t('common.search')}
+                                >
+                                  <option value="">{t('commonQuestions.turnoverSelectPlaceholder')}</option>
+                                  {TURNOVER_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {t(opt.labelKey)}
+                                    </option>
+                                  ))}
+                                </BrandSelect>
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {getTurnoverLabel(profileData.turnover, t)}
                                 </div>
                               )}
@@ -1552,7 +1548,7 @@ const SupplierDashboard = () => {
                             {/* Q2 – Financial Stability */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q2Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q2Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q2Help')}</p>
                               {editingProfile ? (
@@ -1560,10 +1556,10 @@ const SupplierDashboard = () => {
                                   type="text"
                                   value={profileData.financialStability}
                                   onChange={(e) => setProfileData({ ...profileData, financialStability: e.target.value })}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {profileData.financialStability || t('common.na')}
                                 </div>
                               )}
@@ -1647,7 +1643,7 @@ const SupplierDashboard = () => {
                             {/* Q5 – Quality */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q5Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q5Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q5Help')}</p>
                               {editingProfile ? (
@@ -1655,10 +1651,10 @@ const SupplierDashboard = () => {
                                   type="text"
                                   value={profileData.qualityManagementSystem}
                                   onChange={(e) => setProfileData({ ...profileData, qualityManagementSystem: e.target.value })}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {profileData.qualityManagementSystem || t('common.na')}
                                 </div>
                               )}
@@ -1668,7 +1664,7 @@ const SupplierDashboard = () => {
                             {/* Q6 – Management System – Environment */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q6Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q6Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q6Help')}</p>
                               {editingProfile ? (
@@ -1676,10 +1672,10 @@ const SupplierDashboard = () => {
                                   type="text"
                                   value={profileData.environmentalManagementSystem}
                                   onChange={(e) => setProfileData({ ...profileData, environmentalManagementSystem: e.target.value })}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {profileData.environmentalManagementSystem || t('common.na')}
                                 </div>
                               )}
@@ -1689,7 +1685,7 @@ const SupplierDashboard = () => {
                             {/* Q7 – Management System – Social Responsibility */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q7Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q7Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q7Help')}</p>
                               {editingProfile ? (
@@ -1697,10 +1693,10 @@ const SupplierDashboard = () => {
                                   type="text"
                                   value={profileData.socialResponsibilityManagementSystem}
                                   onChange={(e) => setProfileData({ ...profileData, socialResponsibilityManagementSystem: e.target.value })}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {profileData.socialResponsibilityManagementSystem || t('common.na')}
                                 </div>
                               )}
@@ -1710,7 +1706,7 @@ const SupplierDashboard = () => {
                             {/* Q8 – Management System – Occupational Health and Safety */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q8Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q8Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q8Help')}</p>
                               {editingProfile ? (
@@ -1718,10 +1714,10 @@ const SupplierDashboard = () => {
                                   type="text"
                                   value={profileData.ohsManagementSystem}
                                   onChange={(e) => setProfileData({ ...profileData, ohsManagementSystem: e.target.value })}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {profileData.ohsManagementSystem || t('common.na')}
                                 </div>
                               )}
@@ -1735,7 +1731,7 @@ const SupplierDashboard = () => {
                             {/* Q9 – Grounds for Exclusion */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q9Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q9Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q9Help')}</p>
                               {editingProfile ? (
@@ -1743,10 +1739,10 @@ const SupplierDashboard = () => {
                                   type="text"
                                   value={profileData.groundsForExclusion}
                                   onChange={(e) => setProfileData({ ...profileData, groundsForExclusion: e.target.value })}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {profileData.groundsForExclusion || t('common.na')}
                                 </div>
                               )}
@@ -1755,7 +1751,7 @@ const SupplierDashboard = () => {
                             {/* Q10 – Labor Law Regulations */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q10Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q10Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q10Help')}</p>
                               {editingProfile ? (
@@ -1763,10 +1759,10 @@ const SupplierDashboard = () => {
                                   type="text"
                                   value={profileData.laborLawRegulations}
                                   onChange={(e) => setProfileData({ ...profileData, laborLawRegulations: e.target.value })}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {profileData.laborLawRegulations || t('common.na')}
                                 </div>
                               )}
@@ -1775,7 +1771,7 @@ const SupplierDashboard = () => {
                             {/* Q11 – Sanctions Regarding Russia and Belarus */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q11Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q11Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q11Help')}</p>
                               {editingProfile ? (
@@ -1783,10 +1779,10 @@ const SupplierDashboard = () => {
                                   type="text"
                                   value={profileData.sanctionsRussiaBelarus}
                                   onChange={(e) => setProfileData({ ...profileData, sanctionsRussiaBelarus: e.target.value })}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                   {profileData.sanctionsRussiaBelarus || t('common.na')}
                                 </div>
                               )}
@@ -1799,7 +1795,7 @@ const SupplierDashboard = () => {
                             {/* Q12 – Technical capacity */}
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <label className="block text-sm font-semibold text-gray-700">{t('commonQuestions.q12Label')}</label>
+                                <label className="block text-xs font-semibold text-muted">{t('commonQuestions.q12Label')}</label>
                               </div>
                               <p className="text-xs text-gray-500 mb-2">{t('commonQuestions.q12Help')}</p>
                               {editingProfile ? (
@@ -1807,10 +1803,10 @@ const SupplierDashboard = () => {
                                   value={profileData.technicalCapacityProfessionalExperience}
                                   onChange={(e) => setProfileData({ ...profileData, technicalCapacityProfessionalExperience: e.target.value })}
                                   rows={4}
-                                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 resize-y"
+                                  className="field-control w-full"
                                 />
                               ) : (
-                                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 whitespace-pre-wrap">
+                                <div className="field-control w-full !bg-surface !shadow-none text-foreground whitespace-pre-wrap">
                                   {profileData.technicalCapacityProfessionalExperience || t('common.na')}
                                 </div>
                               )}
@@ -1830,52 +1826,52 @@ const SupplierDashboard = () => {
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insurerName')}</label>
+                                  <label className="block text-xs font-semibold text-muted mb-1.5">{t('supplierPortal.insurerName')}</label>
                                   {editingProfile ? (
                                     <input
                                       type="text"
                                       value={profileData.insurerName}
                                       onChange={(e) => setProfileData({ ...profileData, insurerName: e.target.value })}
-                                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                      className="field-control w-full"
                                     />
                                   ) : (
-                                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                    <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                       {profileData.insurerName || t('common.na')}
                                     </div>
                                   )}
                                 </div>
                                 <div>
-                                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insurancePolicyNumber')}</label>
+                                  <label className="block text-xs font-semibold text-muted mb-1.5">{t('supplierPortal.insurancePolicyNumber')}</label>
                                   {editingProfile ? (
                                     <input
                                       type="text"
                                       value={profileData.insurancePolicyNumber}
                                       onChange={(e) => setProfileData({ ...profileData, insurancePolicyNumber: e.target.value })}
-                                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                      className="field-control w-full"
                                     />
                                   ) : (
-                                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                    <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                       {profileData.insurancePolicyNumber || t('common.na')}
                                     </div>
                                   )}
                                 </div>
                                 <div>
-                                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insuranceCoverageAmount')}</label>
+                                  <label className="block text-xs font-semibold text-muted mb-1.5">{t('supplierPortal.insuranceCoverageAmount')}</label>
                                   {editingProfile ? (
                                     <input
                                       type="number"
                                       value={profileData.insuranceCoverageAmount}
                                       onChange={(e) => setProfileData({ ...profileData, insuranceCoverageAmount: e.target.value })}
-                                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                      className="field-control w-full"
                                     />
                                   ) : (
-                                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                    <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                       {profileData.insuranceCoverageAmount || t('common.na')}
                                     </div>
                                   )}
                                 </div>
                                 <div>
-                                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('supplierPortal.insuranceValidTo')}</label>
+                                  <label className="block text-xs font-semibold text-muted mb-1.5">{t('supplierPortal.insuranceValidTo')}</label>
                                   {editingProfile ? (
                                     <DateOnlyPicker
                                       value={profileData.insuranceValidTo}
@@ -1883,7 +1879,7 @@ const SupplierDashboard = () => {
                                       placeholder={t('supplierPortal.insuranceValidTo')}
                                     />
                                   ) : (
-                                    <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+                                    <div className="field-control w-full !bg-surface !shadow-none text-foreground">
                                       {profileData.insuranceValidTo ? new Date(profileData.insuranceValidTo).toLocaleDateString() : t('common.na')}
                                     </div>
                                   )}
@@ -2070,7 +2066,7 @@ const CPVSelectorModal = ({
                     type="checkbox"
                     checked={selectedCPVCodes.includes(cpv.id)}
                     onChange={() => toggleCPVCode(cpv.id)}
-                    className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    className="mt-1 field-check"
                   />
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900">{cpv.code}</p>
@@ -2183,7 +2179,7 @@ const NUTSSelectorModal = ({
                             type="checkbox"
                             checked={selectedNUTSCodes.includes(nuts.id)}
                             onChange={() => toggleNUTSCode(nuts.id)}
-                            className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            className="mt-1 field-check"
                           />
                           <div className="flex-1">
                             <p className="font-semibold text-gray-900">{nuts.code} - {nuts.nameSwedish}</p>
@@ -2209,7 +2205,7 @@ const NUTSSelectorModal = ({
                             type="checkbox"
                             checked={selectedNUTSCodes.includes(nuts.id)}
                             onChange={() => toggleNUTSCode(nuts.id)}
-                            className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            className="mt-1 field-check"
                           />
                           <div className="flex-1">
                             <p className="font-semibold text-gray-900">{nuts.code} - {nuts.nameSwedish}</p>
@@ -2235,7 +2231,7 @@ const NUTSSelectorModal = ({
                             type="checkbox"
                             checked={selectedNUTSCodes.includes(nuts.id)}
                             onChange={() => toggleNUTSCode(nuts.id)}
-                            className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            className="mt-1 field-check"
                           />
                           <div className="flex-1">
                             <p className="font-semibold text-gray-900">{nuts.code} - {nuts.nameSwedish}</p>
@@ -2389,7 +2385,7 @@ const QuestionnaireResponseModal = ({
           : displayValue;
       return (
         <div>
-          <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900">
+          <div className="field-control w-full !bg-surface !shadow-none text-foreground">
             {formatted || t('common.noAnswerProvided')}
           </div>
           {/* Document link is shown only in the "Upload Document" section below (when question.requiresDocument) to avoid showing it twice */}
@@ -2429,7 +2425,7 @@ const QuestionnaireResponseModal = ({
                 } 
               });
             }}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+            className="field-control w-full"
             required={question.isRequired}
           />
         );
@@ -2449,7 +2445,7 @@ const QuestionnaireResponseModal = ({
               });
             }}
             rows={4}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+            className="field-control w-full"
             required={question.isRequired}
           />
         );
@@ -2469,7 +2465,7 @@ const QuestionnaireResponseModal = ({
                 } 
               });
             }}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+            className="field-control w-full"
             required={question.isRequired}
           />
         );
@@ -2510,7 +2506,7 @@ const QuestionnaireResponseModal = ({
                   const currentAnswer = getAnswer(question.id) || {};
                   setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: 'Yes', answerValue: 'yes' } });
                 }}
-                className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                className="field-check"
                 required={question.isRequired}
               />
               <span>{t('common.yes')}</span>
@@ -2525,7 +2521,7 @@ const QuestionnaireResponseModal = ({
                   const currentAnswer = getAnswer(question.id) || {};
                   setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: 'No', answerValue: 'no' } });
                 }}
-                className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                className="field-check"
                 required={question.isRequired}
               />
               <span>{t('common.no')}</span>
@@ -2537,7 +2533,7 @@ const QuestionnaireResponseModal = ({
         return (
           <div className="space-y-2">
             {question.options?.map((option: string, index: number) => (
-              <label key={index} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-gray-50 rounded-lg">
+              <label key={index} className="flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md hover:bg-surface">
                 <input
                   type="radio"
                   name={`question-${question.id}`}
@@ -2547,7 +2543,7 @@ const QuestionnaireResponseModal = ({
                     const currentAnswer = getAnswer(question.id) || {};
                     setResponse({ ...response, [question.id]: { ...currentAnswer, answerText: option, answerValue: option } });
                   }}
-                  className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                  className="field-check"
                   required={question.isRequired}
                 />
                 <span>{option}</span>
@@ -2560,7 +2556,7 @@ const QuestionnaireResponseModal = ({
         return (
           <div className="space-y-2">
             {question.options?.map((option: string, index: number) => (
-              <label key={index} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-gray-50 rounded-lg">
+              <label key={index} className="flex items-center gap-2.5 cursor-pointer px-2 py-1.5 rounded-md hover:bg-surface">
                 <input
                   type="checkbox"
                   checked={selectedValues.includes(option)}
@@ -2581,7 +2577,7 @@ const QuestionnaireResponseModal = ({
                       }
                     });
                   }}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="field-check"
                 />
                 <span>{option}</span>
               </label>
@@ -2590,32 +2586,28 @@ const QuestionnaireResponseModal = ({
         );
       case 'dropdown':
         return (
-          <div className="relative">
-            <select
-              value={getAnswer(question.id)?.answerValue ?? getAnswer(question.id)?.answerText ?? ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                const currentAnswer = response[question.id] || {};
-                setResponse({
-                  ...response,
-                  [question.id]: {
-                    ...currentAnswer,
-                    answerText: val,
-                    answerValue: val
-                  }
-                });
-              }}
-              className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white appearance-none cursor-pointer text-gray-900"
-              required={question.isRequired}
-              style={{ minHeight: '48px' }}
-            >
-              <option value="">{t('common.selectOption')}</option>
-              {question.options?.map((option: string, index: number) => (
-                <option key={index} value={option}>{option}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" aria-hidden />
-          </div>
+          <BrandSelect
+            value={getAnswer(question.id)?.answerValue ?? getAnswer(question.id)?.answerText ?? ''}
+            onChange={(e) => {
+              const val = e.target.value;
+              const currentAnswer = response[question.id] || {};
+              setResponse({
+                ...response,
+                [question.id]: {
+                  ...currentAnswer,
+                  answerText: val,
+                  answerValue: val
+                }
+              });
+            }}
+            required={question.isRequired}
+            searchPlaceholder={t('common.search')}
+          >
+            <option value="">{t('common.selectOption')}</option>
+            {question.options?.map((option: string, index: number) => (
+              <option key={index} value={option}>{option}</option>
+            ))}
+          </BrandSelect>
         );
       default:
         return null;
@@ -2731,13 +2723,13 @@ const QuestionnaireResponseModal = ({
                 />
               )}
               {questionnaire.questions?.map((question: Question, index: number) => (
-            <div key={question.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-              <div className="flex items-start gap-3 mb-3">
-                <span className="flex-shrink-0 w-8 h-8 bg-primary-100 text-primary-700 rounded-lg flex items-center justify-center font-bold text-sm">
+            <div key={question.id} className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-start gap-2.5 mb-2.5">
+                <span className="flex-shrink-0 w-6 h-6 bg-accent-subtle text-accent rounded-md flex items-center justify-center font-semibold text-xs">
                   {index + 1}
                 </span>
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900 mb-1">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[0.8125rem] font-semibold text-foreground mb-0.5 leading-snug">
                     {question.questionText}
                     {question.isRequired && <span className="text-red-500 ml-1">*</span>}
                   </p>
@@ -2760,7 +2752,7 @@ const QuestionnaireResponseModal = ({
                   </div>
                   {question.requiresDocument && (
                     <div className="mt-3">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="block text-xs font-semibold text-muted mb-1.5">
                         {isReadOnly
                           ? t('sections.previewDownloadType', { type: question.documentType || t('sections.documentFallback') })
                           : t('sections.attachDocumentType', { type: question.documentType || t('sections.documentFallback') })}
@@ -2807,7 +2799,7 @@ const QuestionnaireResponseModal = ({
                                 setResponseDocuments({ ...responseDocuments, [question.id]: file });
                               }
                             }}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
+                            className="field-control w-full focus:border-primary-500 transition-all duration-200"
                           />
                         </div>
                       )}

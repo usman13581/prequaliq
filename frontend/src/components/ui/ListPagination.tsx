@@ -15,9 +15,9 @@ type ListPaginationProps = {
 };
 
 /**
- * Approved app-wide pagination:
- * Left — "Showing 1 to 10 of 24 {label}" + Rows [size]
- * Right — Previous | page numbers | Next
+ * Compact app-wide pagination (brief §6.3):
+ * Left — "1–10 of N {label}" + rows-per-page
+ * Right — Previous | pages | Next
  */
 export function ListPagination({
   page,
@@ -43,20 +43,17 @@ export function ListPagination({
     pageNums.push(...Array.from(set).sort((a, b) => a - b));
   }
 
-  const navBtn =
-    'px-3 py-1.5 border border-border rounded-lg text-sm font-medium bg-white hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors inline-flex items-center gap-1 text-foreground';
-
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-border pt-4 mt-1">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
-        <p className="text-sm text-muted whitespace-nowrap">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 border-t border-border pt-3 mt-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0 text-[0.8125rem]">
+        <p className="text-muted whitespace-nowrap">
           {t('common.paginationShowing', { from, to, total, label: itemLabel })}
         </p>
-        <label className="inline-flex items-center gap-2 text-sm text-muted">
+        <label className="inline-flex items-center gap-2 text-muted">
           <span className="shrink-0">{t('common.rowsPerPage')}</span>
           <BrandSelect
             wrapperClassName="w-[4.25rem]"
-            className="!py-1.5 !pl-2.5 !pr-7 !text-sm !rounded-lg !border-border"
+            className="!py-1 !pl-2 !pr-7 !text-[0.8125rem] !rounded-md !border-border"
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
             aria-label={t('common.rowsPerPage')}
@@ -70,14 +67,14 @@ export function ListPagination({
         </label>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+      <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
         <button
           type="button"
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1}
-          className={navBtn}
+          className="btn-ghost !min-h-8 !px-2.5 !py-1 !text-[0.78rem] disabled:opacity-40"
         >
-          <ChevronLeft size={16} aria-hidden />
+          <ChevronLeft size={15} aria-hidden />
           {t('buttons.previous')}
         </button>
         <div className="flex gap-1">
@@ -86,15 +83,15 @@ export function ListPagination({
             const showEllipsis = prev != null && pageNum - prev > 1;
             return (
               <span key={pageNum} className="inline-flex items-center gap-1">
-                {showEllipsis ? <span className="px-1 text-muted select-none">…</span> : null}
+                {showEllipsis ? <span className="px-1 text-muted select-none text-sm">…</span> : null}
                 <button
                   type="button"
                   onClick={() => onPageChange(pageNum)}
                   aria-current={page === pageNum ? 'page' : undefined}
-                  className={`min-w-[2.25rem] px-2.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  className={`min-w-[2rem] px-2 py-1 text-[0.78rem] font-semibold rounded-md transition-colors ${
                     page === pageNum
-                      ? 'bg-primary-600 text-white shadow-sm'
-                      : 'border border-border text-foreground bg-white hover:bg-surface'
+                      ? 'bg-accent text-white'
+                      : 'btn-ghost !min-h-8 !px-2 !py-1'
                   }`}
                 >
                   {pageNum}
@@ -107,10 +104,10 @@ export function ListPagination({
           type="button"
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
-          className={navBtn}
+          className="btn-ghost !min-h-8 !px-2.5 !py-1 !text-[0.78rem] disabled:opacity-40"
         >
           {t('buttons.next')}
-          <ChevronRight size={16} aria-hidden />
+          <ChevronRight size={15} aria-hidden />
         </button>
       </div>
     </div>

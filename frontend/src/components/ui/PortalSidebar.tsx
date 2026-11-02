@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -13,76 +12,39 @@ type PortalSidebarProps = {
   activeId: string;
   onSelect: (id: string) => void;
   className?: string;
-  /** Wider rail for longer nav labels (e.g. procuring entity) */
+  /** Kept for call-site compatibility; top nav no longer uses rail width. */
   variant?: 'compact' | 'wide';
 };
 
-export function PortalSidebar({ items, activeId, onSelect, className = '', variant = 'compact' }: PortalSidebarProps) {
+/**
+ * Top navigation strip — square joined boxes with icon + label.
+ * Horizontally scrollable when items do not fit (bar height stays fixed).
+ */
+export function PortalSidebar({ items, activeId, onSelect, className = '' }: PortalSidebarProps) {
   const { t } = useTranslation();
-  const isWide = variant === 'wide';
-  const [hovered, setHovered] = useState(false);
-  /** After a nav click, stay collapsed until the pointer leaves the rail */
-  const [collapseUntilLeave, setCollapseUntilLeave] = useState(false);
-  const expanded = hovered && !collapseUntilLeave;
-
-  const handleSelect = (id: string) => {
-    onSelect(id);
-    setCollapseUntilLeave(true);
-  };
 
   return (
-    <>
-      {/* Desktop: sticky left rail — expands and pushes page body */}
-      <aside
-        className={`portal-sidebar ${isWide ? 'portal-sidebar--wide' : ''} ${expanded ? 'portal-sidebar--expanded' : ''} hidden md:flex flex-col shrink-0 sticky top-[var(--portal-header-height)] self-start h-[calc(100vh-var(--portal-header-height))] py-2.5 ${className}`}
-        aria-label={t('common.mainNavigation')}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => {
-          setHovered(false);
-          setCollapseUntilLeave(false);
-        }}
-      >
-        <nav className="flex flex-col gap-0.5 px-1">
-          {items.map(({ id, label, icon: Icon }) => {
-            const active = activeId === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleSelect(id)}
-                title={label}
-                className={`portal-sidebar-item ${active ? 'portal-sidebar-item--active' : ''}`}
-              >
-                <Icon size={20} strokeWidth={active ? 2.25 : 2} className="shrink-0" />
-                <span className="portal-sidebar-label">{label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* Mobile: bottom icon bar */}
-      <nav
-        className={`portal-sidebar-mobile ${isWide ? 'portal-sidebar-mobile--wide' : ''} md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur-lg safe-area-pb`}
-        aria-label={t('common.mainNavigation')}
-      >
-        <div className="flex justify-around items-stretch px-1 py-1.5 max-w-lg mx-auto">
-          {items.map(({ id, label, icon: Icon }) => {
-            const active = activeId === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => onSelect(id)}
-                className={`portal-sidebar-item portal-sidebar-item--mobile flex-1 ${isWide ? 'max-w-[6.25rem]' : 'max-w-[5rem]'} ${active ? 'portal-sidebar-item--active' : ''}`}
-              >
-                <Icon size={20} strokeWidth={active ? 2.25 : 2} />
-                <span className="portal-sidebar-label">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-    </>
+    <nav
+      className={`portal-top-nav min-w-0 ${className}`}
+      aria-label={t('common.mainNavigation')}
+    >
+      <div className="portal-top-nav-strip">
+        {items.map(({ id, label, icon: Icon }) => {
+          const active = activeId === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onSelect(id)}
+              title={label}
+              className={`portal-top-nav-item ${active ? 'portal-top-nav-item--active' : ''}`}
+            >
+              <Icon size={16} strokeWidth={active ? 2.35 : 2} aria-hidden />
+              <span className="portal-top-nav-label">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

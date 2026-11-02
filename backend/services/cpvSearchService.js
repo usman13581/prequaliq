@@ -28,7 +28,7 @@ const TERM_SYNONYMS = {
   renovation: ['construction', 'repair', 'maintenance'],
   electrical: ['electrical', 'installation'],
   hvac: ['installation', 'ventilation', 'heating'],
-  cleaning: ['cleaning', 'environmental', 'refuse'],
+  cleaning: ['cleaning', 'environmental', 'refuse', 'sanitation', 'facility'],
   software: ['software', 'information systems', 'it services', 'computer'],
   it: ['it services', 'software', 'consulting', 'information technology', 'computer'],
   information: ['information technology', 'it services', 'software'],
@@ -51,6 +51,69 @@ const TERM_SYNONYMS = {
   insurance: ['insurance'],
   facility: ['facility', 'cleaning', 'sanitation'],
   sanitation: ['cleaning', 'facility'],
+  // Cars / EV brands (catalog has no brand names — map to passenger-car CPVs)
+  car: ['passenger cars', 'saloon cars', 'motor vehicles'],
+  cars: ['passenger cars', 'saloon cars', 'motor vehicles'],
+  automobile: ['passenger cars', 'saloon cars', 'motor vehicles'],
+  automobiles: ['passenger cars', 'saloon cars'],
+  vehicle: ['motor vehicles', 'passenger cars'],
+  vehicles: ['motor vehicles', 'passenger cars'],
+  sedan: ['saloon cars', 'passenger cars'],
+  saloon: ['saloon cars', 'passenger cars'],
+  estate: ['estate cars', 'passenger cars'],
+  suv: ['passenger cars', '4-wheel-drive'],
+  tesla: ['electric vehicles', 'passenger cars', 'saloon cars'],
+  bmw: ['passenger cars', 'saloon cars'],
+  volvo: ['passenger cars', 'saloon cars'],
+  audi: ['passenger cars', 'saloon cars'],
+  mercedes: ['passenger cars', 'saloon cars'],
+  volkswagen: ['passenger cars', 'saloon cars'],
+  toyota: ['passenger cars', 'saloon cars'],
+  ev: ['electric vehicles', 'passenger cars'],
+  electric: ['electric vehicles'],
+  // Swedish / Nordic buyer wording → EN CPV catalog terms
+  bil: ['passenger cars', 'saloon cars', 'motor vehicles'],
+  bilar: ['passenger cars', 'saloon cars'],
+  personbil: ['passenger cars', 'saloon cars'],
+  personbilar: ['passenger cars', 'saloon cars'],
+  elbil: ['electric vehicles', 'passenger cars'],
+  elbilar: ['electric vehicles', 'passenger cars'],
+  lokalvård: ['cleaning', 'facility', 'sanitation'],
+  lokalvarden: ['cleaning', 'facility', 'sanitation'],
+  städ: ['cleaning', 'facility', 'sanitation'],
+  städning: ['cleaning', 'facility', 'sanitation'],
+  städtjänster: ['cleaning', 'facility', 'sanitation'],
+  stadtjanster: ['cleaning', 'facility', 'sanitation'],
+  städservice: ['cleaning', 'facility'],
+  rengöring: ['cleaning', 'sanitation'],
+  rengoring: ['cleaning', 'sanitation'],
+  hygien: ['cleaning', 'sanitation', 'facility'],
+  bygg: ['construction', 'building', 'civil'],
+  byggentreprenad: ['construction', 'building'],
+  anläggning: ['construction', 'civil'],
+  anlaggning: ['construction', 'civil'],
+  renovering: ['construction', 'repair', 'maintenance'],
+  elinstallation: ['electrical', 'installation'],
+  ventilation: ['installation', 'ventilation', 'heating'],
+  ittjänster: ['it services', 'software', 'information technology'],
+  ittjänst: ['it services', 'software'],
+  'it-tjänster': ['it services', 'software', 'information technology'],
+  mjukvara: ['software', 'information systems'],
+  konsult: ['consultancy', 'business services'],
+  konsulttjänster: ['consultancy', 'business services'],
+  transporttjänster: ['transport'],
+  catering: ['hotel', 'restaurant', 'food'],
+  livsmedel: ['food', 'beverages'],
+  sjukvård: ['health', 'medical'],
+  vård: ['health', 'medical'],
+  utbildning: ['education', 'training'],
+  säkerhet: ['security', 'defence'],
+  underhåll: ['repair', 'maintenance'],
+  underhall: ['repair', 'maintenance'],
+  försäkring: ['insurance'],
+  forsakring: ['insurance'],
+  brobyggnation: ['construction', 'civil', 'bridge'],
+  bro: ['construction', 'civil', 'bridge'],
 };
 
 function normalizeCpvCode(raw) {
@@ -112,13 +175,36 @@ function extractSearchTerms(description, extraKeywords = []) {
     ...extraKeywords.map((k) => String(k).toLowerCase()),
   ];
 
-  // Phrase boosts for common multi-word CPV intents
+  // Phrase boosts for common multi-word CPV intents (EN + SV)
   const lower = prioritized.toLowerCase();
-  if (/\bit\s+services?\b/.test(lower)) {
+  if (/\bit\s+services?\b/.test(lower) || /\bit[\s-]?tjänster?\b/.test(lower)) {
     raw.unshift('it', 'software', 'information', 'technology');
   }
   if (/\binformation\s+technology\b/.test(lower)) {
     raw.unshift('information', 'technology', 'software', 'it');
+  }
+  if (/\blokalvård|\bstäd|\bstädtjänst|\brengöring|\bfacility\s+clean/.test(lower)) {
+    raw.unshift('cleaning', 'facility', 'sanitation');
+  }
+  if (/\bbygg|\banläggning|\brenovering|\bconstruction|\bcivil\s+work/.test(lower)) {
+    raw.unshift('construction', 'building', 'civil');
+  }
+  // Passenger cars / EV brands (e.g. "Tesla S", "elbil", "personbil")
+  if (
+    /\b(tesla|bmw|volvo|audi|mercedes|volkswagen|toyota|ford|kia|hyundai)\b/.test(lower) ||
+    /\b(model\s*[3syx]|personbil|elbil|sedan|saloon|suv)\b/.test(lower) ||
+    /\b(passenger\s+cars?|electric\s+vehicles?|motor\s+vehicles?)\b/.test(lower) ||
+    /\b(car|cars|automobile|bil|bilar)\b/.test(lower)
+  ) {
+    raw.unshift(
+      'passenger cars',
+      'saloon cars',
+      'electric vehicles',
+      'motor vehicles',
+      'passenger',
+      'saloon',
+      'electric'
+    );
   }
 
   const terms = new Set();
@@ -133,6 +219,41 @@ function extractSearchTerms(description, extraKeywords = []) {
     if (syns) syns.forEach((s) => terms.add(s));
   }
   return [...terms].slice(0, 40);
+}
+
+function termMatchesHay(term, hay) {
+  const t = String(term || '').toLowerCase().trim();
+  if (!t) return false;
+  // Multi-word phrases: substring OK ("passenger cars")
+  if (t.includes(' ')) return hay.includes(t);
+  // Short/ambiguous tokens need word boundaries so "electric" ≠ "electricity"
+  if (t.length <= 8) {
+    try {
+      return new RegExp(`(?:^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=[^a-z0-9]|$)`).test(hay);
+    } catch {
+      return hay.includes(t);
+    }
+  }
+  return hay.includes(t);
+}
+
+function isEmergencySpecialistCode(code, description) {
+  const c = String(code || '');
+  const d = String(description || '').toLowerCase();
+  if (/^34114/.test(c) || /^34144/.test(c)) return true;
+  return /\b(rescue|emergency|ambulance|firefight|police|prisoner|paramedic|military)\b/.test(d);
+}
+
+function descriptionHasEmergencyIntent(description) {
+  return /\b(rescue|emergency|ambulance|firefight|fire\s*fight|police|paramedic|military)\b/i.test(
+    String(description || '')
+  );
+}
+
+function descriptionHasCarIntent(description) {
+  return /\b(tesla|bmw|volvo|audi|mercedes|volkswagen|toyota|car|cars|automobile|bil|bilar|personbil|elbil|sedan|saloon|suv|model\s*[3syx])\b/i.test(
+    String(description || '')
+  );
 }
 
 async function getSupplierCpvUsageCounts() {
@@ -155,11 +276,13 @@ function scoreCpvRow(row, terms, description, usage) {
   const hay = `${row.code} ${row.description}`.toLowerCase();
   const matched = [];
   let score = 0;
+  const carIntent = descriptionHasCarIntent(description);
+  const emergencyIntent = descriptionHasEmergencyIntent(description);
 
   for (const term of terms) {
-    if (hay.includes(term)) {
+    if (termMatchesHay(term, hay)) {
       matched.push(term);
-      score += term.length >= 6 ? 3 : 2;
+      score += term.length >= 6 || term.includes(' ') ? 3 : 2;
     }
   }
 
@@ -168,13 +291,30 @@ function scoreCpvRow(row, terms, description, usage) {
     .split(/[\s,.;:!?()\-/]+/)
     .filter((w) => w.length >= 5 && !STOP_WORDS.has(w));
   for (const word of descWords.slice(0, 12)) {
-    if (hay.includes(word)) {
+    if (termMatchesHay(word, hay)) {
       if (!matched.includes(word)) matched.push(word);
       score += 1;
     }
   }
 
   if (score === 0) return null;
+
+  // Car buys: boost passenger/EV codes; suppress rescue/emergency unless asked
+  if (carIntent) {
+    if (/^3411/.test(String(row.code)) || String(row.code) === '34144900') {
+      score += 18;
+    }
+    if (/passenger cars|saloon cars|electric vehicles|estate cars/.test(hay)) {
+      score += 10;
+    }
+    if (!emergencyIntent && isEmergencySpecialistCode(row.code, row.description)) {
+      score -= 25;
+    }
+    // "procure" alone must not win via procurement software
+    if (/procurement software|consultancy services|software development/.test(hay)) {
+      score -= 20;
+    }
+  }
 
   const supplierCount = usage[row.id] || 0;
   score += Math.min(supplierCount, 20) * 2;

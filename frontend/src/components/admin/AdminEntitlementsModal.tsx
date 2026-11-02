@@ -4,6 +4,7 @@ import { Save } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { CenterModal } from '../ui/SlideOver';
+import { SlimCheckList, SlimCheckRow } from '../ui/SlimCheckRow';
 
 type CatalogItem = { key: string; layer: string; liveDefault: boolean };
 
@@ -75,16 +76,16 @@ export function AdminEntitlementsModal({
       maxWidthClass="max-w-2xl"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="btn-cancel px-5 py-2.5 rounded-xl font-semibold">
+          <button type="button" onClick={onClose} className="btn-ghost">
             {t('common.cancel')}
           </button>
           <button
             type="button"
             onClick={save}
             disabled={saving || loading}
-            className="btn-save px-5 py-2.5 rounded-xl font-semibold inline-flex items-center gap-2 disabled:opacity-50"
+            className="btn-save inline-flex items-center gap-2 disabled:opacity-50"
           >
-            <Save size={16} />
+            <Save size={15} />
             {saving ? t('common.loading') : t('common.save')}
           </button>
         </div>
@@ -93,64 +94,60 @@ export function AdminEntitlementsModal({
       {loading ? (
         <p className="text-sm text-muted">{t('common.loading')}</p>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-4">
           {byLayer['ai-extra']?.length ? (
-            <div className="bg-violet-50 rounded-2xl border border-violet-200 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <h3 className="text-xs font-bold uppercase tracking-wide text-violet-800">
+            <div className="rounded-lg border border-violet-200 bg-violet-50/80 px-2.5 py-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-violet-800">
                   {t('adminPortal.aiControls')}
-                </h3>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white border border-violet-200 text-violet-800"
-                    onClick={() => {
-                      setEntitlements((prev) => {
-                        const next = { ...prev };
-                        for (const item of byLayer['ai-extra'] || []) next[item.key] = true;
-                        return next;
-                      });
-                    }}
-                  >
-                    {t('adminPortal.aiEnableAllUser')}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white border border-violet-200 text-violet-800"
-                    onClick={() => {
-                      setEntitlements((prev) => {
-                        const next = { ...prev };
-                        for (const item of byLayer['ai-extra'] || []) next[item.key] = false;
-                        return next;
-                      });
-                    }}
-                  >
-                    {t('adminPortal.aiDisableAllUser')}
-                  </button>
-                </div>
+                </p>
+                <p className="text-xs text-violet-900/80 mt-0.5">{t('adminPortal.aiUserEntitlementHint')}</p>
               </div>
-              <p className="text-xs text-violet-900/80 mb-3">{t('adminPortal.aiUserEntitlementHint')}</p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  className="text-xs font-semibold px-2 py-1 rounded-md bg-white border border-violet-200 text-violet-800"
+                  onClick={() => {
+                    setEntitlements((prev) => {
+                      const next = { ...prev };
+                      for (const item of byLayer['ai-extra'] || []) next[item.key] = true;
+                      return next;
+                    });
+                  }}
+                >
+                  {t('adminPortal.aiEnableAllUser')}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs font-semibold px-2 py-1 rounded-md bg-white border border-violet-200 text-violet-800"
+                  onClick={() => {
+                    setEntitlements((prev) => {
+                      const next = { ...prev };
+                      for (const item of byLayer['ai-extra'] || []) next[item.key] = false;
+                      return next;
+                    });
+                  }}
+                >
+                  {t('adminPortal.aiDisableAllUser')}
+                </button>
+              </div>
             </div>
           ) : null}
           {Object.entries(byLayer).map(([layer, items]) => (
-            <div key={layer} className="bg-white rounded-2xl border border-border p-4 shadow-sm">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-muted mb-3">{layer}</h3>
-              <div className="space-y-2">
+            <div key={layer} className="space-y-1.5">
+              <h3 className="text-[0.68rem] font-semibold uppercase tracking-wide text-muted px-0.5">
+                {layer}
+              </h3>
+              <SlimCheckList>
                 {items.map((item) => (
-                  <label
+                  <SlimCheckRow
                     key={item.key}
-                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-border hover:bg-surface cursor-pointer"
-                  >
-                    <span className="text-sm font-medium text-foreground font-mono">{item.key}</span>
-                    <input
-                      type="checkbox"
-                      checked={!!entitlements[item.key]}
-                      onChange={() => toggle(item.key)}
-                      className="w-4 h-4 accent-accent"
-                    />
-                  </label>
+                    checked={!!entitlements[item.key]}
+                    onChange={() => toggle(item.key)}
+                    title={item.key}
+                  />
                 ))}
-              </div>
+              </SlimCheckList>
             </div>
           ))}
         </div>

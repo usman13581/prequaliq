@@ -28,9 +28,13 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Don't redirect to login for password reset endpoint - let it handle its own errors
-    if (error.response?.status === 401 && !error.config?.url?.includes('/reset-password')) {
-      // Token expired or invalid (but not for password reset)
+    // Don't redirect to login for password-change / forgot-password flows
+    const url = error.config?.url || '';
+    const skipAuthRedirect =
+      url.includes('/reset-password') ||
+      url.includes('/forgot-password') ||
+      url.includes('/reset-password-with-token');
+    if (error.response?.status === 401 && !skipAuthRedirect) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

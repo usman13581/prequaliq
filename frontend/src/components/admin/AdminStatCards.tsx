@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 type StatCardProps = {
@@ -7,6 +8,8 @@ type StatCardProps = {
   icon: LucideIcon;
   accent?: 'blue' | 'green' | 'amber' | 'red' | 'orange' | 'slate' | 'violet';
   badge?: string;
+  /** Dense strip tiles (supplier / entity list pages) */
+  compact?: boolean;
 };
 
 const accentMap = {
@@ -19,23 +22,51 @@ const accentMap = {
   violet: 'from-violet-500 to-violet-700'
 };
 
-export function AdminStatCard({ label, value, hint, icon: Icon, accent = 'blue', badge }: StatCardProps) {
+export function AdminStatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  accent = 'blue',
+  badge,
+  compact = false
+}: StatCardProps) {
+  if (compact) {
+    return (
+      <div className="rounded-md border border-border bg-card px-2.5 py-1.5 min-h-[2.5rem] flex items-center gap-2">
+        <div
+          className={`w-7 h-7 rounded-md bg-gradient-to-br ${accentMap[accent]} flex items-center justify-center shrink-0`}
+        >
+          <Icon className="text-white" size={13} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.65rem] font-semibold text-muted uppercase tracking-wide truncate leading-none">
+            {label}
+          </p>
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <p className="text-base font-bold text-foreground tabular-nums leading-none">{value}</p>
+            {hint ? <p className="text-[0.65rem] text-muted truncate">{hint}</p> : null}
+          </div>
+        </div>
+        {badge ? <span className="status-chip status-chip--open shrink-0">{badge}</span> : null}
+      </div>
+    );
+  }
+
   return (
-    <div className="group relative bg-white rounded-2xl border border-border p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-accent/5 to-transparent rounded-bl-full pointer-events-none" />
+    <div className="panel-card relative p-4 overflow-hidden">
+      <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-accent/5 to-transparent rounded-bl-full pointer-events-none" />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-muted uppercase tracking-wide">{label}</p>
-          <p className="text-2xl sm:text-3xl font-bold text-foreground mt-1 tabular-nums">{value}</p>
-          {hint && <p className="text-xs text-muted mt-1.5">{hint}</p>}
+          <p className="text-[0.72rem] font-semibold text-muted uppercase tracking-wide">{label}</p>
+          <p className="text-2xl font-bold text-foreground mt-0.5 tabular-nums leading-tight">{value}</p>
+          {hint && <p className="text-xs text-muted mt-1">{hint}</p>}
           {badge && (
-            <span className="inline-block mt-2 text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-accent-subtle text-accent">
-              {badge}
-            </span>
+            <span className="status-chip status-chip--open mt-2">{badge}</span>
           )}
         </div>
-        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br ${accentMap[accent]} flex items-center justify-center shadow-md shrink-0`}>
-          <Icon className="text-white" size={22} />
+        <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${accentMap[accent]} flex items-center justify-center shadow-sm shrink-0`}>
+          <Icon className="text-white" size={18} />
         </div>
       </div>
     </div>
@@ -47,9 +78,9 @@ type BreakdownItem = { key: string; label: string; value: number; color: string 
 export function AdminStatusBreakdown({ title, items, total }: { title: string; items: BreakdownItem[]; total: number }) {
   const safeTotal = total || 1;
   return (
-    <div className="bg-white rounded-2xl border border-border p-5 shadow-sm">
-      <h3 className="text-sm font-bold text-foreground mb-4">{title}</h3>
-      <div className="flex h-3 rounded-full overflow-hidden bg-surface mb-4">
+    <div className="panel-card p-4">
+      <h3 className="text-sm font-bold text-foreground mb-3">{title}</h3>
+      <div className="flex h-2.5 rounded-full overflow-hidden bg-surface mb-3">
         {items.filter((i) => i.value > 0).map((item) => (
           <div
             key={item.key}
@@ -59,10 +90,10 @@ export function AdminStatusBreakdown({ title, items, total }: { title: string; i
           />
         ))}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {items.map((item) => (
           <div key={item.key} className="flex items-center gap-2 min-w-0">
-            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.color}`} />
+            <span className={`w-2 h-2 rounded-full shrink-0 ${item.color}`} />
             <div className="min-w-0">
               <p className="text-xs text-muted truncate">{item.label}</p>
               <p className="text-sm font-bold text-foreground tabular-nums">{item.value}</p>
@@ -74,15 +105,31 @@ export function AdminStatusBreakdown({ title, items, total }: { title: string; i
   );
 }
 
-export function AdminStatsGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">{children}</div>;
+export function AdminStatsGrid({
+  children,
+  compact = false
+}: {
+  children: ReactNode;
+  compact?: boolean;
+}) {
+  if (compact) {
+    return (
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(9.25rem, 1fr))' }}
+      >
+        {children}
+      </div>
+    );
+  }
+  return <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">{children}</div>;
 }
 
 export function AdminSectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-4">
-      <h2 className="text-base font-bold text-foreground">{title}</h2>
-      {subtitle && <p className="text-sm text-muted mt-0.5">{subtitle}</p>}
+      <h2 className="page-title">{title}</h2>
+      {subtitle && <p className="text-sm text-muted mt-1">{subtitle}</p>}
     </div>
   );
 }
@@ -96,17 +143,17 @@ export function AdminRecentList({
   title: string;
   emptyLabel: string;
   items: unknown[];
-  renderItem: (item: unknown, index: number) => React.ReactNode;
+  renderItem: (item: unknown, index: number) => ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-border p-5 shadow-sm">
-      <h3 className="text-sm font-bold text-foreground mb-3">{title}</h3>
+    <div className="panel-card p-4">
+      <h3 className="text-sm font-bold text-foreground mb-2">{title}</h3>
       {items.length === 0 ? (
         <p className="text-sm text-muted py-4 text-center">{emptyLabel}</p>
       ) : (
         <ul className="divide-y divide-border">
           {items.map((item, i) => (
-            <li key={i} className="py-3 first:pt-0 last:pb-0">
+            <li key={i} className="py-2.5 first:pt-0 last:pb-0">
               {renderItem(item, i)}
             </li>
           ))}

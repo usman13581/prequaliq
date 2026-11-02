@@ -28,8 +28,21 @@ const resetPasswordValidation = [
   handleValidationErrors
 ];
 
+const forgotPasswordValidation = [
+  emailField('email', 'Valid email is required'),
+  handleValidationErrors
+];
+
+const resetWithTokenValidation = [
+  body('token').notEmpty().withMessage('Reset token is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+  handleValidationErrors
+];
+
 router.post('/register', registerValidation, authController.register);
 router.post('/login', loginValidation, authController.login);
+router.post('/forgot-password', forgotPasswordValidation, authController.forgotPassword);
+router.post('/reset-password-with-token', resetWithTokenValidation, authController.resetPasswordWithToken);
 router.get('/profile', authenticate, authController.getProfile);
 router.put('/reset-password', authenticate, resetPasswordValidation, authController.resetPassword);
 router.put('/profile-picture', authenticate, (req, res, next) => {

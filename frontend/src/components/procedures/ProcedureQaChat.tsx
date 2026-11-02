@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MessageSquare, Send } from 'lucide-react';
+import { BrandSelect } from '../ui/BrandSelect';
 
 export type QaChatMessage = {
   id: string;
@@ -119,9 +120,9 @@ export function ProcedureQaChat({
                 <label className="text-xs font-semibold text-muted block mb-1">
                   {t('procedures.qaStartThread')}
                 </label>
-                <select
-                  className="input-brand text-sm w-full"
+                <BrandSelect
                   value=""
+                  searchPlaceholder={t('common.search')}
                   onChange={(e) => {
                     if (e.target.value) onSelectThread?.(e.target.value);
                   }}
@@ -132,7 +133,7 @@ export function ProcedureQaChat({
                       {s.companyName}
                     </option>
                   ))}
-                </select>
+                </BrandSelect>
               </div>
             )}
           </div>

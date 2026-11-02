@@ -31,12 +31,19 @@ export function CpvSearchSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const portalId = useId();
   const onSearchRef = useRef(onSearch);
-  const selected = cpvCodes.find((c) => c.id === value);
+  const selectedFromList = cpvCodes.find((c) => c.id === value);
+  const [selectedCache, setSelectedCache] = useState<CpvCodeOption | null>(null);
+  const selected = selectedFromList || (selectedCache?.id === value ? selectedCache : null);
   const coords = useFixedDropdownPosition(open, containerRef);
 
   useEffect(() => {
     onSearchRef.current = onSearch;
   }, [onSearch]);
+
+  useEffect(() => {
+    if (selectedFromList) setSelectedCache(selectedFromList);
+    else if (!value) setSelectedCache(null);
+  }, [selectedFromList, value]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,27 +77,27 @@ export function CpvSearchSelect({
               zIndex: 10050
             }}
           >
-            <div className="p-2 border-b border-gray-100 bg-gray-50/80">
+            <div className="p-2 border-b border-border bg-surface/80">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={t('placeholders.searchByCodeOrDescription')}
-                  className="w-full pl-9 pr-9 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="field-control !pl-8 !pr-8 !min-h-8 !py-1.5"
                   autoFocus
                 />
                 {loading ? (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-500 animate-spin" />
+                  <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent animate-spin" />
                 ) : null}
               </div>
             </div>
             <div className="max-h-56 overflow-y-auto py-1">
               {cpvCodes.length === 0 && loading ? (
-                <p className="px-4 py-3 text-sm text-muted">{t('common.loading')}</p>
+                <p className="px-3 py-2.5 text-xs text-muted">{t('common.loading')}</p>
               ) : cpvCodes.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-amber-700 bg-amber-50">{t('cpvCodes.noCodesLoaded')}</p>
+                <p className="px-3 py-2.5 text-xs text-amber-700 bg-amber-50">{t('cpvCodes.noCodesLoaded')}</p>
               ) : (
                 <>
                   {value ? (
@@ -101,7 +108,7 @@ export function CpvSearchSelect({
                         setOpen(false);
                         setSearch('');
                       }}
-                      className="w-full px-4 py-2 text-left text-xs text-muted hover:bg-surface"
+                      className="w-full px-3 py-1.5 text-left text-xs text-muted hover:bg-surface"
                     >
                       {t('savedSearch.clearField')}
                     </button>
@@ -115,10 +122,10 @@ export function CpvSearchSelect({
                         setOpen(false);
                         setSearch('');
                       }}
-                      className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
+                      className={`w-full px-3 py-2 text-left text-[0.8125rem] transition-colors ${
                         value === cpv.id
-                          ? 'bg-primary-50 text-primary-800 font-medium'
-                          : 'text-gray-700 hover:bg-primary-50/60'
+                          ? 'bg-accent-subtle text-accent-hover font-semibold'
+                          : 'text-foreground hover:bg-surface'
                       }`}
                     >
                       <span className="font-mono font-semibold">{cpv.code}</span>
@@ -137,14 +144,15 @@ export function CpvSearchSelect({
     <div className="relative min-w-0" ref={containerRef}>
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="w-full min-w-0 px-4 py-3 flex items-center justify-between gap-2 rounded-xl border border-gray-300 bg-white hover:border-primary-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 text-left"
+        className="field-trigger w-full min-w-0 flex items-center justify-between gap-2 text-left"
       >
-        <span className={`min-w-0 truncate text-sm sm:text-base ${selected ? 'text-gray-900' : 'text-gray-500'}`}>
+        <span className={`min-w-0 truncate ${selected ? 'text-foreground' : 'text-muted-light'}`}>
           {selected ? `${selected.code} – ${selected.description}` : resolvedPlaceholder}
         </span>
         <ChevronDown
-          className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
       {dropdown}

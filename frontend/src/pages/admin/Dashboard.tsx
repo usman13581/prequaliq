@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadsUrl } from '../../utils/uploadsUrl';
-import { Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, User, Lock, Eye, EyeOff, Key, Camera, Upload, LayoutDashboard, SlidersHorizontal, BookMarked, Sparkles, Bell } from 'lucide-react';
+import { Users, Building2, Plus, CheckCircle, XCircle, Edit2, Trash2, Power, PowerOff, User, Lock, Eye, EyeOff, Key, Camera, Upload, LayoutDashboard, SlidersHorizontal, BookMarked, Sparkles } from 'lucide-react';
 import { NotificationsBell } from '../../components/notifications/NotificationsBell';
 import { NotificationsPanel } from '../../components/notifications/NotificationsPanel';
 import { SearchField } from '../../components/ui/SearchField';
@@ -13,6 +13,10 @@ import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { PortalLayout } from '../../components/ui/PortalLayout';
 import { ListPagination } from '../../components/ui/ListPagination';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { StatusChip } from '../../components/ui/StatusChip';
+import { LoadingBlock } from '../../components/ui/EmptyState';
+import { RowActionsMenu } from '../../components/ui/RowActionsMenu';
 import { useListPagination } from '../../hooks/useListPagination';
 import { usePortalTab } from '../../hooks/usePortalTab';
 import { AdminHomeTab, AdminSupplierStatsStrip, AdminEntityStatsStrip } from '../../components/admin/AdminHomeTab';
@@ -288,21 +292,13 @@ const AdminDashboard = () => {
     { id: 'home', label: t('adminPortal.navHome'), icon: LayoutDashboard },
     { id: 'suppliers', label: t('nav.suppliers'), icon: Users },
     { id: 'entities', label: t('nav.entities'), icon: Building2 },
-    { id: 'notifications', label: t('nav.notifications'), icon: Bell },
     { id: 'ai-controls', label: t('adminPortal.aiControls'), icon: Sparkles },
     { id: 'lookups', label: t('nav.lookups'), icon: BookMarked },
-    { id: 'profile', label: t('nav.profile'), icon: User },
   ];
 
   const handleSidebarSelect = (id: string) => {
-    if (id === 'profile') {
-      setShowProfileModal(true);
-      return;
-    }
     setActiveTab(id);
   };
-
-  const sidebarActiveId = showProfileModal ? 'profile' : activeTab;
 
   return (
     <>
@@ -311,7 +307,7 @@ const AdminDashboard = () => {
         logoSubtitle={t('nav.adminDashboard')}
         roleLabel={t('nav.administrator')}
         sidebarItems={sidebarItems}
-        activeTab={sidebarActiveId}
+        activeTab={activeTab}
         onTabSelect={handleSidebarSelect}
         onProfileClick={() => setShowProfileModal(true)}
         headerExtra={<NotificationsBell onNavigate={handleSidebarSelect} />}
@@ -330,45 +326,36 @@ const AdminDashboard = () => {
         {activeTab === 'lookups' && <AdminLookupsPanel />}
 
         {activeTab === 'ai-controls' && (
-          <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 p-4 sm:p-6">
+          <div className="panel-card p-4 sm:p-5">
             <AdminAiGlobalPanel />
           </div>
         )}
 
         {(activeTab === 'suppliers' || activeTab === 'entities') && (
-        <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/50 overflow-hidden">
+        <div className="panel-card overflow-hidden">
           <div className="px-3 sm:px-4 py-4">
-            {loading && (
-              <div className="text-center py-16">
-                <div className="inline-flex flex-col items-center">
-                  <div className="relative">
-                    <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full animate-pulse"></div>
-                    </div>
-                  </div>
-                  <p className="mt-6 text-gray-600 font-medium">{t('sections.loadingData')}</p>
-                </div>
-              </div>
-            )}
+            {loading && <LoadingBlock label={t('sections.loadingData')} />}
 
             {!loading && activeTab === 'suppliers' && (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <AdminSupplierStatsStrip stats={statsFromSuppliers(suppliers)} />
               <div className="px-0 sm:px-1">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900">{t('sections.supplierManagement')}</h2>
-                    <p className="text-sm text-gray-500 mt-1">{t('sections.manageSuppliers')}</p>
-                  </div>
-                  <button
-                    onClick={() => setShowCreateSupplier(true)}
-                    className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
-                  >
-                    <Plus size={20} />
-                    {t('actions.createSupplier')}
-                  </button>
-                </div>
+                <PageHeader
+                  title={t('sections.supplierManagement')}
+                  subtitle={t('sections.manageSuppliers')}
+                  count={suppliers.length}
+                  icon={<Users size={18} />}
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateSupplier(true)}
+                      className="btn-primary"
+                    >
+                      <Plus size={16} />
+                      {t('actions.createSupplier')}
+                    </button>
+                  }
+                />
 
                 <div className="mb-4 flex flex-col sm:flex-row gap-3">
                   <SearchField
@@ -413,142 +400,114 @@ const AdminDashboard = () => {
                   </div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto rounded-xl border border-gray-200/50 shadow-inner">
-                      <table className="min-w-full divide-y divide-gray-200/50">
-                        <thead className="bg-slate-700">
+                    <div className="data-table-wrap">
+                      <table className="data-table min-w-full">
+                        <thead>
                           <tr>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.companyName')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.contact')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.status')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.actions')}</th>
+                            <th>{t('columns.companyName')}</th>
+                            <th>{t('columns.contact')}</th>
+                            <th>{t('columns.status')}</th>
+                            <th>{t('columns.actions')}</th>
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200/50">
+                        <tbody>
                           {supplierPager.paginatedItems.map((supplier) => (
-                          <tr key={supplier.id} className="hover:bg-gradient-to-r hover:from-primary-50/50 hover:to-transparent transition-all duration-150">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center text-white font-bold shadow-md">
+                          <tr key={supplier.id}>
+                            <td>
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 bg-gradient-to-br from-primary-500 to-primary-700 rounded flex items-center justify-center text-white text-[0.65rem] font-bold shrink-0">
                                   {supplier.companyName?.[0]?.toUpperCase()}
                                 </div>
-                                <div className="text-sm font-semibold text-gray-900">{supplier.companyName}</div>
+                                <div className="text-[0.8125rem] font-semibold text-foreground truncate">{supplier.companyName}</div>
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{supplier.user?.firstName} {supplier.user?.lastName}</div>
-                              <div className="text-sm text-gray-500">{supplier.user?.email}</div>
+                            <td>
+                              <div className="text-[0.8125rem] font-medium text-foreground truncate">{supplier.user?.firstName} {supplier.user?.lastName}</div>
+                              <div className="text-[0.7rem] text-muted truncate">{supplier.user?.email}</div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex flex-col gap-2">
-                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
-                                  supplier.status === 'approved' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
-                                  supplier.status === 'rejected' ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' :
-                                  supplier.status === 'requalification_required' ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white' :
-                                  'bg-gradient-to-r from-yellow-400 to-yellow-500 text-white'
-                                }`}>
-                                  {supplier.status === 'approved' ? t('common.approved') :
+                            <td>
+                              <div className="flex flex-wrap gap-1 items-center">
+                                <StatusChip
+                                  status={supplier.status}
+                                  label={
+                                    supplier.status === 'approved' ? t('common.approved') :
                                     supplier.status === 'rejected' ? t('common.rejected') :
                                     supplier.status === 'requalification_required' ? t('supplierPortal.requalificationTitle') :
-                                    t('common.pending')}
-                                </span>
-                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
-                                  supplier.user?.isActive 
-                                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white' 
-                                    : 'bg-gradient-to-r from-gray-400 to-gray-500 text-white'
-                                }`}>
-                                  {supplier.user?.isActive ? `✓ ${t('common.active')}` : `✗ ${t('common.inactive')}`}
-                                </span>
+                                    t('common.pending')
+                                  }
+                                />
+                                <StatusChip
+                                  status={supplier.user?.isActive ? 'active' : 'inactive'}
+                                  label={supplier.user?.isActive ? t('common.active') : t('common.inactive')}
+                                />
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex flex-wrap gap-2 items-center">
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      const response = await api.get(`/admin/suppliers/${supplier.id}`);
-                                      setEditingSupplier(response.data.supplier);
-                                    } catch (error: any) {
-                                      showToast(error.response?.data?.message || t('msg.failedLoadSupplierDetails'), 'error');
+                            <td>
+                              <RowActionsMenu
+                                label={t('columns.actions')}
+                                items={[
+                                  {
+                                    id: 'edit',
+                                    label: t('buttons.edit'),
+                                    icon: <Edit2 size={14} />,
+                                    onClick: async () => {
+                                      try {
+                                        const response = await api.get(`/admin/suppliers/${supplier.id}`);
+                                        setEditingSupplier(response.data.supplier);
+                                      } catch (error: any) {
+                                        showToast(error.response?.data?.message || t('msg.failedLoadSupplierDetails'), 'error');
+                                      }
                                     }
-                                  }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title={t('adminPortal.editSupplierTitle')}
-                                >
-                                  <Edit2 size={14} />
-                                  {t('buttons.edit')}
-                                </button>
-                                {supplier.status === 'pending' && (
-                                  <>
-                                    <button
-                                      onClick={() => reviewSupplier(supplier.id, 'approve')}
-                                      className="btn-approve flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                    >
-                                      <CheckCircle size={14} />
-                                      {t('buttons.approve')}
-                                    </button>
-                                    <button
-                                      onClick={() => reviewSupplier(supplier.id, 'reject')}
-                                      className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                    >
-                                      <XCircle size={14} />
-                                      {t('buttons.reject')}
-                                    </button>
-                                  </>
-                                )}
-                                {supplier.user?.id && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
+                                  },
+                                  {
+                                    id: 'approve',
+                                    label: t('buttons.approve'),
+                                    icon: <CheckCircle size={14} />,
+                                    tone: 'success',
+                                    hidden: supplier.status !== 'pending',
+                                    onClick: () => reviewSupplier(supplier.id, 'approve')
+                                  },
+                                  {
+                                    id: 'reject',
+                                    label: t('buttons.reject'),
+                                    icon: <XCircle size={14} />,
+                                    tone: 'danger',
+                                    hidden: supplier.status !== 'pending',
+                                    onClick: () => reviewSupplier(supplier.id, 'reject')
+                                  },
+                                  {
+                                    id: 'features',
+                                    label: t('adminPortal.features'),
+                                    icon: <SlidersHorizontal size={14} />,
+                                    hidden: !supplier.user?.id,
+                                    onClick: () =>
                                       setEntitlementsTarget({
                                         userId: supplier.user.id!,
                                         label: `${supplier.companyName} (${supplier.user.email})`
                                       })
-                                    }
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                    title={t('adminPortal.featureControl')}
-                                  >
-                                    <SlidersHorizontal size={14} />
-                                    {t('adminPortal.features')}
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => toggleSupplierStatus(supplier.id, supplier.user?.isActive || false)}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow ${
-                                    supplier.user?.isActive
-                                      ? 'btn-reject'
-                                      : 'btn-approve'
-                                  }`}
-                                  title={supplier.user?.isActive ? t('adminPortal.deactivateSupplierTitle') : t('adminPortal.activateSupplierTitle')}
-                                >
-                                  {supplier.user?.isActive ? (
-                                    <>
-                                      <PowerOff size={14} />
-                                      {t('buttons.deactivate')}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Power size={14} />
-                                      {t('buttons.activate')}
-                                    </>
-                                  )}
-                                </button>
-                                <button
-                                  onClick={() => setResetPasswordSupplier(supplier)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title={t('actions.resetPassword')}
-                                >
-                                  <Key size={14} />
-                                  {t('buttons.resetPassword')}
-                                </button>
-                                <button
-                                  onClick={() => setDeleteSupplierConfirm(supplier)}
-                                  className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title={t('adminPortal.deleteSupplierTitle')}
-                                >
-                                  <Trash2 size={14} />
-                                  {t('common.delete')}
-                                </button>
-                              </div>
+                                  },
+                                  {
+                                    id: 'toggle',
+                                    label: supplier.user?.isActive ? t('buttons.deactivate') : t('buttons.activate'),
+                                    icon: supplier.user?.isActive ? <PowerOff size={14} /> : <Power size={14} />,
+                                    tone: supplier.user?.isActive ? 'danger' : 'success',
+                                    onClick: () => toggleSupplierStatus(supplier.id, supplier.user?.isActive || false)
+                                  },
+                                  {
+                                    id: 'reset',
+                                    label: t('buttons.resetPassword'),
+                                    icon: <Key size={14} />,
+                                    onClick: () => setResetPasswordSupplier(supplier)
+                                  },
+                                  {
+                                    id: 'delete',
+                                    label: t('common.delete'),
+                                    icon: <Trash2 size={14} />,
+                                    tone: 'danger',
+                                    onClick: () => setDeleteSupplierConfirm(supplier)
+                                  }
+                                ]}
+                              />
                             </td>
                           </tr>
                             ))}
@@ -573,22 +532,21 @@ const AdminDashboard = () => {
             )}
 
             {!loading && activeTab === 'entities' && (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <AdminEntityStatsStrip stats={statsFromEntities(procuringEntities)} />
               <div className="px-0 sm:px-1">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900">{t('sections.entityManagement')}</h2>
-                    <p className="text-sm text-gray-500 mt-1">{t('sections.manageEntities')}</p>
-                  </div>
-                  <button
-                    onClick={() => setShowCreateEntity(true)}
-                    className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
-                  >
-                    <Plus size={20} />
-                    {t('actions.createEntity')}
-                  </button>
-                </div>
+                <PageHeader
+                  title={t('sections.entityManagement')}
+                  subtitle={t('sections.manageEntities')}
+                  count={procuringEntities.length}
+                  icon={<Building2 size={18} />}
+                  action={
+                    <button type="button" onClick={() => setShowCreateEntity(true)} className="btn-primary">
+                      <Plus size={16} />
+                      {t('actions.createEntity')}
+                    </button>
+                  }
+                />
 
                 <div className="mb-4 flex flex-col sm:flex-row gap-3">
                   <SearchField
@@ -632,144 +590,113 @@ const AdminDashboard = () => {
                   </div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto rounded-xl border border-gray-200/50 shadow-inner">
-                      <table className="min-w-full divide-y divide-gray-200/50">
-                        <thead className="bg-slate-700">
+                    <div className="data-table-wrap">
+                      <table className="data-table min-w-full">
+                        <thead>
                           <tr>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.entityName')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.contact')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.status')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-100 uppercase tracking-wider">{t('columns.actions')}</th>
+                            <th>{t('columns.entityName')}</th>
+                            <th>{t('columns.contact')}</th>
+                            <th>{t('columns.status')}</th>
+                            <th>{t('columns.actions')}</th>
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200/50">
+                        <tbody>
                           {entityPager.paginatedItems.map((entity) => (
-                          <tr key={entity.id} className="hover:bg-gradient-to-r hover:from-primary-50/50 hover:to-transparent transition-all duration-150">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center text-white font-bold shadow-md">
+                          <tr key={entity.id}>
+                            <td>
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 bg-gradient-to-br from-primary-500 to-primary-700 rounded flex items-center justify-center text-white text-[0.65rem] font-bold shrink-0">
                                   {entity.entityName?.[0]?.toUpperCase()}
                                 </div>
-                                <div className="text-sm font-semibold text-gray-900">{entity.entityName}</div>
+                                <div className="text-[0.8125rem] font-semibold text-foreground truncate">{entity.entityName}</div>
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{entity.user?.firstName} {entity.user?.lastName}</div>
-                              <div className="text-sm text-gray-500">{entity.user?.email}</div>
+                            <td>
+                              <div className="text-[0.8125rem] font-medium text-foreground truncate">{entity.user?.firstName} {entity.user?.lastName}</div>
+                              <div className="text-[0.7rem] text-muted truncate">{entity.user?.email}</div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex flex-col gap-2">
-                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
-                                  entity.status === 'approved' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
-                                  entity.status === 'rejected' ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' :
-                                  'bg-gradient-to-r from-amber-400 to-amber-600 text-white'
-                                }`}>
-                                  {entity.status === 'approved' ? t('common.approved') :
+                            <td>
+                              <div className="flex flex-wrap gap-1 items-center">
+                                <StatusChip
+                                  status={entity.status}
+                                  label={
+                                    entity.status === 'approved' ? t('common.approved') :
                                     entity.status === 'rejected' ? t('common.rejected') :
-                                    t('common.pending')}
-                                </span>
-                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full w-fit shadow-sm ${
-                                  entity.user?.isActive 
-                                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white' 
-                                    : 'bg-gradient-to-r from-gray-400 to-gray-500 text-white'
-                                }`}>
-                                  {entity.user?.isActive ? `✓ ${t('common.active')}` : `✗ ${t('common.inactive')}`}
-                                </span>
+                                    t('common.pending')
+                                  }
+                                />
+                                <StatusChip
+                                  status={entity.user?.isActive ? 'active' : 'inactive'}
+                                  label={entity.user?.isActive ? t('common.active') : t('common.inactive')}
+                                />
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex flex-wrap gap-2 items-center">
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      const response = await api.get(`/admin/procuring-entities/${entity.id}`);
-                                      setEditingEntity(response.data.procuringEntity);
-                                    } catch (error: any) {
-                                      showToast(error.response?.data?.message || t('msg.failedLoadEntityDetails'), 'error');
+                            <td>
+                              <RowActionsMenu
+                                label={t('columns.actions')}
+                                items={[
+                                  {
+                                    id: 'edit',
+                                    label: t('buttons.edit'),
+                                    icon: <Edit2 size={14} />,
+                                    onClick: async () => {
+                                      try {
+                                        const response = await api.get(`/admin/procuring-entities/${entity.id}`);
+                                        setEditingEntity(response.data.procuringEntity);
+                                      } catch (error: any) {
+                                        showToast(error.response?.data?.message || t('msg.failedLoadEntityDetails'), 'error');
+                                      }
                                     }
-                                  }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title={t('adminPortal.editEntityTitle')}
-                                >
-                                  <Edit2 size={14} />
-                                  {t('buttons.edit')}
-                                </button>
-                                {entity.status !== 'approved' && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => reviewEntity(entity.id, 'approve')}
-                                      className="btn-approve flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                    >
-                                      <CheckCircle size={14} />
-                                      {t('buttons.approve')}
-                                    </button>
-                                    {entity.status !== 'rejected' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => reviewEntity(entity.id, 'reject')}
-                                        className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                      >
-                                        <XCircle size={14} />
-                                        {t('buttons.reject')}
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-                                {entity.user?.id && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
+                                  },
+                                  {
+                                    id: 'approve',
+                                    label: t('buttons.approve'),
+                                    icon: <CheckCircle size={14} />,
+                                    tone: 'success',
+                                    hidden: entity.status === 'approved',
+                                    onClick: () => reviewEntity(entity.id, 'approve')
+                                  },
+                                  {
+                                    id: 'reject',
+                                    label: t('buttons.reject'),
+                                    icon: <XCircle size={14} />,
+                                    tone: 'danger',
+                                    hidden: entity.status === 'approved' || entity.status === 'rejected',
+                                    onClick: () => reviewEntity(entity.id, 'reject')
+                                  },
+                                  {
+                                    id: 'features',
+                                    label: t('adminPortal.features'),
+                                    icon: <SlidersHorizontal size={14} />,
+                                    hidden: !entity.user?.id,
+                                    onClick: () =>
                                       setEntitlementsTarget({
                                         userId: entity.user.id!,
                                         label: `${entity.entityName} (${entity.user.email})`
                                       })
-                                    }
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                    title={t('adminPortal.featureControl')}
-                                  >
-                                    <SlidersHorizontal size={14} />
-                                    {t('adminPortal.features')}
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => toggleEntityStatus(entity.id, entity.user?.isActive || false)}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow ${
-                                    entity.user?.isActive
-                                      ? 'btn-reject'
-                                      : 'btn-approve'
-                                  }`}
-                                  title={entity.user?.isActive ? t('adminPortal.deactivateEntityTitle') : t('adminPortal.activateEntityTitle')}
-                                >
-                                  {entity.user?.isActive ? (
-                                    <>
-                                      <PowerOff size={14} />
-                                      {t('buttons.deactivate')}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Power size={14} />
-                                      {t('buttons.activate')}
-                                    </>
-                                  )}
-                                </button>
-                                <button
-                                  onClick={() => setResetPasswordEntity(entity)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title={t('actions.resetPassword')}
-                                >
-                                  <Key size={14} />
-                                  {t('buttons.resetPassword')}
-                                </button>
-                                <button
-                                  onClick={() => setDeleteEntityConfirm(entity)}
-                                  className="btn-delete flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 font-medium text-xs shadow-sm hover:shadow"
-                                  title={t('adminPortal.deleteEntityTitle')}
-                                >
-                                  <Trash2 size={14} />
-                                  {t('common.delete')}
-                                </button>
-                              </div>
+                                  },
+                                  {
+                                    id: 'toggle',
+                                    label: entity.user?.isActive ? t('buttons.deactivate') : t('buttons.activate'),
+                                    icon: entity.user?.isActive ? <PowerOff size={14} /> : <Power size={14} />,
+                                    tone: entity.user?.isActive ? 'danger' : 'success',
+                                    onClick: () => toggleEntityStatus(entity.id, entity.user?.isActive || false)
+                                  },
+                                  {
+                                    id: 'reset',
+                                    label: t('buttons.resetPassword'),
+                                    icon: <Key size={14} />,
+                                    onClick: () => setResetPasswordEntity(entity)
+                                  },
+                                  {
+                                    id: 'delete',
+                                    label: t('common.delete'),
+                                    icon: <Trash2 size={14} />,
+                                    tone: 'danger',
+                                    onClick: () => setDeleteEntityConfirm(entity)
+                                  }
+                                ]}
+                              />
                             </td>
                           </tr>
                             ))}
@@ -2183,17 +2110,17 @@ const EditSupplierModal = ({ supplier, onClose, onSuccess }: { supplier: Supplie
               <label htmlFor="edit-turnover" className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('forms.turnover')}
               </label>
-              <select
+              <BrandSelect
                 id="edit-turnover"
                 value={formData.turnover}
                 onChange={(e) => setFormData({ ...formData, turnover: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 hover:border-gray-400 appearance-none bg-white"
+                searchPlaceholder={t('common.search')}
               >
                 <option value="">{t('commonQuestions.turnoverSelectPlaceholder')}</option>
                 {TURNOVER_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
                 ))}
-              </select>
+              </BrandSelect>
             </div>
           </div>
 

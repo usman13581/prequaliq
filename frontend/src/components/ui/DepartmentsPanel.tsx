@@ -7,6 +7,7 @@ import { useEntitlement } from '../../contexts/EntitlementContext';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../questionnaires/QuestionnaireSlimRow';
 import { useListPagination } from '../../hooks/useListPagination';
 import { ListPagination } from './ListPagination';
+import { BrandSelect } from './BrandSelect';
 
 type Department = {
   id: string;
@@ -223,24 +224,26 @@ export function DepartmentsPanel() {
             onChange={(e) => setInviteEmail(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendInvite()}
           />
-          <select
-            className="input-brand sm:w-32 !py-1.5 !text-sm"
+          <BrandSelect
+            wrapperClassName="sm:w-32"
             value={inviteRole}
             onChange={(e) => setInviteRole(e.target.value as 'member' | 'admin')}
+            searchPlaceholder={t('common.search')}
           >
             <option value="member">{t('departments.roleMember')}</option>
             <option value="admin">{t('departments.roleAdmin')}</option>
-          </select>
-          <select
-            className="input-brand sm:w-40 !py-1.5 !text-sm"
+          </BrandSelect>
+          <BrandSelect
+            wrapperClassName="sm:w-40"
             value={inviteDeptId}
             onChange={(e) => setInviteDeptId(e.target.value)}
+            searchPlaceholder={t('common.search')}
           >
             <option value="">{t('departments.noDepartment')}</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
-          </select>
+          </BrandSelect>
           <button
             type="button"
             onClick={sendInvite}

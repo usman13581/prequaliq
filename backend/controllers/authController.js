@@ -1,7 +1,12 @@
+const crypto = require('crypto');
 const db = require('../models');
 const { hashPassword, comparePassword } = require('../utils/password');
 const { generateToken } = require('../utils/jwt');
 const { ensureDefaultsForUser } = require('../services/entitlementService');
+const { sendPasswordResetLinkEmail } = require('../services/emailService');
+
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const hashResetToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 const register = async (req, res) => {
   try {
@@ -244,28 +249,23 @@ const resetPassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;
 
-    console.log('Reset password request:', { userId, hasCurrentPassword: !!currentPassword, hasNewPassword: !!newPassword });
-
-    // Find user with password (need to include password field for comparison)
     const user = await db.User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Verify current password
     const isMatch = await comparePassword(currentPassword, user.password);
     if (!isMatch) {
-      console.log('Password mismatch');
       return res.status(401).json({ message: 'Current password is incorrect' });
     }
 
-    // Hash new password
     const hashedPassword = await hashPassword(newPassword);
+    await user.update({
+      password: hashedPassword,
+      passwordResetToken: null,
+      passwordResetExpires: null
+    });
 
-    // Update password
-    await user.update({ password: hashedPassword });
-
-    console.log('Password reset successful for user:', userId);
     res.json({ message: 'Password reset successfully' });
   } catch (error) {
     console.error('Reset password error:', error);
@@ -273,4 +273,79 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getProfile, resetPassword, uploadProfilePicture, removeProfilePicture };
+/** Request a password-reset email. Always returns success to avoid email enumeration. */
+const forgotPassword = async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const user = await db.User.findOne({ where: { email } });
+    if (user) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await user.update({
+        passwordResetToken: hashResetToken(rawToken),
+        passwordResetExpires: expires
+      });
+      const resetUrl = `${FRONTEND_URL.replace(/\/$/, '')}/reset-password?token=${rawToken}`;
+      try {
+        await sendPasswordResetLinkEmail(user.email, user.firstName, user.lastName, resetUrl);
+      } catch (mailErr) {
+        console.error('Forgot password email error:', mailErr);
+      }
+    }
+
+    res.json({
+      message: 'If an account exists for that email, we sent a password reset link.'
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Error processing password reset request', error: error.message });
+  }
+};
+
+/** Set a new password using the token from the reset email. */
+const resetPasswordWithToken = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Token and new password are required' });
+    }
+
+    const user = await db.User.findOne({
+      where: {
+        passwordResetToken: hashResetToken(token),
+        passwordResetExpires: { [db.Sequelize.Op.gt]: new Date() }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired reset link. Please request a new one.' });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    await user.update({
+      password: hashedPassword,
+      passwordResetToken: null,
+      passwordResetExpires: null
+    });
+
+    res.json({ message: 'Password updated successfully. You can log in with your new password.' });
+  } catch (error) {
+    console.error('Reset password with token error:', error);
+    res.status(500).json({ message: 'Error resetting password', error: error.message });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  getProfile,
+  resetPassword,
+  forgotPassword,
+  resetPasswordWithToken,
+  uploadProfilePicture,
+  removeProfilePicture
+};

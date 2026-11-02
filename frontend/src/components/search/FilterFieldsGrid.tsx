@@ -1,9 +1,9 @@
-import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useEffect } from 'react';
 import { CpvSearchSelect } from '../cpv/CpvSearchSelect';
 import { NutsSearchSelect } from '../nuts/NutsSearchSelect';
 import { BrandSelect } from '../ui/BrandSelect';
+import { SearchField } from '../ui/SearchField';
 import { useCpvCatalogSearch } from '../../hooks/useCpvCatalogSearch';
 import { useNutsCatalogSearch } from '../../hooks/useNutsCatalogSearch';
 import { filterValueAsString, type FilterFieldDef, type FilterValues } from './filterTypes';
@@ -58,19 +58,11 @@ export function FilterFieldsGrid({ fields, values, onChange, maxColumns = 4 }: P
               <label className="block text-xs font-medium text-muted mb-1.5">
                 {t(field.labelKey || 'common.search')}
               </label>
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-                  size={18}
-                />
-                <input
-                  type="search"
-                  className="w-full min-w-0 pl-11 pr-4 py-3 border border-gray-300 rounded-xl bg-white text-sm sm:text-base text-foreground placeholder:text-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200"
-                  placeholder={t(field.placeholderKey || 'savedSearch.keywordPlaceholder')}
-                  value={str(field.key)}
-                  onChange={(e) => setField(field.key, e.target.value)}
-                />
-              </div>
+              <SearchField
+                placeholder={t(field.placeholderKey || 'savedSearch.keywordPlaceholder')}
+                value={str(field.key)}
+                onChange={(e) => setField(field.key, e.target.value)}
+              />
             </div>
           );
         }

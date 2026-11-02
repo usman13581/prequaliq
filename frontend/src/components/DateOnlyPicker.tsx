@@ -45,7 +45,7 @@ export const DateOnlyPicker: React.FC<DateOnlyPickerProps> = ({
     onChange(`${y}-${m}-${d}`);
   };
 
-  const baseClass = `w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white ${error ? 'border-red-300 bg-red-50' : 'border-gray-300'} ${className}`;
+  const baseClass = `field-control w-full ${error ? 'border-red-300' : ''} ${className}`;
 
   return (
     <DatePicker

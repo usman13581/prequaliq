@@ -6,6 +6,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { useEntitlements } from '../../contexts/EntitlementContext';
 import { useListPagination } from '../../hooks/useListPagination';
 import { ListPagination } from '../ui/ListPagination';
+import { PageHeader } from '../ui/PageHeader';
+import { SlimCheckList, SlimCheckRow } from '../ui/SlimCheckRow';
 
 type AiCatalogItem = { key: string; nameKey?: string; descKey?: string };
 
@@ -68,10 +70,6 @@ export function AiPreferencesPanel() {
     }
   };
 
-  const togglePref = (key: string) => {
-    setPreferences((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   if (loading) {
     return <p className="text-sm text-muted py-4">{t('common.loading')}</p>;
   }
@@ -79,75 +77,65 @@ export function AiPreferencesPanel() {
   const globalMaster = globalFlags['ai.__master__'] !== false;
 
   return (
-    <div className="rounded-2xl border border-border bg-white p-4 sm:p-5 space-y-4">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0">
-          <Sparkles size={20} />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-base font-bold text-foreground">{t('adminPortal.aiUserPrefs')}</h3>
-          <p className="text-sm text-muted mt-0.5">{t('adminPortal.aiUserPrefsHint')}</p>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        icon={<Sparkles size={18} />}
+        title={t('adminPortal.aiUserPrefs')}
+        subtitle={t('adminPortal.aiUserPrefsHint')}
+        action={
+          <button
+            type="button"
+            className="btn-save inline-flex items-center gap-2"
+            disabled={saving}
+            onClick={save}
+          >
+            <Save size={15} />
+            {saving ? t('common.saving') : t('common.save')}
+          </button>
+        }
+      />
 
       {!globalMaster ? (
-        <p className="text-xs text-amber-800 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+        <p className="text-xs text-amber-800 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5">
           {t('adminPortal.aiGloballyDisabled')}
         </p>
       ) : null}
 
-      <label className="flex items-start gap-3 cursor-pointer">
-        <input
-          type="checkbox"
-          className="mt-1"
+      <SlimCheckList>
+        <SlimCheckRow
+          emphasis
           checked={!masterEnabled}
-          onChange={(e) => setMasterEnabled(!e.target.checked)}
+          onChange={(checked) => setMasterEnabled(!checked)}
+          title={t('adminPortal.aiDisableAll')}
         />
-        <span>
-          <span className="block text-sm font-semibold text-foreground">{t('adminPortal.aiDisableAll')}</span>
-        </span>
-      </label>
+      </SlimCheckList>
 
       {catalog.length === 0 ? (
-        <div className="text-center py-8 rounded-xl border-2 border-dashed border-border text-sm text-muted">
+        <div className="text-center py-8 rounded-lg border border-dashed border-border text-sm text-muted">
           {t('common.noResults')}
         </div>
       ) : (
         <>
-          <div className={`space-y-3 ${!masterEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+          <SlimCheckList>
             {pager.paginatedItems.map((item) => {
               const adminOff = adminEntitlements[item.key] === false;
               const globalOff = globalFlags[item.key] === false;
               const locked = adminOff || globalOff || !globalMaster;
               return (
-                <label
+                <SlimCheckRow
                   key={item.key}
-                  className={`flex items-start gap-3 rounded-xl border border-border px-3 py-3 ${
-                    locked ? 'bg-gray-50 opacity-70' : 'bg-white'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={preferences[item.key] !== false}
-                    disabled={locked || !masterEnabled}
-                    onChange={() => togglePref(item.key)}
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-foreground">
-                      {item.nameKey ? t(item.nameKey) : item.key}
-                    </span>
-                    <span className="block text-xs text-muted mt-0.5">
-                      {item.descKey ? t(item.descKey) : ''}
-                    </span>
-                    {locked ? (
-                      <span className="block text-xs text-amber-700 mt-1">{t('adminPortal.aiLockedByAdmin')}</span>
-                    ) : null}
-                  </span>
-                </label>
+                  checked={preferences[item.key] !== false}
+                  disabled={locked || !masterEnabled}
+                  onChange={() =>
+                    setPreferences((prev) => ({ ...prev, [item.key]: !(prev[item.key] !== false) }))
+                  }
+                  title={item.nameKey ? t(item.nameKey) : item.key}
+                  description={item.descKey ? t(item.descKey) : undefined}
+                  hint={locked ? t('adminPortal.aiLockedByAdmin') : undefined}
+                />
               );
             })}
-          </div>
+          </SlimCheckList>
           {pager.showPagination ? (
             <ListPagination
               page={pager.page}
@@ -160,18 +148,6 @@ export function AiPreferencesPanel() {
           ) : null}
         </>
       )}
-
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className="btn-save inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
-          disabled={saving}
-          onClick={save}
-        >
-          <Save size={16} />
-          {saving ? t('common.saving') : t('common.save')}
-        </button>
-      </div>
     </div>
   );
 }

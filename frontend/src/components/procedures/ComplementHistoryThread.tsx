@@ -5,6 +5,7 @@ import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { StatusBadge } from '../questionnaires/QuestionnaireSlimRow';
 import { DateOnlyPicker } from '../DateOnlyPicker';
+import { BrandSelect } from '../ui/BrandSelect';
 
 export type ComplementAttachment = {
   id: string;
@@ -185,10 +186,10 @@ export function ComplementHistoryThread({
       {mode === 'buyer' && onCreateRequest ? (
         <div className="rounded-xl border border-border bg-slate-50/70 p-3 space-y-2">
           <p className="text-sm font-bold text-foreground">{t('procedures.requestComplement')}</p>
-          <select
-            className="input-brand"
+          <BrandSelect
             value={newReq.supplierId}
             disabled={disabled || busy}
+            searchPlaceholder={t('common.search')}
             onChange={(e) => setNewReq({ ...newReq, supplierId: e.target.value })}
           >
             <option value="">{t('procedures.selectSupplier')}</option>
@@ -197,7 +198,7 @@ export function ComplementHistoryThread({
                 {s.companyName}
               </option>
             ))}
-          </select>
+          </BrandSelect>
           <textarea
             className="input-brand"
             rows={3}
