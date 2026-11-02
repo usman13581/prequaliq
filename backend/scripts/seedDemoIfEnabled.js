@@ -60,4 +60,3 @@ console.log(
   '[seedDemoIfEnabled] Skipping demo seed. To wipe & reload on production set SEED_DEMO_DATA=wipe (then remove after seed).'
 );
 process.exit(0);
-}
