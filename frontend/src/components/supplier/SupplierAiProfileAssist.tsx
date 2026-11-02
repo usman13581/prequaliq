@@ -274,13 +274,21 @@ function Root({
     });
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     const toApply: Record<string, string> = { ...selectedFields };
     for (const [field, value] of Object.entries(conflictChoices)) {
       if (value) toApply[field] = value;
     }
-    const cpvIds = [...selectedCpvIds];
-    const nutsIds = [...selectedNutsIds];
+    // Prefer checked boxes; if none checked but suggestions exist, apply all suggestions
+    // (avoids silent skip when selection state races the drawer open).
+    let cpvIds = [...selectedCpvIds].filter(Boolean);
+    let nutsIds = [...selectedNutsIds].filter(Boolean);
+    if (!cpvIds.length && (result?.cpvSuggestions || []).length) {
+      cpvIds = (result?.cpvSuggestions || []).map((c) => c.cpvCodeId).filter(Boolean);
+    }
+    if (!nutsIds.length && (result?.nutsSuggestions || []).length) {
+      nutsIds = (result?.nutsSuggestions || []).map((n) => n.nutsCodeId).filter(Boolean);
+    }
     if (!Object.keys(toApply).length && !cpvIds.length && !nutsIds.length) {
       const hasSuggestions =
         Object.keys(result?.suggestions || {}).length > 0 ||
@@ -295,8 +303,23 @@ function Root({
       return;
     }
     if (Object.keys(toApply).length) onApply(toApply);
-    if (cpvIds.length && onApplyCpv) onApplyCpv(cpvIds);
-    if (nutsIds.length && onApplyNuts) onApplyNuts(nutsIds);
+    try {
+      // Await persistence so a quick "Save profile" cannot race ahead of CPV/NUTS PUTs
+      await Promise.all([
+        cpvIds.length && onApplyCpv ? Promise.resolve(onApplyCpv(cpvIds)) : Promise.resolve(),
+        nutsIds.length && onApplyNuts ? Promise.resolve(onApplyNuts(nutsIds)) : Promise.resolve(),
+      ]);
+    } catch (error: any) {
+      showToast(
+        error?.response?.data?.message ||
+          error?.message ||
+          t('supplierPortal.aiProfileCpvNutsApplyFailed', {
+            defaultValue: 'Profile fields applied, but saving CPV/NUTS failed. Try again.',
+          }),
+        'error'
+      );
+      return;
+    }
     setResult(null);
     setDrawerOpen(false);
     setSelectedFields({});
@@ -306,7 +329,7 @@ function Root({
     showToast(
       cpvIds.length || nutsIds.length
         ? t('supplierPortal.aiProfileAppliedWithCpv', {
-            defaultValue: 'Suggestions applied — CPV/NUTS selected. Review and save.',
+            defaultValue: 'Suggestions applied — CPV/NUTS saved. Review Business scope, then save profile fields.',
           })
         : t('supplierPortal.aiProfileApplied'),
       'success'

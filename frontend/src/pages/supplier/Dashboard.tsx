@@ -535,49 +535,35 @@ const SupplierDashboard = () => {
 
   const handleAiProfileApplyCpv = async (cpvCodeIds: string[]) => {
     if (!cpvCodeIds.length) return;
-    const merged = [...selectedCPVCodes];
-    for (const id of cpvCodeIds) {
-      if (!merged.includes(id)) merged.push(id);
-    }
+    const merged = Array.from(new Set([...(selectedCPVCodes || []), ...cpvCodeIds]));
     setSelectedCPVCodes(merged);
     cpvCatalog.fetchCodes('', merged);
     if (!editingProfile) setEditingProfile(true);
     setActiveProfileTab('scope');
-    try {
-      const res = await api.put('/supplier/cpv-codes', { cpvCodeIds: merged });
-      if (res.data?.supplier) {
-        setProfile(res.data.supplier);
-        setSelectedCPVCodes(res.data.supplier.cpvCodes?.map((c: CPVCode) => c.id) || merged);
-      } else {
-        await fetchProfile();
-      }
-      fetchCompleteness();
-    } catch (error: any) {
-      showToast(error.response?.data?.message || t('msg.failedUpdateCPV'), 'error');
+    const res = await api.put('/supplier/cpv-codes', { cpvCodeIds: merged });
+    if (res.data?.supplier) {
+      setProfile(res.data.supplier);
+      setSelectedCPVCodes(res.data.supplier.cpvCodes?.map((c: CPVCode) => c.id) || merged);
+    } else {
+      await fetchProfile();
     }
+    fetchCompleteness();
   };
 
   const handleAiProfileApplyNuts = async (nutsCodeIds: string[]) => {
     if (!nutsCodeIds.length) return;
-    const merged = [...selectedNUTSCodes];
-    for (const id of nutsCodeIds) {
-      if (!merged.includes(id)) merged.push(id);
-    }
+    const merged = Array.from(new Set([...(selectedNUTSCodes || []), ...nutsCodeIds]));
     setSelectedNUTSCodes(merged);
     if (!editingProfile) setEditingProfile(true);
     setActiveProfileTab('scope');
-    try {
-      const res = await api.put('/supplier/nuts-codes', { nutsCodeIds: merged });
-      if (res.data?.supplier) {
-        setProfile(res.data.supplier);
-        setSelectedNUTSCodes(res.data.supplier.nutsCodes?.map((n: NUTSCode) => n.id) || merged);
-      } else {
-        await fetchProfile();
-      }
-      fetchCompleteness();
-    } catch (error: any) {
-      showToast(error.response?.data?.message || t('msg.failedUpdateNUTS'), 'error');
+    const res = await api.put('/supplier/nuts-codes', { nutsCodeIds: merged });
+    if (res.data?.supplier) {
+      setProfile(res.data.supplier);
+      setSelectedNUTSCodes(res.data.supplier.nutsCodes?.map((n: NUTSCode) => n.id) || merged);
+    } else {
+      await fetchProfile();
     }
+    fetchCompleteness();
   };
 
   // Update profile
