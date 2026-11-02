@@ -14,7 +14,9 @@ const sequelize = new Sequelize(
     host: config.host,
     port: config.port,
     dialect: config.dialect,
-    logging: config.logging
+    logging: config.logging,
+    // Required for Railway public Postgres (proxy) and any production SSL DB
+    ...(config.dialectOptions ? { dialectOptions: config.dialectOptions } : {})
   }
 );
 

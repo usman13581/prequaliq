@@ -13,8 +13,9 @@
  *   cd backend
  *   CONFIRM_PROD_SEED=YES NODE_ENV=production DATABASE_URL='postgresql://…' npm run seed-prod-demo
  */
+// Local .env first, then .env.prod wins (avoids silently seeding the wrong DB)
 require('dotenv').config();
-require('dotenv').config({ path: require('path').join(__dirname, '../.env.prod') });
+require('dotenv').config({ path: require('path').join(__dirname, '../.env.prod'), override: true });
 
 const confirm = String(process.env.CONFIRM_PROD_SEED || '').trim().toUpperCase();
 if (confirm !== 'YES' && confirm !== '1' && confirm !== 'TRUE') {
@@ -31,9 +32,21 @@ Admin (admin@prequaliq.com) and CPV/NUTS catalogs are kept.
   process.exit(1);
 }
 
-process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+// Always production + DATABASE_URL only (ignore stale local DB_USER/DB_PASSWORD)
+process.env.NODE_ENV = 'production';
+delete process.env.DB_USER;
+delete process.env.DB_PASSWORD;
+delete process.env.DB_HOST;
+delete process.env.DB_NAME;
+delete process.env.DB_PORT;
+
+if (!process.env.DATABASE_URL) {
+  console.error('[seed-prod-demo] DATABASE_URL is required (set it in backend/.env.prod)');
+  process.exit(1);
+}
+
 console.log('[seed-prod-demo] NODE_ENV=', process.env.NODE_ENV);
-console.log('[seed-prod-demo] DATABASE_URL=', process.env.DATABASE_URL ? 'Set' : 'Not set');
+console.log('[seed-prod-demo] DATABASE_URL=', 'Set');
 console.log('[seed-prod-demo] Starting destructive wipe + rich demo seed…');
 
 require('./seedRichDemoData');

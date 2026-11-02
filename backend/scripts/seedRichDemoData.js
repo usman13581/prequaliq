@@ -390,6 +390,179 @@ async function run() {
   const activeApprovedBuyers = buyers.filter((b) => b.status === 'approved' && b.isActive);
   const activeApprovedSuppliers = suppliers.filter((s) => s.status === 'approved' && s.isActive);
 
+  console.log(
+    `Core portal users ready: ${buyers.length} buyers, ${suppliers.length} suppliers ` +
+      `(approved+active: ${activeApprovedBuyers.length} / ${activeApprovedSuppliers.length})`
+  );
+
+  // -------- E2E AI kit accounts EARLY (survive if later scenario packs fail / OOM) --------
+  console.log('Seeding E2E AI kit accounts (Maria / Jonas / Anna / Stina)…');
+  let facilityCpv =
+    (await db.CPVCode.findOne({ where: { code: '90920000' } })) ||
+    sharedCpvs.find((c) => /clean|facility|sanitation|9092/i.test(`${c.code} ${c.description}`)) ||
+    sharedCpvs[0];
+
+  const e2eBuyerUser = await db.User.create({
+    email: 'maria.lindqvist@uppsalastad.e2e',
+    password: hashed,
+    firstName: 'Maria',
+    lastName: 'Lindqvist',
+    role: 'procuring_entity',
+    phone: '+46 18 727 00 00',
+    isActive: true
+  });
+  const e2eBuyerEntity = await db.ProcuringEntity.create({
+    userId: e2eBuyerUser.id,
+    entityName: 'Uppsala Stad — Fastighet & Service',
+    address: 'Stationsgatan 12',
+    city: 'Uppsala',
+    country: 'Sweden',
+    phone: '+46 18 727 00 00',
+    status: 'approved',
+    approvedAt: new Date()
+  });
+  await ensureDefaultsForUser(e2eBuyerUser.id);
+
+  const e2eJonasUser = await db.User.create({
+    email: 'jonas.berg@nordicfacility.e2e',
+    password: hashed,
+    firstName: 'Jonas',
+    lastName: 'Berg',
+    role: 'supplier',
+    phone: '+46 18 100 20 30',
+    isActive: true
+  });
+  const e2eJonas = await db.Supplier.create({
+    userId: e2eJonasUser.id,
+    companyName: 'Nordic Facility Services AB',
+    registrationNumber: '556812-3344',
+    taxId: 'SE556812334401',
+    address: 'Kungsgatan 45',
+    city: 'Uppsala',
+    country: 'Sweden',
+    employeeCount: 62,
+    yearEstablished: 2004,
+    turnover: 18500000,
+    insurerName: 'If Skadeförsäkring',
+    insurancePolicyNumber: 'IF-UPP-2026-7781',
+    insuranceCoverageAmount: '15000000',
+    insuranceValidTo: '2027-12-31',
+    qualityManagementSystem:
+      'ISO 9001-aligned QMS. Night and weekend cleaning for municipal buildings. 14 active public-sector contracts in Mälardalen.',
+    status: 'approved',
+    approvedAt: new Date(),
+    profileSubmittedAt: new Date(),
+    profileVersion: 1
+  });
+  await ensureDefaultsForUser(e2eJonasUser.id);
+
+  const e2eAnnaUser = await db.User.create({
+    email: 'anna.holm@malardalenclean.e2e',
+    password: hashed,
+    firstName: 'Anna',
+    lastName: 'Holm',
+    role: 'supplier',
+    phone: '+46 18 200 30 40',
+    isActive: true
+  });
+  const e2eAnna = await db.Supplier.create({
+    userId: e2eAnnaUser.id,
+    companyName: 'Mälardalen Clean Partner AB',
+    registrationNumber: '559041-8821',
+    taxId: 'SE559041882101',
+    address: 'Svarta vägen 8',
+    city: 'Enköping',
+    country: 'Sweden',
+    employeeCount: 28,
+    yearEstablished: 2012,
+    turnover: 7200000,
+    insurerName: 'Länsförsäkringar',
+    insurancePolicyNumber: 'LF-ENK-2026-441',
+    insuranceCoverageAmount: '10000000',
+    insuranceValidTo: '2027-06-30',
+    qualityManagementSystem: 'Daytime municipal cleaning; eco-labelled chemicals available on request.',
+    status: 'approved',
+    approvedAt: new Date(),
+    profileSubmittedAt: new Date(),
+    profileVersion: 1
+  });
+  await ensureDefaultsForUser(e2eAnnaUser.id);
+
+  for (const s of [e2eJonas, e2eAnna]) {
+    await db.SupplierCPV.findOrCreate({
+      where: { supplierId: s.id, cpvCodeId: facilityCpv.id },
+      defaults: { supplierId: s.id, cpvCodeId: facilityCpv.id }
+    });
+  }
+  if (db.NUTSCode && db.SupplierNUTS) {
+    const uppsalaNuts =
+      (await db.NUTSCode.findOne({ where: { code: 'SE121' } })) ||
+      (await db.NUTSCode.findOne({ where: { name: { [Op.iLike]: '%Uppsala%' } } }));
+    if (uppsalaNuts) {
+      for (const s of [e2eJonas, e2eAnna]) {
+        await db.SupplierNUTS.findOrCreate({
+          where: { supplierId: s.id, nutsCodeId: uppsalaNuts.id },
+          defaults: { supplierId: s.id, nutsCodeId: uppsalaNuts.id }
+        });
+      }
+    }
+  }
+
+  const e2eStinaUser = await db.User.create({
+    email: 'stina.bofors@aurorait.e2e',
+    password: hashed,
+    firstName: 'Stina',
+    lastName: 'Bofors',
+    role: 'supplier',
+    phone: '+46 8 555 120 00',
+    isActive: true
+  });
+  const e2eStina = await db.Supplier.create({
+    userId: e2eStinaUser.id,
+    companyName: 'Aurora IT Services AB',
+    registrationNumber: '559401-8821',
+    taxId: 'SE559401882101',
+    address: 'Drottninggatan 12',
+    city: 'Stockholm',
+    country: 'Sweden',
+    website: 'https://www.aurorait.example',
+    employeeCount: 62,
+    yearEstablished: 2012,
+    turnover: 28500000,
+    status: 'approved',
+    approvedAt: new Date(),
+    profileSubmittedAt: new Date(),
+    profileVersion: 1
+  });
+  await ensureDefaultsForUser(e2eStinaUser.id);
+  if (db.UserNotification) {
+    await db.UserNotification.create({
+      userId: e2eStinaUser.id,
+      type: 'profile_approved',
+      title: 'Profile approved',
+      message: 'Your supplier profile is approved. Upload a business PDF to test AI CPV/NUTS.',
+      linkTab: 'profile',
+      isRead: false
+    });
+    await db.UserNotification.create({
+      userId: e2eJonasUser.id,
+      type: 'contract_activity',
+      title: 'Contract message',
+      message: 'Seeded notification — open Contracts to test the message thread.',
+      linkTab: 'contracts',
+      isRead: false
+    });
+    await db.UserNotification.create({
+      userId: e2eBuyerUser.id,
+      type: 'bid_submitted',
+      title: 'New bid received',
+      message: 'Nordic Facility submitted a bid on a demo procedure.',
+      linkTab: 'procedures',
+      isRead: false
+    });
+  }
+  console.log('E2E kit logins ready: maria / jonas / anna / stina (*.e2e)');
+
   // -------- Questionnaires (open ads) per active buyer --------
   console.log('Seeding questionnaires / open ads…');
   const allQuestionnaires = [];
@@ -1209,167 +1382,8 @@ async function run() {
     }
   }
 
-  // -------- E2E AI kit accounts (Maria / Jonas / Anna) + AI award test procedures --------
-  console.log('Seeding E2E AI kit accounts + [AI TEST] award procedures…');
-  let facilityCpv =
-    (await db.CPVCode.findOne({ where: { code: '90920000' } })) ||
-    sharedCpvs.find((c) => /clean|facility|sanitation|9092/i.test(`${c.code} ${c.description}`)) ||
-    sharedCpvs[0];
-
-  const e2eBuyerUser = await db.User.create({
-    email: 'maria.lindqvist@uppsalastad.e2e',
-    password: hashed,
-    firstName: 'Maria',
-    lastName: 'Lindqvist',
-    role: 'procuring_entity',
-    phone: '+46 18 727 00 00',
-    isActive: true
-  });
-  const e2eBuyerEntity = await db.ProcuringEntity.create({
-    userId: e2eBuyerUser.id,
-    entityName: 'Uppsala Stad — Fastighet & Service',
-    address: 'Stationsgatan 12',
-    city: 'Uppsala',
-    country: 'Sweden',
-    phone: '+46 18 727 00 00',
-    status: 'approved',
-    approvedAt: new Date()
-  });
-  await ensureDefaultsForUser(e2eBuyerUser.id);
-
-  const e2eJonasUser = await db.User.create({
-    email: 'jonas.berg@nordicfacility.e2e',
-    password: hashed,
-    firstName: 'Jonas',
-    lastName: 'Berg',
-    role: 'supplier',
-    phone: '+46 18 100 20 30',
-    isActive: true
-  });
-  const e2eJonas = await db.Supplier.create({
-    userId: e2eJonasUser.id,
-    companyName: 'Nordic Facility Services AB',
-    registrationNumber: '556812-3344',
-    taxId: 'SE556812334401',
-    address: 'Kungsgatan 45',
-    city: 'Uppsala',
-    country: 'Sweden',
-    employeeCount: 62,
-    yearEstablished: 2004,
-    turnover: 18500000,
-    insurerName: 'If Skadeförsäkring',
-    insurancePolicyNumber: 'IF-UPP-2026-7781',
-    insuranceCoverageAmount: '15000000',
-    insuranceValidTo: '2027-12-31',
-    qualityManagementSystem:
-      'ISO 9001-aligned QMS. Night and weekend cleaning for municipal buildings. 14 active public-sector contracts in Mälardalen.',
-    status: 'approved',
-    approvedAt: new Date(),
-    profileSubmittedAt: new Date(),
-    profileVersion: 1
-  });
-  await ensureDefaultsForUser(e2eJonasUser.id);
-
-  const e2eAnnaUser = await db.User.create({
-    email: 'anna.holm@malardalenclean.e2e',
-    password: hashed,
-    firstName: 'Anna',
-    lastName: 'Holm',
-    role: 'supplier',
-    phone: '+46 18 200 30 40',
-    isActive: true
-  });
-  const e2eAnna = await db.Supplier.create({
-    userId: e2eAnnaUser.id,
-    companyName: 'Mälardalen Clean Partner AB',
-    registrationNumber: '559041-8821',
-    taxId: 'SE559041882101',
-    address: 'Svarta vägen 8',
-    city: 'Enköping',
-    country: 'Sweden',
-    employeeCount: 28,
-    yearEstablished: 2012,
-    turnover: 7200000,
-    insurerName: 'Länsförsäkringar',
-    insurancePolicyNumber: 'LF-ENK-2026-441',
-    insuranceCoverageAmount: '10000000',
-    insuranceValidTo: '2027-06-30',
-    qualityManagementSystem: 'Daytime municipal cleaning; eco-labelled chemicals available on request.',
-    status: 'approved',
-    approvedAt: new Date(),
-    profileSubmittedAt: new Date(),
-    profileVersion: 1
-  });
-  await ensureDefaultsForUser(e2eAnnaUser.id);
-
-  for (const s of [e2eJonas, e2eAnna]) {
-    await db.SupplierCPV.findOrCreate({
-      where: { supplierId: s.id, cpvCodeId: facilityCpv.id },
-      defaults: { supplierId: s.id, cpvCodeId: facilityCpv.id }
-    });
-  }
-  if (db.NUTSCode && db.SupplierNUTS) {
-    const uppsalaNuts =
-      (await db.NUTSCode.findOne({ where: { code: 'SE121' } })) ||
-      (await db.NUTSCode.findOne({ where: { name: { [Op.iLike]: '%Uppsala%' } } }));
-    if (uppsalaNuts) {
-      for (const s of [e2eJonas, e2eAnna]) {
-        await db.SupplierNUTS.findOrCreate({
-          where: { supplierId: s.id, nutsCodeId: uppsalaNuts.id },
-          defaults: { supplierId: s.id, nutsCodeId: uppsalaNuts.id }
-        });
-      }
-    }
-  }
-
-  // Aurora IT — profile AI CPV/NUTS extraction test (leave CPV/NUTS empty for Apply tests)
-  const e2eStinaUser = await db.User.create({
-    email: 'stina.bofors@aurorait.e2e',
-    password: hashed,
-    firstName: 'Stina',
-    lastName: 'Bofors',
-    role: 'supplier',
-    phone: '+46 8 555 120 00',
-    isActive: true
-  });
-  const e2eStina = await db.Supplier.create({
-    userId: e2eStinaUser.id,
-    companyName: 'Aurora IT Services AB',
-    registrationNumber: '559401-8821',
-    taxId: 'SE559401882101',
-    address: 'Drottninggatan 12',
-    city: 'Stockholm',
-    country: 'Sweden',
-    website: 'https://www.aurorait.example',
-    employeeCount: 62,
-    yearEstablished: 2012,
-    turnover: 28500000,
-    // Intentionally light on insurance/QMS so profile AI can suggest more
-    status: 'approved',
-    approvedAt: new Date(),
-    profileSubmittedAt: new Date(),
-    profileVersion: 1
-  });
-  await ensureDefaultsForUser(e2eStinaUser.id);
-  // Sample in-app notifications for bell / dual-write QA
-  if (db.UserNotification) {
-    await db.UserNotification.create({
-      userId: e2eStinaUser.id,
-      type: 'profile_approved',
-      title: 'Profile approved',
-      message: 'Your supplier profile is approved. Upload a business PDF to test AI CPV/NUTS.',
-      linkTab: 'profile',
-      isRead: false
-    });
-    await db.UserNotification.create({
-      userId: e2eJonasUser.id,
-      type: 'contract_activity',
-      title: 'Contract message',
-      message: 'Seeded notification — open Contracts to test the message thread.',
-      linkTab: 'contracts',
-      isRead: false
-    });
-  }
+  // -------- E2E procedures (accounts already created early) --------
+  console.log('Seeding E2E / [AI TEST] procedures…');
 
   // Maria: one evaluation-ready procedure with unique underlag (for AI award/eval smoke)
   const mariaUnderlag = await createUniqueUnderlag({
@@ -1481,14 +1495,42 @@ async function run() {
     }
   }
 
+  // Hard verify — fail seed if core logins missing (partial wipe must not look like success)
+  const mustExist = [
+    'buyer1@prequaliq.demo',
+    'supplier1@prequaliq.demo',
+    'maria.lindqvist@uppsalastad.e2e',
+    'jonas.berg@nordicfacility.e2e',
+    'anna.holm@malardalenclean.e2e',
+    'stina.bofors@aurorait.e2e'
+  ];
+  const foundUsers = await db.User.findAll({
+    where: { email: { [Op.in]: mustExist } },
+    attributes: ['email', 'role']
+  });
+  const foundEmails = new Set(foundUsers.map((u) => u.email));
+  const missing = mustExist.filter((e) => !foundEmails.has(e));
+  if (missing.length) {
+    throw new Error(`Seed verification failed — missing users: ${missing.join(', ')}`);
+  }
+  const buyerCount = await db.User.count({ where: { role: 'procuring_entity' } });
+  const supplierCount = await db.User.count({ where: { role: 'supplier' } });
+  if (buyerCount < 20 || supplierCount < 12) {
+    throw new Error(
+      `Seed verification failed — expected ~22 buyers + ~15 suppliers, got buyers=${buyerCount} suppliers=${supplierCount}`
+    );
+  }
+
   const summary = {
-    buyers: buyers.length + 1,
+    buyers: buyerCount,
+    buyersDemo: buyers.length,
     buyersApprovedActive: activeApprovedBuyers.length + 1,
     buyersInactive: buyers.filter((b) => !b.isActive).length,
     buyersPending: buyers.filter((b) => b.status === 'pending').length,
     buyersRejected: buyers.filter((b) => b.status === 'rejected').length,
-    suppliers: suppliers.length + 2,
-    suppliersApprovedActive: activeApprovedSuppliers.length + 2,
+    suppliers: supplierCount,
+    suppliersDemo: suppliers.length,
+    suppliersApprovedActive: activeApprovedSuppliers.length + 3,
     questionnaires: allQuestionnaires.length,
     openAds: openAds.length,
     procedures: db.Procedure ? await db.Procedure.count() : 0,
@@ -1500,7 +1542,8 @@ async function run() {
       supplierB: 'anna.holm@malardalenclean.e2e',
       supplierCpvAi: 'stina.bofors@aurorait.e2e',
       cpv: facilityCpv.code
-    }
+    },
+    verifiedLogins: mustExist
   };
 
   console.log('\n✅ Demo seed complete (realistic mix + AI/E2E kit).\n');
