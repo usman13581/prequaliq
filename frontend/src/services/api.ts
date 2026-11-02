@@ -6,13 +6,21 @@ const baseURL = import.meta.env.VITE_API_URL || '/api';
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
-    /** Skip the global processing overlay (polling / background refresh). */
+    /**
+     * Skip the global dots overlay.
+     * Use when the screen already shows its own loader (panel spinner, button busy).
+     */
     silentBusy?: boolean;
+    /**
+     * Force the global dots even for GET (rare — prefer in-page loaders for reads).
+     */
+    forceBusy?: boolean;
   }
 }
 
 type BusyConfig = InternalAxiosRequestConfig & {
   silentBusy?: boolean;
+  forceBusy?: boolean;
   __busyTracked?: boolean;
 };
 
@@ -23,13 +31,30 @@ const api = axios.create({
   },
 });
 
+/**
+ * Unified busy rule:
+ * - Page/panel reads (GET) → in-page spinner only (no global dots)
+ * - Mutations (POST/PUT/PATCH/DELETE) → global dots
+ * - Opt out with silentBusy; opt in on GET with forceBusy
+ */
 function shouldTrackBusy(config?: AxiosRequestConfig | null) {
   if (!config) return false;
   if (config.silentBusy) return false;
+  if (config.forceBusy) return true;
+
   const url = String(config.url || '');
-  // Background / high-frequency endpoints — do not flash the overlay
   if (url.includes('/notifications/preview')) return false;
   if (url.includes('/health')) return false;
+  // AI flows already show AiBusyButton / phase UI in place
+  if (
+    /ai-suggest|ai-understand|ai-suggest-answers|\/ai-extras\/|\/profile\/ai-suggest/.test(url)
+  ) {
+    return false;
+  }
+
+  const method = String(config.method || 'get').toLowerCase();
+  // Reads already use local loading UI (questionnaire open, lists, tabs, …)
+  if (method === 'get' || method === 'head' || method === 'options') return false;
   return true;
 }
 
