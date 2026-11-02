@@ -116,7 +116,7 @@ async function safeDestroy(model) {
 }
 
 async function cleanup() {
-  console.log('Cleaning previous demo / E2E test data…');
+  console.log('Cleaning previous demo / E2E / portal test data…');
   const order = [
     db.ContractAttachment,
     db.ContractMessage,
@@ -138,6 +138,7 @@ async function cleanup() {
     db.Department,
     db.FeatureEntitlement,
     db.UserAiPreference,
+    db.UserNotification,
     db.SupplierNotification,
     db.SupplierProfileSubmission,
     db.SupplierReference,
@@ -153,12 +154,14 @@ async function cleanup() {
   await safeDestroy(db.Supplier);
   await safeDestroy(db.ProcuringEntity);
   await safeDestroy(db.Company);
+  // Remove all buyer/supplier users (keeps admin). Also catches legacy entreprenor* emails.
   await db.User.destroy({
     where: {
       [Op.or]: [
         { role: { [Op.in]: ['supplier', 'procuring_entity'] } },
         { email: { [Op.like]: '%@prequaliq.demo' } },
-        { email: { [Op.like]: '%.e2e' } }
+        { email: { [Op.like]: '%.e2e' } },
+        { email: { [Op.like]: '%@entreprenor%' } }
       ]
     }
   });
@@ -1305,6 +1308,68 @@ async function run() {
       defaults: { supplierId: s.id, cpvCodeId: facilityCpv.id }
     });
   }
+  if (db.NUTSCode && db.SupplierNUTS) {
+    const uppsalaNuts =
+      (await db.NUTSCode.findOne({ where: { code: 'SE121' } })) ||
+      (await db.NUTSCode.findOne({ where: { name: { [Op.iLike]: '%Uppsala%' } } }));
+    if (uppsalaNuts) {
+      for (const s of [e2eJonas, e2eAnna]) {
+        await db.SupplierNUTS.findOrCreate({
+          where: { supplierId: s.id, nutsCodeId: uppsalaNuts.id },
+          defaults: { supplierId: s.id, nutsCodeId: uppsalaNuts.id }
+        });
+      }
+    }
+  }
+
+  // Aurora IT — profile AI CPV/NUTS extraction test (leave CPV/NUTS empty for Apply tests)
+  const e2eStinaUser = await db.User.create({
+    email: 'stina.bofors@aurorait.e2e',
+    password: hashed,
+    firstName: 'Stina',
+    lastName: 'Bofors',
+    role: 'supplier',
+    phone: '+46 8 555 120 00',
+    isActive: true
+  });
+  const e2eStina = await db.Supplier.create({
+    userId: e2eStinaUser.id,
+    companyName: 'Aurora IT Services AB',
+    registrationNumber: '559401-8821',
+    taxId: 'SE559401882101',
+    address: 'Drottninggatan 12',
+    city: 'Stockholm',
+    country: 'Sweden',
+    website: 'https://www.aurorait.example',
+    employeeCount: 62,
+    yearEstablished: 2012,
+    turnover: 28500000,
+    // Intentionally light on insurance/QMS so profile AI can suggest more
+    status: 'approved',
+    approvedAt: new Date(),
+    profileSubmittedAt: new Date(),
+    profileVersion: 1
+  });
+  await ensureDefaultsForUser(e2eStinaUser.id);
+  // Sample in-app notifications for bell / dual-write QA
+  if (db.UserNotification) {
+    await db.UserNotification.create({
+      userId: e2eStinaUser.id,
+      type: 'profile_approved',
+      title: 'Profile approved',
+      message: 'Your supplier profile is approved. Upload a business PDF to test AI CPV/NUTS.',
+      linkTab: 'profile',
+      isRead: false
+    });
+    await db.UserNotification.create({
+      userId: e2eJonasUser.id,
+      type: 'contract_activity',
+      title: 'Contract message',
+      message: 'Seeded notification — open Contracts to test the message thread.',
+      linkTab: 'contracts',
+      isRead: false
+    });
+  }
 
   // Maria: one evaluation-ready procedure with unique underlag (for AI award/eval smoke)
   const mariaUnderlag = await createUniqueUnderlag({
@@ -1433,6 +1498,7 @@ async function run() {
       buyer: 'maria.lindqvist@uppsalastad.e2e',
       supplierA: 'jonas.berg@nordicfacility.e2e',
       supplierB: 'anna.holm@malardalenclean.e2e',
+      supplierCpvAi: 'stina.bofors@aurorait.e2e',
       cpv: facilityCpv.code
     }
   };
@@ -1448,8 +1514,9 @@ async function run() {
   console.log('Password (all demo / E2E): Password123!');
   console.log('\nE2E AI kit:');
   console.log('  maria.lindqvist@uppsalastad.e2e  → buyer (Uppsala) + evaluation procedure ready for award AI');
-  console.log('  jonas.berg@nordicfacility.e2e    → Nordic Facility Services AB');
+  console.log('  jonas.berg@nordicfacility.e2e    → Nordic Facility Services AB (cleaning CPV + NUTS)');
   console.log('  anna.holm@malardalenclean.e2e    → Mälardalen Clean Partner AB');
+  console.log('  stina.bofors@aurorait.e2e        → Aurora IT (no CPV/NUTS yet — profile AI PDF test)');
   console.log('\nKey smoke logins:');
   console.log('  buyer1@prequaliq.demo     → SCENARIO A–I (unique underlags) + [AI TEST] award procedures');
   console.log('  buyer2@prequaliq.demo     → [LIFECYCLE] eval/award/complements + [SEALED]');
@@ -1465,6 +1532,7 @@ async function run() {
   console.log('\nAlso: [LIFECYCLE] on buyer2 (unsealed, scored, complement open)');
   console.log('      [SEALED] on buyer2 (award/complements locked)');
   console.log('      Each procedure has a unique questionnaire (no shared underlag).');
+  console.log('      History tab = view-only for awarded/closed tenders.');
 
   await db.sequelize.close();
   process.exit(0);
