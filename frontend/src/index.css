@@ -835,7 +835,7 @@ input.field-bare:focus-visible,
   @apply max-w-md w-full bg-card/95 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/60 relative z-10;
 }
 
-/* Global processing overlay — blocks interaction while API work runs */
+/* Global busy overlay — midsize blinking dots, no text */
 .global-busy-overlay {
   position: fixed;
   inset: 0;
@@ -843,55 +843,50 @@ input.field-bare:focus-visible,
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(11, 18, 32, 0.28);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(11, 18, 32, 0.22);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
   animation: globalBusyIn 160ms ease-out both;
   cursor: wait;
 }
-.global-busy-card {
+.global-busy-dots {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  min-width: 10.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 10px;
-  border: 1px solid var(--border-strong);
-  background: var(--card);
-  box-shadow:
-    0 12px 32px rgba(15, 39, 68, 0.16),
-    0 2px 8px rgba(15, 39, 68, 0.08);
-  font-family: var(--font-app);
+  gap: 0.55rem;
 }
-.global-busy-spinner {
-  color: var(--accent);
-  animation: globalBusySpin 0.75s linear infinite;
-  flex-shrink: 0;
+.global-busy-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.25;
+  animation: globalBusyBlink 1.05s ease-in-out infinite;
 }
-.global-busy-label {
-  margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--foreground);
-  letter-spacing: -0.01em;
-}
+.global-busy-dot:nth-child(1) { animation-delay: 0ms; }
+.global-busy-dot:nth-child(2) { animation-delay: 140ms; }
+.global-busy-dot:nth-child(3) { animation-delay: 280ms; }
+.global-busy-dot:nth-child(4) { animation-delay: 420ms; }
 @keyframes globalBusyIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-@keyframes globalBusySpin {
-  to {
-    transform: rotate(360deg);
+@keyframes globalBusyBlink {
+  0%, 80%, 100% {
+    opacity: 0.22;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.08);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .global-busy-overlay,
-  .global-busy-spinner {
+  .global-busy-dot {
     animation: none !important;
+  }
+  .global-busy-dot {
+    opacity: 0.7;
   }
 }
 

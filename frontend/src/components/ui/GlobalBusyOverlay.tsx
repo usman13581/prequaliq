@@ -1,18 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { subscribeGlobalBusy } from '../../lib/globalBusy';
 
 const SHOW_DELAY_MS = 160;
 const MIN_VISIBLE_MS = 280;
 
 /**
- * Full-screen processing layer while API requests (or other tracked work) are in flight.
- * Delayed slightly so fast calls do not flash.
+ * Full-screen busy layer while API work runs — midsize blinking dots, no label text.
  */
 export function GlobalBusyOverlay() {
-  const { t } = useTranslation();
   const [pending, setPending] = useState(0);
   const [visible, setVisible] = useState(false);
   const shownAtRef = useRef(0);
@@ -48,18 +44,12 @@ export function GlobalBusyOverlay() {
   if (!visible || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div
-      className="global-busy-overlay"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      aria-label={t('common.processing', { defaultValue: 'Processing…' })}
-    >
-      <div className="global-busy-card">
-        <Loader2 className="global-busy-spinner" size={22} aria-hidden />
-        <p className="global-busy-label">
-          {t('common.processing', { defaultValue: 'Processing…' })}
-        </p>
+    <div className="global-busy-overlay" role="status" aria-live="polite" aria-busy="true">
+      <div className="global-busy-dots" aria-hidden>
+        <span className="global-busy-dot" />
+        <span className="global-busy-dot" />
+        <span className="global-busy-dot" />
+        <span className="global-busy-dot" />
       </div>
     </div>,
     document.body
