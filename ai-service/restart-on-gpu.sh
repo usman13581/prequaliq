@@ -10,7 +10,7 @@ if [ ! -f .env ]; then
   cat > .env <<EOF
 AI_API_KEY=${KEY}
 OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=qwen2.5:14b
 API_PORT=${PORT}
 EOF
   echo ""

@@ -31,7 +31,7 @@ load_dotenv()
 
 API_KEY = os.getenv("AI_API_KEY", "")
 OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:14b")
 
 app = FastAPI(
     title="PrequaliQ AI Service",
@@ -61,6 +61,7 @@ ENDPOINTS_CATALOG = [
     {"method": "POST", "path": "/generate/evaluation", "auth": True, "description": "Score submitted bids from questionnaire answers"},
     {"method": "POST", "path": "/generate/award-memo", "auth": True, "description": "Draft award decision memo from evaluation scores"},
     {"method": "POST", "path": "/generate/announcement", "auth": True, "description": "Draft public procedure announcement text"},
+    {"method": "POST", "path": "/chat", "auth": True, "description": "Multi-turn chat for Enterprise Hub. Does not write business data."},
 ]
 
 
@@ -249,6 +250,7 @@ async def call_ollama(system_prompt: str, user_text: str, language: str, *, user
             {"role": "user", "content": hint},
         ],
         "stream": False,
+        "keep_alive": -1,
         "options": {"temperature": 0.1},
     }
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -1171,3 +1173,62 @@ async def generate_questionnaire_answers(
         )
 
     return QuestionnaireAnswersResponse(answers=out, raw=parsed)
+
+
+class ChatRequest(BaseModel):
+    messages: list[dict[str, Any]] = Field(..., min_length=1, max_length=40)
+    tools: Optional[list[dict[str, Any]]] = Field(default=None, max_length=16)
+
+
+_CHAT_ROLES = {"system", "user", "assistant", "tool"}
+
+
+def _chat_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    cleaned: list[dict[str, Any]] = []
+    for message in messages:
+        role = str(message.get("role") or "")
+        if role not in _CHAT_ROLES:
+            raise HTTPException(status_code=400, detail="Unsupported chat role")
+        content = message.get("content")
+        text = content if isinstance(content, str) else ""
+        item: dict[str, Any] = {"role": role, "content": text[:8000]}
+        tool_calls = message.get("tool_calls")
+        if isinstance(tool_calls, list) and tool_calls:
+            item["tool_calls"] = tool_calls[:8]
+        name = message.get("name")
+        if isinstance(name, str) and name:
+            item["name"] = name[:80]
+        tool_call_id = message.get("tool_call_id")
+        if isinstance(tool_call_id, str) and tool_call_id:
+            item["tool_call_id"] = tool_call_id[:80]
+        cleaned.append(item)
+    return cleaned
+
+
+@app.post("/chat")
+async def chat(
+    body: ChatRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """Enterprise Hub assistant. Returns the model message only — callers apply their own permissions."""
+    verify_api_key(x_api_key)
+    payload: dict[str, Any] = {
+        "model": OLLAMA_MODEL,
+        "messages": _chat_messages(body.messages),
+        "stream": False,
+        "keep_alive": -1,
+        "options": {"temperature": 0.2},
+    }
+    if body.tools:
+        payload["tools"] = body.tools
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(f"{OLLAMA_BASE}/api/chat", json=payload)
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Ollama unreachable: {exc}") from exc
+    message = data.get("message") if isinstance(data, dict) else None
+    if not isinstance(message, dict):
+        raise HTTPException(status_code=502, detail="Empty response from Ollama")
+    return {"model": OLLAMA_MODEL, "message": message}

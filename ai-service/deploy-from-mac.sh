@@ -65,7 +65,7 @@ ssh "${SSH_OPTS[@]}" "${REMOTE}" "cd ~/${REMOTE_DIR} && \
     grep -q '^API_PORT=' .env && sed -i \"s/^API_PORT=.*/API_PORT=${AI_API_PORT}/\" .env || echo \"API_PORT=${AI_API_PORT}\" >> .env; \
   else \
     KEY=\$(openssl rand -hex 24); \
-    printf 'AI_API_KEY=%s\nOLLAMA_BASE_URL=http://127.0.0.1:11434\nOLLAMA_MODEL=qwen2.5:7b\nAPI_PORT=%s\n' \"\$KEY\" '${AI_API_PORT}' > .env; \
+    printf 'AI_API_KEY=%s\nOLLAMA_BASE_URL=http://127.0.0.1:11434\nOLLAMA_MODEL=qwen2.5:14b\nAPI_PORT=%s\n' \"\$KEY\" '${AI_API_PORT}' > .env; \
     echo 'CREATED .env — save AI_API_KEY from GPU .env into backend/Railway'; \
   fi && \
   chmod +x restart-on-gpu.sh setup-on-gpu.sh && ./restart-on-gpu.sh"
