@@ -352,12 +352,12 @@ const updateContract = async (req, res) => {
       if (!updates.title) return res.status(400).json({ message: 'Title is required' });
     }
     // Terms are fixed once the contract is active.
-    if (isDraft) {
-      ['startDate'].forEach((k) => {
-        if (req.body[k] !== undefined) updates[k] = req.body[k] || null;
-      });
-      if (req.body.status === 'active') updates.status = 'active';
+    // The start date can be corrected until the supplier has reported work: a contract created
+    // by an award starts on the award day, which is rarely the day the work begins.
+    if ((isDraft || contract.deliveryStatus === 'none') && req.body.startDate !== undefined) {
+      updates.startDate = req.body.startDate || null;
     }
+    if (isDraft && req.body.status === 'active') updates.status = 'active';
     // The value is fixed once set; an award-created contract starts active without one.
     if (req.body.valueAmount !== undefined && (isDraft || contract.valueAmount == null)) {
       updates.valueAmount = req.body.valueAmount === '' ? null : req.body.valueAmount;

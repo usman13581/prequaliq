@@ -11,6 +11,7 @@ import { SlideOver } from '../ui/SlideOver';
 import { ContractThread, type ContractThreadMessage } from '../contracts/ContractThread';
 import { DynamicFilterBar } from '../search/DynamicFilterBar';
 import { StatusPills } from '../ui/StatusPills';
+import { useOpenRecord } from '../../lib/openRecord';
 import { emptyFilters, filterValueAsString, type FilterFieldDef, type FilterValues } from '../search/filterTypes';
 
 function contractStatusTone(status: string): 'green' | 'yellow' | 'red' | 'gray' | 'blue' {
@@ -112,6 +113,12 @@ export function SupplierContractsPanel() {
     setDetail(null);
     loadDetail(c.id);
   };
+
+  // Opened from the Home screen: go straight to that contract once the list is loaded.
+  useOpenRecord('supplierContract', enabled && !loading, (id) => {
+    const match = contracts.find((c) => c.id === id);
+    if (match) openContract(match);
+  });
 
   const load = async () => {
     try {

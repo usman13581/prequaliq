@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { procedureStatusLabelKey } from '../../utils/procedureStatus';
+import { requestOpenRecord } from '../../lib/openRecord';
 import { StatusBadge } from '../questionnaires/QuestionnaireSlimRow';
 import {
   DeadlinesPanel, EmptyRow, HomeHeader, HomePanel, HomeRow, HomeSkeleton, KpiTile, PanelLink, TodoPanel, formatDay,
@@ -102,6 +103,13 @@ export function ProcuringEntityHomeTab({
   const { counts } = data;
   const approved = data.status === 'approved';
 
+  // Each task opens its record on the tab where the work is done.
+  const TODO_TAB: Record<string, string> = { qa_unanswered: 'qa', evaluate: 'eval', award: 'award', unseal: 'eval', publish: 'plan' };
+  const openTodo = (item: HomeTodo) => {
+    if (item.procedureId) requestOpenRecord('procedure', item.procedureId, TODO_TAB[item.type]);
+    else if (item.contractId) requestOpenRecord('contract', item.contractId);
+  };
+
   return (
     <div className="space-y-3">
       <HomeHeader
@@ -145,7 +153,10 @@ export function ProcuringEntityHomeTab({
               data.procedures.slice(0, 5).map((p) => (
                 <HomeRow
                   key={p.id}
-                  onClick={() => onNavigate('procedures')}
+                  onClick={() => {
+                    requestOpenRecord('procedure', p.id);
+                    onNavigate('procedures');
+                  }}
                   title={p.title}
                   meta={[
                     p.reference,
@@ -172,7 +183,10 @@ export function ProcuringEntityHomeTab({
               data.contracts.slice(0, 3).map((c) => (
                 <HomeRow
                   key={c.id}
-                  onClick={() => onNavigate('contracts')}
+                  onClick={() => {
+                    requestOpenRecord('contract', c.id);
+                    onNavigate('contracts');
+                  }}
                   title={c.title}
                   meta={[c.reference, c.supplier, c.endDate ? t('home.endsOn', { date: formatDay(c.endDate) }) : null].filter(Boolean).join(' · ')}
                   right={
@@ -187,7 +201,7 @@ export function ProcuringEntityHomeTab({
         </div>
 
         <div className="lg:col-span-2 space-y-3 min-w-0">
-          <TodoPanel todos={data.todo} total={data.todoTotal} onNavigate={onNavigate} limit={4} />
+          <TodoPanel todos={data.todo} total={data.todoTotal} onNavigate={onNavigate} onOpen={openTodo} limit={4} />
           <DeadlinesPanel deadlines={data.deadlines} onNavigate={onNavigate} limit={3} />
         </div>
       </div>

@@ -14,6 +14,7 @@ import { AdminStatCard, AdminStatsGrid } from '../admin/AdminStatCards';
 import { ContractThread, type ContractThreadMessage } from '../contracts/ContractThread';
 import { SearchField } from '../ui/SearchField';
 import { StatusPills } from '../ui/StatusPills';
+import { useOpenRecord } from '../../lib/openRecord';
 
 function contractStatusTone(status: string): 'green' | 'yellow' | 'red' | 'gray' | 'blue' {
   if (status === 'active') return 'green';
@@ -219,6 +220,12 @@ export function ContractsPanel() {
     });
   };
 
+  // Opened from the Home screen: go straight to that contract once the list is loaded.
+  useOpenRecord('contract', enabled && contracts.length > 0, (id) => {
+    const match = contracts.find((c) => c.id === id);
+    if (match) openEdit(match);
+  });
+
   const create = async () => {
     if (!form.title.trim()) return;
     try {
@@ -252,6 +259,8 @@ export function ContractsPanel() {
   const isDraft = current?.status === 'draft';
   // A contract created by an award starts active with no value: the value can be filled in once.
   const canSetValue = isDraft || current?.valueAmount == null || current?.valueAmount === '';
+  // The start date can be corrected until the supplier has reported work.
+  const canSetStart = isDraft || (current?.deliveryStatus ?? 'none') === 'none';
 
   const saveEdit = async (extra?: { status: 'active' }) => {
     if (!editing || !current) return;
@@ -267,7 +276,7 @@ export function ContractsPanel() {
         endDate: editForm.endDate || null,
         notes: editForm.notes || null
       };
-      if (isDraft) payload.startDate = editForm.startDate || null;
+      if (canSetStart) payload.startDate = editForm.startDate || null;
       if (canSetValue) payload.valueAmount = editForm.valueAmount === '' ? null : Number(editForm.valueAmount);
       if (!current.contractNumber && editForm.contractNumber) payload.contractNumber = editForm.contractNumber;
       if (!current.supplier?.id && !current.supplierId && editForm.supplierId) payload.supplierId = editForm.supplierId;
@@ -686,7 +695,7 @@ export function ContractsPanel() {
                   },
                   ...(!isDraft
                     ? [
-                        { label: t('contracts.startDate'), value: current.startDate },
+                        ...(canSetStart ? [] : [{ label: t('contracts.startDate'), value: current.startDate }]),
                         {
                           label: t('contracts.value'),
                           value: current.valueAmount != null && current.valueAmount !== ''
@@ -736,7 +745,7 @@ export function ContractsPanel() {
                       <input className="input-brand" type="number" min={0} value={editForm.valueAmount} onChange={(e) => setEditForm({ ...editForm, valueAmount: e.target.value })} />
                     </div>
                   ) : null}
-                  {isDraft ? (
+                  {canSetStart ? (
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.startDate')}</label>
                       <DateOnlyPicker className="input-brand w-full" value={editForm.startDate} onChange={(startDate) => setEditForm({ ...editForm, startDate })} />

@@ -12,6 +12,8 @@ export type HomeTodo = {
   reference?: string | null;
   count?: number;
   date?: string | null;
+  procedureId?: string;
+  contractId?: string;
 };
 
 export type HomeDeadline = { kind: string; date: string; title: string; reference?: string | null; tab: string };
@@ -155,11 +157,14 @@ export function TodoPanel({
   todos,
   total,
   onNavigate,
+  onOpen,
   limit = 5
 }: {
   todos: HomeTodo[];
   total: number;
   onNavigate: (tab: string) => void;
+  /** Called before the tab switch, so the target screen can open the record the task is about. */
+  onOpen?: (item: HomeTodo) => void;
   limit?: number;
 }) {
   const { t } = useTranslation();
@@ -184,7 +189,10 @@ export function TodoPanel({
           {shown.map((item, i) => (
             <HomeRow
               key={`${item.type}-${i}`}
-              onClick={() => onNavigate(item.tab)}
+              onClick={() => {
+                onOpen?.(item);
+                onNavigate(item.tab);
+              }}
               title={t(`home.todo.${item.type}`, { count: item.count ?? 0, date: formatDay(item.date) })}
               meta={item.title ? [item.reference, item.title].filter(Boolean).join(' · ') : undefined}
               right={<ChevronRight size={16} className="text-muted" aria-hidden />}
