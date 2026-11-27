@@ -4,6 +4,8 @@ module.exports = (sequelize, DataTypes) => {
     contractId: { type: DataTypes.UUID, allowNull: false },
     senderUserId: { type: DataTypes.UUID, allowNull: false },
     senderRole: { type: DataTypes.ENUM('procuring_entity', 'supplier'), allowNull: false },
+    // 'message' is ordinary chat; 'termination' is the system entry written when the buyer ends the contract.
+    kind: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'message' },
     body: { type: DataTypes.TEXT, allowNull: false }
   }, { tableName: 'contract_messages', timestamps: true });
 

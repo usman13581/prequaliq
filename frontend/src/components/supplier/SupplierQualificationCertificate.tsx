@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { Award, Download, Printer } from 'lucide-react';
+import { Download, Printer } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -111,39 +111,26 @@ export function SupplierQualificationCertificate({
   };
 
   return (
-    <div className="bg-gradient-to-r from-primary-50 to-accent-subtle rounded-2xl p-6 border border-primary-100">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Award className="text-primary-700 shrink-0" size={24} />
-          <div>
-            <h3 className="font-bold text-gray-900">{t('supplierPortal.certificateTitle')}</h3>
-            <p className="text-sm text-muted mt-1">{companyName}</p>
-            <p className="text-sm text-muted mt-1">
-              {t('supplierPortal.validUntil')}: {new Date(qualificationExpiresAt).toLocaleDateString()}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={loading}
-            onClick={handlePrint}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-white hover:bg-surface text-sm font-medium"
-          >
-            <Printer size={16} />
-            {t('supplierPortal.printCertificate')}
-          </button>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={handleDownload}
-            className="btn-save inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
-          >
-            <Download size={16} />
-            {t('supplierPortal.downloadCertificate')}
-          </button>
-        </div>
-      </div>
+    // Shown in the Home header: the two certificate actions only; validity is on the Qualification tile.
+    <div className="flex flex-wrap gap-2 shrink-0">
+      <button
+        type="button"
+        disabled={loading}
+        onClick={handlePrint}
+        className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-border bg-white hover:bg-surface text-xs font-semibold"
+      >
+        <Printer size={16} />
+        {t('supplierPortal.printCertificate')}
+      </button>
+      <button
+        type="button"
+        disabled={loading}
+        onClick={handleDownload}
+        className="btn-save inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold"
+      >
+        <Download size={16} />
+        {t('supplierPortal.downloadCertificate')}
+      </button>
     </div>
   );
 }

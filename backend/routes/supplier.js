@@ -2,10 +2,12 @@ const express = require('express');
 const router = express.Router();
 const supplierController = require('../controllers/supplierController');
 const { authenticate, authorize } = require('../middleware/auth');
+const homeController = require('../controllers/homeController');
 
 router.use(authenticate);
 router.use(authorize('supplier'));
 
+router.get('/home', homeController.supplierHome);
 router.get('/dashboard', supplierController.getDashboard);
 router.get('/profile', supplierController.getProfile);
 router.put('/profile', supplierController.updateProfile);

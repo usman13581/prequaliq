@@ -5,7 +5,6 @@ const aiExtrasController = require('../controllers/aiExtrasController');
 
 router.use(authenticate);
 
-router.get('/completeness', authorize('supplier'), aiExtrasController.completenessCheck);
 router.get('/qualification-risk/:supplierId', authorize('procuring_entity', 'admin'), aiExtrasController.qualificationRisk);
 router.get('/evaluation/:procedureId', authorize('procuring_entity'), aiExtrasController.evaluationCopilot);
 router.post('/qa-draft', authorize('procuring_entity'), aiExtrasController.qaDraftReply);

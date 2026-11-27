@@ -1,8 +1,12 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Briefcase, FileCheck, ScrollText, ShieldCheck } from 'lucide-react';
+import api from '../../services/api';
+import { StatusBadge } from '../questionnaires/QuestionnaireSlimRow';
 import {
-  CheckCircle, AlertTriangle, FileText, Shield, Clock, ArrowRight
-} from 'lucide-react';
-import { translateCompletenessBlocker, translateNextActionLabel } from '../../lib/supplierCompletenessI18n';
+  DeadlinesPanel, EmptyRow, HomeHeader, HomePanel, HomeRow, HomeSkeleton, KpiTile, PanelLink, TodoPanel, formatDay,
+  type HomeDeadline, type HomeTodo
+} from '../home/HomeParts';
 import { SupplierQualificationCertificate } from './SupplierQualificationCertificate';
 
 type DashboardData = {
@@ -25,6 +29,42 @@ type DashboardData = {
   companyName?: string;
 };
 
+type SupplierHomeData = {
+  counts: { openTenders: number; invited: number; bidsDraft: number; bidsSubmitted: number; contractsActive: number };
+  todo: HomeTodo[];
+  todoTotal: number;
+  tenders: Array<{
+    id: string;
+    title: string;
+    reference?: string | null;
+    buyer?: string | null;
+    bidDeadline?: string | null;
+    invited: boolean;
+    bid: 'none' | 'draft' | 'submitted';
+    espd: boolean;
+  }>;
+  contracts: Array<{
+    id: string;
+    title: string;
+    reference?: string | null;
+    buyer?: string | null;
+    endDate?: string | null;
+    deliveryStatus: string;
+  }>;
+  deadlines: HomeDeadline[];
+};
+
+const STATUS_TONE: Record<string, 'green' | 'yellow' | 'red' | 'orange'> = {
+  approved: 'green',
+  pending: 'yellow',
+  rejected: 'red',
+  requalification_required: 'orange'
+};
+
+/**
+ * Supplier Home: what needs the supplier now (profile, complements, bids, deliveries), the tenders open
+ * for bids, the contracts in progress and the next dates. Sized to fit a laptop screen without scrolling.
+ */
 export function SupplierOverviewTab({
   data,
   loading,
@@ -35,151 +75,149 @@ export function SupplierOverviewTab({
   onNavigate: (tab: string) => void;
 }) {
   const { t } = useTranslation();
+  const [home, setHome] = useState<SupplierHomeData | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  if (loading || !data) {
-    return (
-      <div className="text-center py-16">
-        <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto" />
-        <p className="mt-6 text-gray-600">{t('common.loading')}</p>
-      </div>
-    );
+  useEffect(() => {
+    let alive = true;
+    api
+      .get('/supplier/home')
+      .then((res) => { if (alive) setHome(res.data); })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, []);
+
+  if (failed) return <EmptyRow>{t('home.loadFailed')}</EmptyRow>;
+  if (loading || !data || !home) return <HomeSkeleton />;
+
+  const approved = data.status === 'approved';
+  const docs = data.completeness.documents;
+  const statusLabel =
+    data.status === 'requalification_required' ? t('supplierPortal.requalificationTitle') : t(`common.${data.status}`);
+
+  // Profile matters come first: without an approved profile no tender can be answered.
+  const profileTodos: HomeTodo[] = [];
+  if (data.status === 'rejected') profileTodos.push({ type: 'profile_rejected', tab: 'profile' });
+  else if (data.status === 'requalification_required') profileTodos.push({ type: 'profile_requalify', tab: 'profile' });
+  else if (data.status === 'pending' && !data.qualification.profileSubmittedAt) {
+    profileTodos.push({ type: data.completeness.readyToSubmit ? 'profile_submit' : 'profile_complete', tab: 'profile', count: data.completeness.percent });
   }
+  if (docs.expiredCount > 0) profileTodos.push({ type: 'docs_expired', tab: 'profile', count: docs.expiredCount });
+  if (docs.expiringCount > 0) profileTodos.push({ type: 'docs_expiring', tab: 'profile', count: docs.expiringCount });
+  const todos = [...profileTodos, ...home.todo];
+  const todoTotal = profileTodos.length + home.todoTotal;
 
-  const statusColors: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    approved: 'bg-green-100 text-green-800',
-    rejected: 'bg-red-100 text-red-800',
-    requalification_required: 'bg-orange-100 text-orange-800'
-  };
-
-  const statusLabel = data.status === 'requalification_required'
-    ? t('supplierPortal.requalificationTitle')
-    : t(`common.${data.status}`);
-
-  const nextLabel = translateNextActionLabel(t, data.nextAction.labelKey, data.nextAction.label);
-  const hasAction = Boolean(data.nextAction.tab);
+  const { counts } = home;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-bold text-gray-900">{t('supplierPortal.overviewTitle')}</h2>
-        <p className="text-sm text-muted mt-1">{t('supplierPortal.overviewSubtitle')}</p>
-      </div>
-
-      {data.status === 'rejected' && data.qualification.rejectionReason && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-          <p className="font-semibold text-red-800">{t('supplierPortal.rejectionTitle')}</p>
-          <p className="text-sm text-red-700 mt-1">{data.qualification.rejectionReason}</p>
-        </div>
-      )}
-
-      {data.status === 'requalification_required' && (
-        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
-          <p className="font-semibold text-orange-800">{t('supplierPortal.requalificationTitle')}</p>
-          <p className="text-sm text-orange-700 mt-1">
-            {t('supplierPortal.requalificationHint', {
-              date: data.qualification.qualificationExpiresAt
-                ? new Date(data.qualification.qualificationExpiresAt).toLocaleDateString()
-                : '—'
-            })}
-          </p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 border border-border shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted">{t('supplierPortal.qualificationStatus')}</span>
-            <Shield className="text-primary-600" size={20} />
-          </div>
-          <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${statusColors[data.status] || 'bg-gray-100 text-gray-800'}`}>
-            {statusLabel}
-          </span>
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 border border-border shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted">{t('supplierPortal.profileCompleteness')}</span>
-            <CheckCircle className="text-accent" size={20} />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{data.completeness.percent}%</p>
-          <div className="mt-2 h-2 bg-surface rounded-full overflow-hidden">
-            <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${data.completeness.percent}%` }} />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 border border-border shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted">{t('supplierPortal.openQuestionnaires')}</span>
-            <FileText className="text-primary-600" size={20} />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{data.openQuestionnaires}</p>
-          {data.nearestDeadline && (
-            <p className="text-xs text-muted mt-2 flex items-center gap-1">
-              <Clock size={12} />
-              {t('supplierPortal.nearestDeadline')}: {new Date(data.nearestDeadline).toLocaleDateString()}
-            </p>
-          )}
-        </div>
-
-        <div className="bg-white rounded-2xl p-5 border border-border shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted">{t('supplierPortal.documents')}</span>
-            <AlertTriangle className="text-amber-600" size={20} />
-          </div>
-          <p className="text-sm text-gray-700">
-            {data.completeness.documents.missingCount} {t('supplierPortal.missing')}
-          </p>
-          <p className="text-sm text-gray-700">
-            {data.completeness.documents.expiringCount} {t('supplierPortal.expiringSoon')}
-          </p>
-          <p className="text-sm text-red-600">
-            {data.completeness.documents.expiredCount} {t('supplierPortal.expired')}
-          </p>
-        </div>
-      </div>
-
-      <SupplierQualificationCertificate
-        companyName={data.companyName}
-        qualificationExpiresAt={data.qualification.qualificationExpiresAt}
-        canDownload={data.status === 'approved' || data.status === 'requalification_required'}
+    <div className="space-y-3">
+      <HomeHeader
+        title={data.companyName || t('home.supplierTitle')}
+        subtitle={t('home.supplierSubtitle')}
+        action={
+          approved || data.status === 'requalification_required' ? (
+            <SupplierQualificationCertificate
+              companyName={data.companyName}
+              qualificationExpiresAt={data.qualification.qualificationExpiresAt}
+              canDownload
+            />
+          ) : null
+        }
       />
 
-      <div className={`rounded-2xl p-6 border shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 ${
-        hasAction ? 'bg-white border-border sm:justify-between' : 'bg-green-50/80 border-green-200'
-      }`}>
-        <div className="flex items-start gap-3 min-w-0">
-          {!hasAction && <CheckCircle className="text-green-600 shrink-0 mt-0.5" size={22} />}
-          <div>
-            <p className="text-sm text-muted">{t('supplierPortal.nextAction')}</p>
-            <p className={`text-lg font-semibold ${hasAction ? 'text-gray-900' : 'text-green-800'}`}>{nextLabel}</p>
-          </div>
-        </div>
-        {hasAction && (
-          <button
-            type="button"
-            onClick={() => onNavigate(data.nextAction.tab!)}
-            className="btn-save inline-flex items-center gap-2 px-6 py-3 rounded-full font-semibold shrink-0"
-          >
-            {nextLabel}
-            <ArrowRight size={18} />
-          </button>
-        )}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiTile
+          label={t('home.kpi.qualification')}
+          value={<StatusBadge tone={STATUS_TONE[data.status] || 'yellow'}>{statusLabel}</StatusBadge>}
+          hint={
+            approved && data.qualification.qualificationExpiresAt
+              ? t('home.validUntil', { date: formatDay(data.qualification.qualificationExpiresAt) })
+              : t('home.profilePercent', { percent: data.completeness.percent })
+          }
+          icon={ShieldCheck}
+          accent={approved ? 'green' : 'amber'}
+          onClick={() => onNavigate('profile')}
+        />
+        <KpiTile
+          label={t('home.kpi.openTenders')}
+          value={counts.openTenders}
+          hint={counts.invited ? t('home.kpi.invitedHint', { count: counts.invited }) : undefined}
+          icon={Briefcase}
+          accent="blue"
+          onClick={() => onNavigate('tenders')}
+        />
+        <KpiTile
+          label={t('home.kpi.bids')}
+          value={counts.bidsSubmitted}
+          hint={counts.bidsDraft ? t('home.kpi.draftsHint', { count: counts.bidsDraft }) : t('home.kpi.submittedHint')}
+          icon={FileCheck}
+          accent="violet"
+          onClick={() => onNavigate('tenders')}
+        />
+        <KpiTile label={t('home.kpi.contractsActive')} value={counts.contractsActive} icon={ScrollText} accent="green" onClick={() => onNavigate('contracts')} />
       </div>
 
-      {!data.completeness.readyToSubmit && data.completeness.blockers.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 border border-border">
-          <h3 className="font-bold text-gray-900 mb-3">{t('supplierPortal.blockersTitle')}</h3>
-          <ul className="space-y-2">
-            {data.completeness.blockers.slice(0, 8).map((item) => (
-              <li key={item} className="text-sm text-gray-700 flex items-start gap-2">
-                <span className="text-red-500 mt-0.5">•</span>
-                {translateCompletenessBlocker(t, item)}
-              </li>
-            ))}
-          </ul>
+      <div className="grid lg:grid-cols-5 gap-3 items-start">
+        <div className="lg:col-span-3 space-y-3 min-w-0">
+          <HomePanel
+            title={t('home.tendersTitle')}
+            action={<PanelLink label={t('home.viewAll')} onClick={() => onNavigate('tenders')} />}
+          >
+            {home.tenders.length === 0 ? (
+              <EmptyRow>{approved ? t('home.tendersEmpty') : t('home.tendersLocked')}</EmptyRow>
+            ) : (
+              home.tenders.slice(0, 5).map((p) => (
+                <HomeRow
+                  key={p.id}
+                  onClick={() => onNavigate('tenders')}
+                  title={p.title}
+                  meta={[
+                    p.reference,
+                    p.buyer,
+                    p.bidDeadline ? t('home.deadlineOn', { date: formatDay(p.bidDeadline) }) : null
+                  ].filter(Boolean).join(' · ')}
+                  right={
+                    <>
+                      {p.invited ? <StatusBadge tone="blue">{t('home.invited')}</StatusBadge> : null}
+                      <StatusBadge tone={p.bid === 'submitted' ? 'green' : p.bid === 'draft' ? 'yellow' : 'gray'}>
+                        {t(`home.bid.${p.bid}`)}
+                      </StatusBadge>
+                    </>
+                  }
+                />
+              ))
+            )}
+          </HomePanel>
+
+          <HomePanel
+            title={t('home.contractsTitle')}
+            action={<PanelLink label={t('home.viewAll')} onClick={() => onNavigate('contracts')} />}
+          >
+            {home.contracts.length === 0 ? (
+              <EmptyRow>{t('home.contractsEmpty')}</EmptyRow>
+            ) : (
+              home.contracts.slice(0, 3).map((c) => (
+                <HomeRow
+                  key={c.id}
+                  onClick={() => onNavigate('contracts')}
+                  title={c.title}
+                  meta={[c.reference, c.buyer, c.endDate ? t('home.endsOn', { date: formatDay(c.endDate) }) : null].filter(Boolean).join(' · ')}
+                  right={
+                    <StatusBadge tone={c.deliveryStatus === 'changes_requested' ? 'yellow' : c.deliveryStatus === 'accepted' ? 'green' : 'blue'}>
+                      {t(`home.delivery.${c.deliveryStatus}`)}
+                    </StatusBadge>
+                  }
+                />
+              ))
+            )}
+          </HomePanel>
         </div>
-      )}
+
+        <div className="lg:col-span-2 space-y-3 min-w-0">
+          <TodoPanel todos={todos} total={todoTotal} onNavigate={onNavigate} limit={4} />
+          <DeadlinesPanel deadlines={home.deadlines} onNavigate={onNavigate} limit={3} />
+        </div>
+      </div>
     </div>
   );
 }

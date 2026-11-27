@@ -1,5 +1,104 @@
 {
+  "home": {
+    "buyerTitle": "Home",
+    "buyerSubtitle": "What needs you today, across procedures and contracts",
+    "supplierTitle": "Home",
+    "supplierSubtitle": "Your tenders, bids and contracts at a glance",
+    "loadFailed": "The overview could not be loaded. Reload the page to try again.",
+    "viewAll": "View all",
+    "kpi": {
+      "preparing": "In preparation",
+      "open": "Open for bids",
+      "evaluation": "In evaluation",
+      "awardedHint": "Awarded: {{count}}",
+      "contractsActive": "Active contracts",
+      "qualification": "Qualification",
+      "openTenders": "Open tenders",
+      "invitedHint": "Invited: {{count}}",
+      "bids": "Bids submitted",
+      "draftsHint": "Drafts: {{count}}",
+      "submittedHint": "awaiting result",
+      "waiting": "Waiting for approval",
+      "suppliers": "Suppliers",
+      "buyers": "Buyers",
+      "questionnaires": "Questionnaires",
+      "newHint": "New this month: {{count}}",
+      "overdueHint": "Overdue: {{count}}"
+    },
+    "todoTitle": "Needs your attention",
+    "todoEmpty": "Nothing is waiting for you.",
+    "todoMore": "More items: {{count}}",
+    "todo": {
+      "qa_unanswered": "Supplier questions waiting for an answer: {{count}}",
+      "unseal": "Bid deadline has passed. Unseal the bids (received: {{count}})",
+      "evaluate": "Bids left to score: {{count}}",
+      "award": "All bids are scored. Make the award decision",
+      "publish": "Not published yet. Finish and publish",
+      "delivery_review": "Supplier marked the work as done. Accept or request changes",
+      "contract_ending": "Contract ends on {{date}}",
+      "contract_draft": "Draft contract. Activate it when ready",
+      "complement": "The buyer asked you to complement your bid (due {{date}})",
+      "delivery_changes": "The buyer requested changes to your delivery",
+      "bid_draft": "Your bid is still a draft. Submit before {{date}}",
+      "bid_invited": "You are invited and have not started a bid (deadline {{date}})",
+      "profile_complete": "Complete your profile ({{count}}% done), then submit it for qualification",
+      "profile_submit": "Your profile is complete. Submit it for qualification",
+      "profile_rejected": "Your profile was rejected. Update it and submit again",
+      "profile_requalify": "Your qualification needs renewing. Review and submit your profile",
+      "docs_expired": "Expired profile documents: {{count}}",
+      "docs_expiring": "Profile documents expiring soon: {{count}}",
+      "admin_suppliers_pending": "Supplier accounts waiting for approval: {{count}}",
+      "admin_entities_pending": "Buyer accounts waiting for approval: {{count}}",
+      "admin_requalification": "Suppliers that need re-qualification: {{count}}",
+      "admin_inactive": "Deactivated accounts: {{count}}"
+    },
+    "deadlinesTitle": "Upcoming dates",
+    "deadlinesEmpty": "No upcoming dates.",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "inDays": "In {{count}} days",
+    "deadline": {
+      "qa_deadline": "Q&A closes",
+      "bid_deadline": "Bid deadline",
+      "standstill_end": "Standstill ends",
+      "contract_end": "Contract ends",
+      "complement_deadline": "Complement due"
+    },
+    "proceduresTitle": "Procedures in progress",
+    "proceduresEmpty": "No procedures yet. Create the first one.",
+    "deadlineOn": "Deadline {{date}}",
+    "bids": "Bids: {{count}}",
+    "sealed": "sealed",
+    "winner": "Winner: {{name}}",
+    "contractsTitle": "Contracts in progress",
+    "contractsEmpty": "No contracts in progress.",
+    "endsOn": "Ends {{date}}",
+    "delivery": {
+      "none": "In progress",
+      "marked_done": "Work marked done",
+      "changes_requested": "Changes requested",
+      "accepted": "Delivery accepted"
+    },
+    "tendersTitle": "Tenders open for bids",
+    "tendersEmpty": "No open tenders right now.",
+    "tendersLocked": "Tenders appear here once your account is approved.",
+    "invited": "Invited",
+    "bid": {
+      "none": "No bid yet",
+      "draft": "Draft",
+      "submitted": "Submitted"
+    },
+    "validUntil": "Valid until {{date}}",
+    "profilePercent": "Profile {{percent}}% complete",
+    "adminTitle": "Platform overview",
+    "adminSubtitle": "Accounts waiting for a decision and the newest sign-ups",
+    "recentSuppliers": "Newest suppliers",
+    "recentBuyers": "Newest buyers",
+    "noneYet": "None yet.",
+    "accountMix": "Accounts by status"
+  },
   "common": {
+    "all": "All",
     "appName": "PrequaliQ",
     "logout": "Logout",
     "language": "Language",
@@ -259,7 +358,8 @@
       "accept": "Accept delivery",
       "requestChanges": "Request changes",
       "reopen": "Reopen for work",
-      "changesPlaceholder": "Describe what needs to be changed…"
+      "changesPlaceholder": "Describe what needs to be changed…",
+      "title": "Delivery"
     },
     "thread": {
       "title": "Messages & documents",
@@ -272,7 +372,42 @@
       "messagePlaceholder": "Write a message…",
       "attach": "Attach files",
       "send": "Send",
-      "messageSent": "Message sent"
+      "messageSent": "Message sent",
+      "count_one": "{{count}} message",
+      "count_other": "{{count}} messages",
+      "emptyHint": "Write the first message below. Files can be attached.",
+      "you": "You",
+      "download": "Download",
+      "composerHint": "Enter sends, Shift + Enter starts a new line. PDF, images, Word and Excel, up to 10 MB each.",
+      "fileTooLarge": "{{name}} is larger than 10 MB.",
+      "tooManyFiles": "At most {{count}} files per message.",
+      "endedByBuyer": "Contract ended by the buyer",
+      "readOnlyEnded": "This contract has ended. The conversation is kept for reference and can no longer be changed.",
+      "readOnlyDraft": "Messages open when the contract is activated."
+    },
+    "numberAuto": "Generated automatically if left empty",
+    "titleRequired": "Enter a contract title.",
+    "activate": "Activate contract",
+    "activated": "Contract activated",
+    "buyerField": "Buyer",
+    "fixed": {
+      "title": "Fixed contract details",
+      "supplierTitle": "Contract details",
+      "hintDraft": "Number, type, supplier and procedure cannot be changed. Value and start date are fixed once the contract is active.",
+      "hintActive": "These details are fixed. You can still change the title, end date and notes."
+    },
+    "end": {
+      "action": "End contract",
+      "title": "End this contract",
+      "warning": "Ending a contract cannot be undone. Messages and delivery actions are closed, and the supplier is notified.",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Why is the contract ended?",
+      "reasonMin": "A reason of at least {{count}} characters is required.",
+      "reasonShared": "The supplier will see this reason.",
+      "confirm": "End contract",
+      "done": "Contract ended",
+      "failed": "Could not end the contract.",
+      "endedTitle": "Contract ended by the buyer"
     }
   },
   "procedures": {
@@ -387,6 +522,15 @@
     "espdResubmit": "Update ESPD declaration",
     "aiQaDraft": "AI Q&A draft",
     "aiEvalSummary": "AI evaluation",
+    "filter": {
+      "all": "All",
+      "preparing": "In preparation",
+      "open": "Open for bids",
+      "evaluation": "Evaluation",
+      "awarded": "Awarded",
+      "closed": "Closed"
+    },
+    "aiWorking": "AI is working…",
     "aiEvalLoading": "Running AI evaluation…",
     "aiEvalPanelTitle": "AI evaluation",
     "aiEvalSourceAi": "Based on submitted answers (GPU)",
@@ -458,7 +602,32 @@
       "framework": "Framework",
       "dis": "DIS",
       "other": "Other"
-    }
+    },
+    "referenceAuto": "Generated automatically when saved",
+    "referenceLocked": "The reference number is issued by the system and cannot be changed.",
+    "answers": {
+      "title": "Submitted answers",
+      "hint": "Read every bid, with the files attached to each answer.",
+      "openAll": "Open all submitted answers",
+      "viewCount_one": "View {{count}} answer",
+      "viewCount_other": "View {{count}} answers",
+      "bidCount_one": "{{count}} submitted bid",
+      "bidCount_other": "{{count}} submitted bids",
+      "fileCount_one": "{{count}} attachment",
+      "fileCount_other": "{{count}} attachments",
+      "submitted": "submitted",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "download": "Download",
+      "missingFile": "A document was requested but not attached.",
+      "sealed": "Bids are sealed until the deadline. Answers and attachments open when the procedure is unsealed.",
+      "sealedCount_one": "{{count}} bid received. It stays sealed until the deadline.",
+      "sealedCount_other": "{{count}} bids received. They stay sealed until the deadline.",
+      "noQuestionnaire": "No questionnaire is linked to this procedure.",
+      "loadFailed": "Could not load the submitted answers.",
+      "fileFailed": "Could not open the file."
+    },
+    "announcementHint": "This text is published with the procedure. Write it, or let AI draft it, before you publish."
   },
   "nav": {
     "supplierPortal": "Supplier Portal",
@@ -522,10 +691,6 @@
     "bidSuggestions": {
       "name": "AI answer suggestions",
       "desc": "Draft answers from your profile, certificates, insurance, and project references. Review before applying."
-    },
-    "completeness": {
-      "name": "AI completeness check",
-      "desc": "Flag missing profile fields and expired documents."
     },
     "qualificationRisk": {
       "name": "AI qualification risk",
@@ -685,6 +850,8 @@
     "profileComplete": "Profile complete",
     "profileIncomplete": "incomplete",
     "documentsHint": "Upload supporting documents for your organization.",
+    "aiQuestionnaireCollapse": "Hide",
+    "aiQuestionnaireExpand": "Show",
     "aiQuestionnaireTitle": "AI questionnaire assist",
     "aiQuestionnaireSubtitle": "Describe the procurement — AI suggests CPV codes and qualification questions (max 300 characters)",
     "aiQuestionnairePlaceholder": "e.g. Qualified construction contractors for school renovation: electrical and HVAC works, ISO 9001, liability insurance, 5+ years public-sector experience…",
@@ -945,7 +1112,8 @@
     "failedRemoveProfilePicture": "Failed to remove profile picture",
     "loginFailed": "Login failed",
     "registrationFailed": "Registration failed",
-    "currentPasswordIncorrect": "Current password is incorrect"
+    "currentPasswordIncorrect": "Current password is incorrect",
+    "profileSentForApproval": "Profile saved. Because an important detail changed, your account is sent for approval again."
   },
   "validation": {
     "emailRequired": "Email is required",
@@ -1331,9 +1499,6 @@
     "aiProfileApplySelectedCount": "Apply {{count}} field(s) to form",
     "aiProfileShowSuggestions": "Show suggestions ({{count}})",
     "aiProfileHideSuggestions": "Hide suggestions",
-    "completenessOk": "Profile looks complete ({{percent}}%)",
-    "completenessGaps": "Profile {{percent}}% complete — {{count}} gap(s)",
-    "aiCompletenessCheck": "AI completeness check",
     "aiAnswersTitle": "AI answer suggestions",
     "aiAnswersSubtitle": "Draft answers from your profile, certificates, insurance, and project references. Review before applying.",
     "aiAnswersGenerate": "Suggest answers with AI",

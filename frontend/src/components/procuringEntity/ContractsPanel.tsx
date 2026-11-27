@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, ClipboardList, FileText, Trophy, Building2, Calendar, ChevronRight, Hash } from 'lucide-react';
+import { Plus, ClipboardList, FileText, Trophy, Building2, Calendar, ChevronRight, Hash, Lock, Ban } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useEntitlement } from '../../contexts/EntitlementContext';
@@ -13,6 +13,7 @@ import { BrandSelect } from '../ui/BrandSelect';
 import { AdminStatCard, AdminStatsGrid } from '../admin/AdminStatCards';
 import { ContractThread, type ContractThreadMessage } from '../contracts/ContractThread';
 import { SearchField } from '../ui/SearchField';
+import { StatusPills } from '../ui/StatusPills';
 
 function contractStatusTone(status: string): 'green' | 'yellow' | 'red' | 'gray' | 'blue' {
   if (status === 'active') return 'green';
@@ -37,9 +38,14 @@ type Contract = {
   supplierId?: string | null;
   procedureId?: string | null;
   supplier?: { id?: string; companyName?: string } | null;
-  procedure?: { id?: string; title?: string } | null;
+  procedure?: { id?: string; title?: string; referenceNumber?: string | null } | null;
   callOffs?: Array<{ id: string; title: string; status: string }>;
+  terminationReason?: string | null;
+  terminatedAt?: string | null;
 };
+
+const CLOSED_STATUSES = ['terminated', 'expired'];
+const END_REASON_MIN = 10;
 
 const emptyForm = {
   title: '',
@@ -76,6 +82,8 @@ export function ContractsPanel() {
   const [editDetailLoading, setEditDetailLoading] = useState(false);
   const [editForm, setEditForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  const [endOpen, setEndOpen] = useState(false);
+  const [endReason, setEndReason] = useState('');
   const [disMemberships, setDisMemberships] = useState<Array<{
     id: string;
     status: string;
@@ -89,10 +97,22 @@ export function ContractsPanel() {
 
   const runListSearch = () => setAppliedListSearch(listSearch.trim());
 
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const statusPills = useMemo(
+    () =>
+      ['all', 'draft', 'active', 'expired', 'terminated'].map((id) => ({
+        id,
+        label: id === 'all' ? t('common.all') : t(STATUS_LABEL[id]),
+        count: id === 'all' ? contracts.length : contracts.filter((c) => c.status === id).length
+      })),
+    [contracts, t]
+  );
+
   const filteredContracts = useMemo(() => {
     const q = appliedListSearch.trim().toLowerCase();
-    if (!q) return contracts;
-    return contracts.filter((c) => {
+    const inStatus = statusFilter === 'all' ? contracts : contracts.filter((c) => c.status === statusFilter);
+    if (!q) return inStatus;
+    return inStatus.filter((c) => {
       const typeLabel = t(`contracts.types.${c.contractType}`, { defaultValue: c.contractType }).toLowerCase();
       const statusLabel = t(STATUS_LABEL[c.status] || 'contracts.status.draft').toLowerCase();
       return (
@@ -107,7 +127,7 @@ export function ContractsPanel() {
         statusLabel.includes(q)
       );
     });
-  }, [contracts, appliedListSearch, t]);
+  }, [contracts, appliedListSearch, statusFilter, t]);
 
   const {
     page,
@@ -166,16 +186,18 @@ export function ContractsPanel() {
     );
   }
 
-  const loadEditDetail = async (id: string) => {
+  /** silent: background refresh of an open contract (new messages) without the loading state. */
+  const loadEditDetail = async (id: string, silent = false) => {
     try {
-      setEditDetailLoading(true);
-      const res = await api.get(`/contracts/${id}`);
+      if (!silent) setEditDetailLoading(true);
+      const res = await api.get(`/contracts/${id}`, { silentBusy: true });
       setEditDetail(res.data.contract || null);
     } catch (error: any) {
+      if (silent) return;
       showToast(error.response?.data?.message || t('msg.failedLoadContracts'), 'error');
       setEditDetail(null);
     } finally {
-      setEditDetailLoading(false);
+      if (!silent) setEditDetailLoading(false);
     }
   };
 
@@ -224,27 +246,62 @@ export function ContractsPanel() {
     }
   };
 
-  const saveEdit = async () => {
-    if (!editing) return;
+  // Current server state of the open contract (falls back to the list row while loading)
+  const current: Contract | null = editDetail || editing;
+  const isClosed = current ? CLOSED_STATUSES.includes(current.status) : false;
+  const isDraft = current?.status === 'draft';
+  // A contract created by an award starts active with no value: the value can be filled in once.
+  const canSetValue = isDraft || current?.valueAmount == null || current?.valueAmount === '';
+
+  const saveEdit = async (extra?: { status: 'active' }) => {
+    if (!editing || !current) return;
+    if (!editForm.title.trim()) {
+      showToast(t('contracts.titleRequired'), 'error');
+      return;
+    }
     try {
       setSaving(true);
-      await api.put(`/contracts/${editing.id}`, {
+      // Only fields that are still open are sent; the server applies the same rules.
+      const payload: Record<string, unknown> = {
         title: editForm.title.trim(),
-        contractType: editForm.contractType,
-        contractNumber: editForm.contractNumber || null,
-        startDate: editForm.startDate || null,
         endDate: editForm.endDate || null,
-        status: editForm.status,
-        valueAmount: editForm.valueAmount === '' ? null : Number(editForm.valueAmount),
-        notes: editForm.notes || null,
-        supplierId: editForm.supplierId || null,
-        procedureId: editForm.procedureId || null
-      });
-      showToast(t('msg.saved'), 'success');
-      if (editing) await loadEditDetail(editing.id);
+        notes: editForm.notes || null
+      };
+      if (isDraft) payload.startDate = editForm.startDate || null;
+      if (canSetValue) payload.valueAmount = editForm.valueAmount === '' ? null : Number(editForm.valueAmount);
+      if (!current.contractNumber && editForm.contractNumber) payload.contractNumber = editForm.contractNumber;
+      if (!current.supplier?.id && !current.supplierId && editForm.supplierId) payload.supplierId = editForm.supplierId;
+      if (!current.procedure?.id && !current.procedureId && editForm.procedureId) payload.procedureId = editForm.procedureId;
+      if (extra?.status) payload.status = extra.status;
+      const res = await api.put(`/contracts/${editing.id}`, payload);
+      showToast(extra?.status ? t('contracts.activated') : t('msg.saved'), 'success');
+      if (res.data.contract) setEditing({ ...editing, ...res.data.contract });
+      await loadEditDetail(editing.id, true);
       load();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const endContract = async () => {
+    if (!editing) return;
+    const reason = endReason.trim();
+    if (reason.length < END_REASON_MIN) return;
+    try {
+      setSaving(true);
+      const res = await api.post(`/contracts/${editing.id}/terminate`, { reason });
+      showToast(t('contracts.end.done'), 'success');
+      setEndOpen(false);
+      setEndReason('');
+      if (res.data.contract) {
+        setEditDetail(res.data.contract);
+        setEditing({ ...editing, ...res.data.contract });
+      }
+      load();
+    } catch (error: any) {
+      showToast(error.response?.data?.message || t('contracts.end.failed'), 'error');
     } finally {
       setSaving(false);
     }
@@ -283,17 +340,15 @@ export function ContractsPanel() {
           <BrandSelect value={values.status} onChange={(e) => setValues({ ...values, status: e.target.value })}>
             <option value="draft">{t('contracts.status.draft')}</option>
             <option value="active">{t('contracts.status.active')}</option>
-            <option value="expired">{t('contracts.status.expired')}</option>
-            <option value="terminated">{t('contracts.status.terminated')}</option>
           </BrandSelect>
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.number')}</label>
-          <input className="input-brand" value={values.contractNumber} onChange={(e) => setValues({ ...values, contractNumber: e.target.value })} />
+          <input className="input-brand" placeholder={t('contracts.numberAuto')} value={values.contractNumber} onChange={(e) => setValues({ ...values, contractNumber: e.target.value })} />
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.value')}</label>
-          <input className="input-brand" type="number" value={values.valueAmount} onChange={(e) => setValues({ ...values, valueAmount: e.target.value })} />
+          <input className="input-brand" type="number" min={0} value={values.valueAmount} onChange={(e) => setValues({ ...values, valueAmount: e.target.value })} />
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.startDate')}</label>
@@ -356,16 +411,16 @@ export function ContractsPanel() {
       </div>
 
       {analytics ? (
-        <AdminStatsGrid>
-          <AdminStatCard label={t('contracts.statProcedures')} value={analytics.procedures} icon={ClipboardList} accent="blue" />
-          <AdminStatCard label={t('contracts.statContracts')} value={analytics.contracts} icon={FileText} accent="green" />
-          <AdminStatCard label={t('contracts.statAwards')} value={analytics.awards} icon={Trophy} accent="violet" />
+        <AdminStatsGrid compact>
+          <AdminStatCard label={t('contracts.statProcedures')} value={analytics.procedures} icon={ClipboardList} accent="blue" compact />
+          <AdminStatCard label={t('contracts.statContracts')} value={analytics.contracts} icon={FileText} accent="green" compact />
+          <AdminStatCard label={t('contracts.statAwards')} value={analytics.awards} icon={Trophy} accent="violet" compact />
         </AdminStatsGrid>
       ) : null}
 
-      <div className="flex flex-col sm:flex-row gap-2 sm:items-center max-w-xl">
+      <div className="flex flex-wrap gap-2 items-center">
         <SearchField
-          wrapperClassName="flex-1 min-w-0"
+          wrapperClassName="flex-1 min-w-[14rem] max-w-md"
           value={listSearch}
           onChange={(e) => setListSearch(e.target.value)}
           onKeyDown={(e) => {
@@ -380,6 +435,7 @@ export function ContractsPanel() {
         >
           {t('buttons.search')}
         </button>
+        <StatusPills pills={statusPills} value={statusFilter} onChange={setStatusFilter} />
       </div>
 
       <div className="space-y-3">
@@ -438,7 +494,7 @@ export function ContractsPanel() {
                       <RowActionButton onClick={() => callOff(c.id)}>{t('contracts.addCallOff')}</RowActionButton>
                     ) : null}
                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700">
-                      {t('common.edit')}
+                      {CLOSED_STATUSES.includes(c.status) ? t('common.view') : t('common.edit')}
                       <ChevronRight size={14} />
                     </span>
                   </div>
@@ -549,33 +605,247 @@ export function ContractsPanel() {
           setEditDetail(null);
         }}
         title={editing?.title || t('common.edit')}
+        subtitle={current?.contractNumber || undefined}
+        widthClass="max-w-full lg:max-w-[62%]"
         footer={
-          <button type="button" className="btn-save px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50" disabled={saving} onClick={saveEdit}>
-            {t('common.save')}
-          </button>
+          current && !isClosed ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                className="btn-reject inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                disabled={saving}
+                onClick={() => {
+                  setEndReason('');
+                  setEndOpen(true);
+                }}
+              >
+                <Ban size={15} /> {t('contracts.end.action')}
+              </button>
+              <div className="flex flex-wrap gap-2">
+                {isDraft ? (
+                  <button
+                    type="button"
+                    className="btn-approve px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                    disabled={saving}
+                    onClick={() => saveEdit({ status: 'active' })}
+                  >
+                    {t('contracts.activate')}
+                  </button>
+                ) : null}
+                <button type="button" className="btn-save px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50" disabled={saving} onClick={() => saveEdit()}>
+                  {t('common.save')}
+                </button>
+              </div>
+            </div>
+          ) : undefined
         }
       >
-        {editing ? (
-          <>
-            {formFields(editForm, setEditForm)}
+        {editing && current ? (
+          <div className="space-y-4">
+            {current.status === 'terminated' ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm font-bold text-red-800 inline-flex items-center gap-1.5">
+                  <Ban size={15} /> {t('contracts.end.endedTitle')}
+                  {current.terminatedAt ? (
+                    <span className="font-normal text-xs text-red-700">
+                      · {new Date(current.terminatedAt).toLocaleDateString()}
+                    </span>
+                  ) : null}
+                </p>
+                {current.terminationReason ? (
+                  <p className="mt-1 text-sm text-red-900 whitespace-pre-wrap">
+                    <span className="font-semibold">{t('contracts.end.reasonLabel')}:</span> {current.terminationReason}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Fixed facts: identify the contract and its parties, never edited here */}
+            <section className="rounded-2xl border border-border bg-surface p-4">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted inline-flex items-center gap-1.5">
+                  <Lock size={12} /> {t('contracts.fixed.title')}
+                </p>
+                <StatusBadge tone={contractStatusTone(current.status)}>
+                  {t(STATUS_LABEL[current.status] || 'contracts.status.draft')}
+                </StatusBadge>
+              </div>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                {[
+                  { label: t('contracts.number'), value: current.contractNumber },
+                  {
+                    label: t('contracts.contractType'),
+                    value: t(`contracts.types.${current.contractType}`, { defaultValue: current.contractType })
+                  },
+                  { label: t('contracts.supplierField'), value: current.supplier?.companyName },
+                  {
+                    label: t('contracts.procedureField'),
+                    value: current.procedure?.title
+                      ? [current.procedure.referenceNumber, current.procedure.title].filter(Boolean).join(' · ')
+                      : null
+                  },
+                  ...(!isDraft
+                    ? [
+                        { label: t('contracts.startDate'), value: current.startDate },
+                        {
+                          label: t('contracts.value'),
+                          value: current.valueAmount != null && current.valueAmount !== ''
+                            ? Number(current.valueAmount).toLocaleString()
+                            : null
+                        }
+                      ]
+                    : []),
+                  ...(isClosed ? [{ label: t('contracts.endDate'), value: current.endDate }] : [])
+                ].map((row) => (
+                  <div key={row.label} className="min-w-0">
+                    <dt className="text-xs text-muted">{row.label}</dt>
+                    <dd className="text-sm font-semibold text-foreground break-words">{row.value || '—'}</dd>
+                  </div>
+                ))}
+              </dl>
+              {!isClosed ? (
+                <p className="mt-3 text-xs text-muted">
+                  {isDraft ? t('contracts.fixed.hintDraft') : t('contracts.fixed.hintActive')}
+                </p>
+              ) : null}
+            </section>
+
+            {isClosed ? (
+              <section className="space-y-2">
+                <p className="text-sm font-semibold text-foreground">{current.title}</p>
+                {current.notes ? (
+                  <p className="text-sm text-foreground whitespace-pre-wrap rounded-xl border border-border px-3 py-2">{current.notes}</p>
+                ) : null}
+              </section>
+            ) : (
+              <section className="space-y-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.titleField')}</label>
+                  <input className="input-brand" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {!current.contractNumber ? (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.number')}</label>
+                      <input className="input-brand" value={editForm.contractNumber} onChange={(e) => setEditForm({ ...editForm, contractNumber: e.target.value })} />
+                    </div>
+                  ) : null}
+                  {canSetValue ? (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.value')}</label>
+                      <input className="input-brand" type="number" min={0} value={editForm.valueAmount} onChange={(e) => setEditForm({ ...editForm, valueAmount: e.target.value })} />
+                    </div>
+                  ) : null}
+                  {isDraft ? (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.startDate')}</label>
+                      <DateOnlyPicker className="input-brand w-full" value={editForm.startDate} onChange={(startDate) => setEditForm({ ...editForm, startDate })} />
+                    </div>
+                  ) : null}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.endDate')}</label>
+                    <DateOnlyPicker className="input-brand w-full" value={editForm.endDate} minDate={editForm.startDate || undefined} onChange={(endDate) => setEditForm({ ...editForm, endDate })} />
+                  </div>
+                </div>
+                {!current.supplier?.id && !current.supplierId ? (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.supplierField')}</label>
+                    <BrandSelect value={editForm.supplierId} onChange={(e) => setEditForm({ ...editForm, supplierId: e.target.value })}>
+                      <option value="">{t('contracts.selectSupplier')}</option>
+                      {suppliers.map((sup) => (
+                        <option key={sup.id} value={sup.id}>{sup.companyName}</option>
+                      ))}
+                    </BrandSelect>
+                  </div>
+                ) : null}
+                {!current.procedure?.id && !current.procedureId ? (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.procedureField')}</label>
+                    <BrandSelect value={editForm.procedureId} onChange={(e) => setEditForm({ ...editForm, procedureId: e.target.value })}>
+                      <option value="">{t('contracts.selectProcedure')}</option>
+                      {procedures.map((proc) => (
+                        <option key={proc.id} value={proc.id}>{proc.title}</option>
+                      ))}
+                    </BrandSelect>
+                  </div>
+                ) : null}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('contracts.notes')}</label>
+                  <textarea className="input-brand" rows={3} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+                </div>
+              </section>
+            )}
+
             {editDetailLoading ? (
-              <p className="text-sm text-muted mt-4">{t('common.loading')}</p>
+              <p className="text-sm text-muted">{t('common.loading')}</p>
             ) : editDetail ? (
               <ContractThread
                 contractId={editDetail.id}
                 messages={editDetail.messages || []}
                 deliveryStatus={editDetail.deliveryStatus || 'none'}
                 mode="buyer"
+                contractStatus={editDetail.status}
                 readOnly={editDetail.status !== 'active'}
                 onUpdated={() => {
-                  if (editing) loadEditDetail(editing.id);
+                  if (editing) loadEditDetail(editing.id, true);
                   load();
+                }}
+                onRefresh={() => {
+                  if (editing) loadEditDetail(editing.id, true);
                 }}
               />
             ) : null}
-          </>
+          </div>
         ) : null}
       </SlideOver>
+
+      <CenterModal
+        open={endOpen}
+        onClose={() => setEndOpen(false)}
+        title={t('contracts.end.title')}
+        subtitle={editing?.title}
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className="btn-cancel px-4 py-2 rounded-xl text-sm font-semibold" onClick={() => setEndOpen(false)}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn-reject px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+              disabled={saving || endReason.trim().length < END_REASON_MIN}
+              onClick={endContract}
+            >
+              {t('contracts.end.confirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-amber-900 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+            {t('contracts.end.warning')}
+          </p>
+          <div>
+            <label htmlFor="contract-end-reason" className="block text-sm font-semibold text-gray-700 mb-1.5">
+              {t('contracts.end.reasonLabel')} <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              id="contract-end-reason"
+              className="input-brand"
+              rows={4}
+              maxLength={2000}
+              autoFocus
+              placeholder={t('contracts.end.reasonPlaceholder')}
+              value={endReason}
+              onChange={(e) => setEndReason(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted">
+              {endReason.trim().length < END_REASON_MIN
+                ? t('contracts.end.reasonMin', { count: END_REASON_MIN })
+                : t('contracts.end.reasonShared')}
+            </p>
+          </div>
+        </div>
+      </CenterModal>
     </div>
   );
 }

@@ -1,5 +1,104 @@
 {
+  "home": {
+    "buyerTitle": "Hem",
+    "buyerSubtitle": "Det som behöver dig idag, för upphandlingar och avtal",
+    "supplierTitle": "Hem",
+    "supplierSubtitle": "Dina upphandlingar, anbud och avtal i en överblick",
+    "loadFailed": "Översikten kunde inte laddas. Ladda om sidan för att försöka igen.",
+    "viewAll": "Visa alla",
+    "kpi": {
+      "preparing": "Under förberedelse",
+      "open": "Öppna för anbud",
+      "evaluation": "Under utvärdering",
+      "awardedHint": "Tilldelade: {{count}}",
+      "contractsActive": "Aktiva avtal",
+      "qualification": "Kvalificering",
+      "openTenders": "Öppna upphandlingar",
+      "invitedHint": "Inbjuden: {{count}}",
+      "bids": "Inlämnade anbud",
+      "draftsHint": "Utkast: {{count}}",
+      "submittedHint": "väntar på besked",
+      "waiting": "Väntar på godkännande",
+      "suppliers": "Leverantörer",
+      "buyers": "Köpare",
+      "questionnaires": "Frågeformulär",
+      "newHint": "Nya denna månad: {{count}}",
+      "overdueHint": "Försenade: {{count}}"
+    },
+    "todoTitle": "Behöver din uppmärksamhet",
+    "todoEmpty": "Inget väntar på dig.",
+    "todoMore": "Fler punkter: {{count}}",
+    "todo": {
+      "qa_unanswered": "Leverantörsfrågor som väntar på svar: {{count}}",
+      "unseal": "Anbudstiden har gått ut. Öppna anbuden (mottagna: {{count}})",
+      "evaluate": "Anbud kvar att poängsätta: {{count}}",
+      "award": "Alla anbud är poängsatta. Fatta tilldelningsbeslut",
+      "publish": "Inte publicerad ännu. Gör klart och publicera",
+      "delivery_review": "Leverantören har markerat arbetet som klart. Godkänn eller begär ändringar",
+      "contract_ending": "Avtalet löper ut {{date}}",
+      "contract_draft": "Avtalsutkast. Aktivera när det är klart",
+      "complement": "Köparen har bett dig komplettera ditt anbud (senast {{date}})",
+      "delivery_changes": "Köparen har begärt ändringar i din leverans",
+      "bid_draft": "Ditt anbud är fortfarande ett utkast. Lämna in före {{date}}",
+      "bid_invited": "Du är inbjuden och har inte påbörjat något anbud (sista dag {{date}})",
+      "profile_complete": "Gör klart din profil ({{count}} % klart) och skicka in den för kvalificering",
+      "profile_submit": "Din profil är komplett. Skicka in den för kvalificering",
+      "profile_rejected": "Din profil avslogs. Uppdatera den och skicka in igen",
+      "profile_requalify": "Din kvalificering behöver förnyas. Granska och skicka in din profil",
+      "docs_expired": "Utgångna profildokument: {{count}}",
+      "docs_expiring": "Profildokument som snart går ut: {{count}}",
+      "admin_suppliers_pending": "Leverantörskonton som väntar på godkännande: {{count}}",
+      "admin_entities_pending": "Köparkonton som väntar på godkännande: {{count}}",
+      "admin_requalification": "Leverantörer som behöver omkvalificeras: {{count}}",
+      "admin_inactive": "Inaktiverade konton: {{count}}"
+    },
+    "deadlinesTitle": "Kommande datum",
+    "deadlinesEmpty": "Inga kommande datum.",
+    "today": "Idag",
+    "tomorrow": "Imorgon",
+    "inDays": "Om {{count}} dagar",
+    "deadline": {
+      "qa_deadline": "Frågor och svar stänger",
+      "bid_deadline": "Sista anbudsdag",
+      "standstill_end": "Avtalsspärren upphör",
+      "contract_end": "Avtalet löper ut",
+      "complement_deadline": "Komplettering senast"
+    },
+    "proceduresTitle": "Pågående upphandlingar",
+    "proceduresEmpty": "Inga upphandlingar ännu. Skapa den första.",
+    "deadlineOn": "Sista dag {{date}}",
+    "bids": "Anbud: {{count}}",
+    "sealed": "förseglade",
+    "winner": "Vinnare: {{name}}",
+    "contractsTitle": "Pågående avtal",
+    "contractsEmpty": "Inga pågående avtal.",
+    "endsOn": "Löper ut {{date}}",
+    "delivery": {
+      "none": "Pågår",
+      "marked_done": "Arbetet markerat som klart",
+      "changes_requested": "Ändringar begärda",
+      "accepted": "Leverans godkänd"
+    },
+    "tendersTitle": "Upphandlingar öppna för anbud",
+    "tendersEmpty": "Inga öppna upphandlingar just nu.",
+    "tendersLocked": "Upphandlingar visas här när ditt konto har godkänts.",
+    "invited": "Inbjuden",
+    "bid": {
+      "none": "Inget anbud ännu",
+      "draft": "Utkast",
+      "submitted": "Inlämnat"
+    },
+    "validUntil": "Giltig till {{date}}",
+    "profilePercent": "Profilen är {{percent}} % klar",
+    "adminTitle": "Plattformsöversikt",
+    "adminSubtitle": "Konton som väntar på beslut och de senaste registreringarna",
+    "recentSuppliers": "Senaste leverantörer",
+    "recentBuyers": "Senaste köpare",
+    "noneYet": "Inga ännu.",
+    "accountMix": "Konton per status"
+  },
   "common": {
+    "all": "Alla",
     "appName": "PrequaliQ",
     "logout": "Logga ut",
     "language": "Språk",
@@ -259,7 +358,8 @@
       "accept": "Godkänn leverans",
       "requestChanges": "Begär ändringar",
       "reopen": "Öppna för arbete igen",
-      "changesPlaceholder": "Beskriv vad som behöver ändras…"
+      "changesPlaceholder": "Beskriv vad som behöver ändras…",
+      "title": "Leverans"
     },
     "thread": {
       "title": "Meddelanden och dokument",
@@ -272,7 +372,42 @@
       "messagePlaceholder": "Skriv ett meddelande…",
       "attach": "Bifoga filer",
       "send": "Skicka",
-      "messageSent": "Meddelande skickat"
+      "messageSent": "Meddelande skickat",
+      "count_one": "{{count}} meddelande",
+      "count_other": "{{count}} meddelanden",
+      "emptyHint": "Skriv det första meddelandet nedan. Du kan bifoga filer.",
+      "you": "Du",
+      "download": "Ladda ner",
+      "composerHint": "Enter skickar, Skift + Enter ger ny rad. PDF, bilder, Word och Excel, högst 10 MB per fil.",
+      "fileTooLarge": "{{name}} är större än 10 MB.",
+      "tooManyFiles": "Högst {{count}} filer per meddelande.",
+      "endedByBuyer": "Avtalet har avslutats av köparen",
+      "readOnlyEnded": "Avtalet är avslutat. Konversationen sparas som referens och kan inte längre ändras.",
+      "readOnlyDraft": "Meddelanden öppnas när avtalet har aktiverats."
+    },
+    "numberAuto": "Skapas automatiskt om fältet lämnas tomt",
+    "titleRequired": "Ange en avtalstitel.",
+    "activate": "Aktivera avtal",
+    "activated": "Avtalet är aktiverat",
+    "buyerField": "Köpare",
+    "fixed": {
+      "title": "Låsta avtalsuppgifter",
+      "supplierTitle": "Avtalsuppgifter",
+      "hintDraft": "Nummer, typ, leverantör och upphandling kan inte ändras. Värde och startdatum låses när avtalet är aktivt.",
+      "hintActive": "Uppgifterna är låsta. Du kan fortfarande ändra titel, slutdatum och anteckningar."
+    },
+    "end": {
+      "action": "Avsluta avtal",
+      "title": "Avsluta avtalet",
+      "warning": "Ett avslutat avtal kan inte öppnas igen. Meddelanden och leveransåtgärder stängs och leverantören meddelas.",
+      "reasonLabel": "Skäl",
+      "reasonPlaceholder": "Varför avslutas avtalet?",
+      "reasonMin": "Ett skäl på minst {{count}} tecken krävs.",
+      "reasonShared": "Leverantören får se skälet.",
+      "confirm": "Avsluta avtal",
+      "done": "Avtalet är avslutat",
+      "failed": "Det gick inte att avsluta avtalet.",
+      "endedTitle": "Avtalet har avslutats av köparen"
     }
   },
   "procedures": {
@@ -387,6 +522,15 @@
     "espdResubmit": "Uppdatera ESPD-försäkran",
     "aiQaDraft": "AI Q&A-utkast",
     "aiEvalSummary": "AI-utvärdering",
+    "filter": {
+      "all": "Alla",
+      "preparing": "Under förberedelse",
+      "open": "Öppen för anbud",
+      "evaluation": "Utvärdering",
+      "awarded": "Tilldelad",
+      "closed": "Avslutad"
+    },
+    "aiWorking": "AI arbetar…",
     "aiEvalLoading": "Kör AI-utvärdering…",
     "aiEvalPanelTitle": "AI-utvärdering",
     "aiEvalSourceAi": "Baserad på inskickade svar (GPU)",
@@ -458,7 +602,32 @@
       "framework": "Ramavtal",
       "dis": "DIS",
       "other": "Övrig"
-    }
+    },
+    "referenceAuto": "Skapas automatiskt när du sparar",
+    "referenceLocked": "Referensnumret tilldelas av systemet och kan inte ändras.",
+    "answers": {
+      "title": "Inskickade svar",
+      "hint": "Läs alla anbud, med filerna som bifogats varje svar.",
+      "openAll": "Öppna alla inskickade svar",
+      "viewCount_one": "Visa {{count}} svar",
+      "viewCount_other": "Visa {{count}} svar",
+      "bidCount_one": "{{count}} inskickat anbud",
+      "bidCount_other": "{{count}} inskickade anbud",
+      "fileCount_one": "{{count}} bilaga",
+      "fileCount_other": "{{count}} bilagor",
+      "submitted": "inskickat",
+      "expandAll": "Visa alla",
+      "collapseAll": "Dölj alla",
+      "download": "Ladda ner",
+      "missingFile": "Ett dokument begärdes men bifogades inte.",
+      "sealed": "Anbuden är förseglade till sista anbudsdag. Svar och bilagor öppnas när upphandlingen avförseglas.",
+      "sealedCount_one": "{{count}} anbud har kommit in. Det är förseglat till sista anbudsdag.",
+      "sealedCount_other": "{{count}} anbud har kommit in. De är förseglade till sista anbudsdag.",
+      "noQuestionnaire": "Inget frågeformulär är kopplat till upphandlingen.",
+      "loadFailed": "Det gick inte att läsa in de inskickade svaren.",
+      "fileFailed": "Det gick inte att öppna filen."
+    },
+    "announcementHint": "Texten publiceras tillsammans med upphandlingen. Skriv den, eller låt AI ta fram ett utkast, innan du publicerar."
   },
   "nav": {
     "supplierPortal": "Leverantörsportalen",
@@ -522,10 +691,6 @@
     "bidSuggestions": {
       "name": "AI-svarförslag",
       "desc": "Skissa svar från profil, certifikat, försäkring och referenser. Granska innan du tillämpar."
-    },
-    "completeness": {
-      "name": "AI-kompletthetskontroll",
-      "desc": "Flagga saknade profilfält och utgångna dokument."
     },
     "qualificationRisk": {
       "name": "AI kvalificeringsrisk",
@@ -685,6 +850,8 @@
     "profileComplete": "Profilen är komplett",
     "profileIncomplete": "ofullständiga",
     "documentsHint": "Ladda upp stödjande dokument för din organisation.",
+    "aiQuestionnaireCollapse": "Dölj",
+    "aiQuestionnaireExpand": "Visa",
     "aiQuestionnaireTitle": "AI-enkätassistent",
     "aiQuestionnaireSubtitle": "Beskriv upphandlingen — AI föreslår CPV-koder och kvalificeringsfrågor (max 300 tecken)",
     "aiQuestionnairePlaceholder": "t.ex. Kvalificerade byggentreprenörer för skolrenovering: el och ventilation, ISO 9001, ansvarsförsäkring, 5+ års erfarenhet av offentliga uppdrag…",
@@ -945,7 +1112,8 @@
     "failedRemoveProfilePicture": "Kunde inte ta bort profilbild",
     "loginFailed": "Inloggningen misslyckades",
     "registrationFailed": "Registreringen misslyckades",
-    "currentPasswordIncorrect": "Nuvarande lösenord är felaktigt"
+    "currentPasswordIncorrect": "Nuvarande lösenord är felaktigt",
+    "profileSentForApproval": "Profilen är sparad. Eftersom en viktig uppgift ändrades skickas kontot för godkännande igen."
   },
   "validation": {
     "emailRequired": "E-post krävs",
@@ -1331,9 +1499,6 @@
     "aiProfileApplySelectedCount": "Använd {{count}} fält i formuläret",
     "aiProfileShowSuggestions": "Visa förslag ({{count}})",
     "aiProfileHideSuggestions": "Dölj förslag",
-    "completenessOk": "Profilen ser komplett ut ({{percent}}%)",
-    "completenessGaps": "Profilen {{percent}}% komplett — {{count}} lucka/luckor",
-    "aiCompletenessCheck": "AI-kompletteringskontroll",
     "aiAnswersTitle": "AI-svarförslag",
     "aiAnswersSubtitle": "Skapa utkast från din profil, certifikat, försäkring och referensprojekt. Granska innan du använder dem.",
     "aiAnswersGenerate": "Föreslå svar med AI",

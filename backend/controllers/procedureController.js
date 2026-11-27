@@ -229,6 +229,25 @@ async function assertEntitlement(userId, key) {
   return { ok: true };
 }
 
+/**
+ * Reference numbers are issued by the server (REF-<year>-<running number> per buyer)
+ * and never taken from the client.
+ */
+async function nextProcedureReference(entityId) {
+  const year = new Date().getFullYear();
+  const prefix = `REF-${year}-`;
+  const rows = await db.Procedure.findAll({
+    where: { procuringEntityId: entityId, referenceNumber: { [Op.like]: `${prefix}%` } },
+    attributes: ['referenceNumber']
+  });
+  let max = 1000;
+  for (const row of rows) {
+    const n = parseInt(String(row.referenceNumber).slice(prefix.length), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${prefix}${max + 1}`;
+}
+
 const listBuyerProcedures = async (req, res) => {
   try {
     const entity = await getBuyerEntity(req.user.id);
@@ -288,7 +307,7 @@ const createProcedure = async (req, res) => {
     const procedure = await db.Procedure.create({
       procuringEntityId: entity.id,
       title,
-      referenceNumber: req.body.referenceNumber?.trim() || null,
+      referenceNumber: await nextProcedureReference(entity.id),
       procedureType: req.body.procedureType || 'open',
       description: req.body.description?.trim() || null,
       status: 'draft',
@@ -455,7 +474,9 @@ const getProcedure = async (req, res) => {
             bySupplier.set(sid, b);
           }
         }
-        json.bidResponses = Array.from(bySupplier.values()).map((b) => ({
+        const stillSealed = isProcedureSealedForLock(procedure);
+        json.bidCount = bySupplier.size;
+        json.bidResponses = stillSealed ? [] : Array.from(bySupplier.values()).map((b) => ({
           id: b.id,
           supplierId: b.supplierId,
           companyName: b.supplier?.companyName || 'Supplier',
@@ -467,6 +488,19 @@ const getProcedure = async (req, res) => {
         json.bidResponses = [];
       }
     } else {
+      // Buyer-only data never reaches a supplier: internal notes, other bidders' scores,
+      // the award memo and who created the procedure.
+      delete json.notes;
+      delete json.createdBy;
+      json.evaluations = [];
+      if (json.awardDecision) {
+        json.awardDecision = {
+          id: json.awardDecision.id,
+          decidedAt: json.awardDecision.decidedAt || json.awardDecision.createdAt,
+          winner: json.awardDecision.winner ? { companyName: json.awardDecision.winner.companyName } : null,
+          isWinner: Boolean(viewingSupplier && json.awardDecision.winnerSupplierId === viewingSupplier.id)
+        };
+      }
       // Strip peer identity from supplier view (only role + own thread)
       json.qaMessages = (json.qaMessages || []).map((m) => ({
         id: m.id,
@@ -515,15 +549,44 @@ const updateProcedure = async (req, res) => {
       return res.status(404).json({ message: 'Procedure not found' });
     }
 
+    // referenceNumber is issued by the server and never editable.
     const fields = [
-      'title', 'referenceNumber', 'procedureType', 'description', 'status',
+      'title', 'procedureType', 'description',
       'plannedPublishAt', 'bidDeadline', 'qaDeadline', 'standstillEndsAt', 'notes', 'questionnaireId'
     ];
     const updates = {};
     for (const f of fields) {
       if (req.body[f] !== undefined) updates[f] = req.body[f];
     }
+    // Status moves through publish / unseal / award / close actions. A plain save may
+    // only step between the preparation statuses.
+    if (
+      req.body.status !== undefined &&
+      req.body.status !== procedure.status &&
+      UNDERLAG_EDIT_PROCEDURE_STATUSES.includes(procedure.status) &&
+      UNDERLAG_EDIT_PROCEDURE_STATUSES.includes(req.body.status)
+    ) {
+      updates.status = req.body.status;
+    }
+    if (!procedure.referenceNumber) {
+      updates.referenceNumber = await nextProcedureReference(entity.id);
+    }
     if (updates.title) updates.title = String(updates.title).trim();
+    // While bids are sealed the deadline may be moved later, never to a day that has passed:
+    // that would open the bids before the deadline the suppliers were given.
+    if (
+      updates.bidDeadline !== undefined &&
+      UNPUBLISHABLE_PROCEDURE_STATUSES.includes(procedure.status) &&
+      isProcedureSealedForLock(procedure) &&
+      String(updates.bidDeadline || '').slice(0, 10) !== String(procedure.bidDeadline || '').slice(0, 10)
+    ) {
+      const today = new Date().toISOString().slice(0, 10);
+      if (!updates.bidDeadline || String(updates.bidDeadline).slice(0, 10) < today) {
+        return res.status(400).json({
+          message: 'Bids are sealed. The bid deadline can be moved to a later date, not removed or set to a date that has passed.'
+        });
+      }
+    }
     if (updates.bidDeadline !== undefined && (procedure.isSealed || procedure.sealedUntil)) {
       updates.sealedUntil = sealedUntilFromBidDeadline(updates.bidDeadline);
     }
@@ -764,8 +827,17 @@ const upsertEvaluation = async (req, res) => {
       });
     }
 
+    // Scores cannot be recorded while the bids are still sealed.
+    const sealCheck = await assertProcedureUnsealedForBuyerAction(procedure);
+    if (!sealCheck.ok) {
+      return res.status(403).json({ message: sealCheck.message, sealedUntil: sealCheck.sealedUntil });
+    }
+
     const { supplierId, score, notes, responseId } = req.body;
     if (!supplierId) return res.status(400).json({ message: 'supplierId is required' });
+    if (score != null && score !== '' && !(Number(score) >= 0 && Number(score) <= 100)) {
+      return res.status(400).json({ message: 'Score must be a number from 0 to 100' });
+    }
 
     const [row] = await db.BidEvaluation.findOrCreate({
       where: { procedureId: procedure.id, supplierId },
@@ -887,6 +959,9 @@ const createAward = async (req, res) => {
         responses.forEach((r) => bidderIds.add(r.supplierId));
       }
       if (winnerSupplierId) bidderIds.add(winnerSupplierId);
+      const winnerName = winnerSupplierId
+        ? (await db.Supplier.findByPk(winnerSupplierId, { attributes: ['companyName'] }))?.companyName
+        : null;
 
       for (const sid of bidderIds) {
         const supplier = await db.Supplier.findByPk(sid, {
@@ -901,7 +976,8 @@ const createAward = async (req, res) => {
             supplier.user.firstName,
             procedure.title,
             isWinner,
-            standstillEndsAt || null
+            standstillEndsAt || procedure.standstillEndsAt || null,
+            { buyerName: entity.entityName, reference: procedure.referenceNumber, winnerName }
           ).catch((err) => console.error('Award email failed:', err.message));
         }
       }
@@ -1111,7 +1187,14 @@ const publishProcedure = async (req, res) => {
               supplier.user.email,
               supplier.user.firstName,
               procedure.title,
-              procedure.referenceNumber
+              procedure.referenceNumber,
+              {
+                buyerName: entity.entityName,
+                procedureType: procedure.procedureType,
+                qaDeadline: procedure.qaDeadline,
+                bidDeadline: procedure.bidDeadline,
+                description: procedure.description
+              }
             ).catch((err) => console.error('Invite email failed:', err.message));
           }
         }
@@ -1331,7 +1414,8 @@ const createComplement = async (req, res) => {
             supplier.user.email,
             supplier.user.firstName,
             procedure.title,
-            req.body.deadline || null
+            req.body.deadline || null,
+            { buyerName: entity.entityName, reference: procedure.referenceNumber, message }
           ).catch((err) => console.error('Complement email failed:', err.message));
         }
       }

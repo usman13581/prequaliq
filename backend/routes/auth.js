@@ -39,10 +39,15 @@ const resetWithTokenValidation = [
   handleValidationErrors
 ];
 
-router.post('/register', registerValidation, authController.register);
-router.post('/login', loginValidation, authController.login);
-router.post('/forgot-password', forgotPasswordValidation, authController.forgotPassword);
-router.post('/reset-password-with-token', resetWithTokenValidation, authController.resetPasswordWithToken);
+const { rateLimit } = require('../middleware/rateLimit');
+// Per account and address: 20 sign-in attempts per 15 minutes, 10 sign-ups / reset mails per hour.
+const signInLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+const signUpLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10 });
+
+router.post('/register', signUpLimiter, registerValidation, authController.register);
+router.post('/login', signInLimiter, loginValidation, authController.login);
+router.post('/forgot-password', signUpLimiter, forgotPasswordValidation, authController.forgotPassword);
+router.post('/reset-password-with-token', signInLimiter, resetWithTokenValidation, authController.resetPasswordWithToken);
 router.get('/profile', authenticate, authController.getProfile);
 router.put('/reset-password', authenticate, resetPasswordValidation, authController.resetPassword);
 router.put('/profile-picture', authenticate, (req, res, next) => {

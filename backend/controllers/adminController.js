@@ -159,9 +159,8 @@ const createProcuringEntity = async (req, res) => {
       userId: user.id,
       entityName: entityName.trim(),
       companyId: validCompanyId,
-      status: 'approved',
-      approvedAt: new Date(),
-      approvedBy: req.user.id
+      // Same as a supplier: the account starts pending and is approved in a separate step.
+      status: 'pending'
     });
     console.log('Procuring entity created successfully:', procuringEntity.id);
 

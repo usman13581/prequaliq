@@ -53,7 +53,15 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route path="/developer" element={<Developer />} />
+                <Route
+                  path="/developer"
+                  element={
+                    <ProtectedRoute allowedRoles={['admin']}>
+                      <Developer />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="*" element={<Navigate to="/login" replace />} />
                 <Route path="/" element={<Navigate to="/login" replace />} />
               </Routes>
             </Router>

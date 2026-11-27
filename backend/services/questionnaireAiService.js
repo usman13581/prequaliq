@@ -347,21 +347,23 @@ async function generateQuestionnaireDraft(description, options = {}) {
     cpvSuggestions = cpvCandidates.slice(0, 5).map((c) => ({
       ...c,
       reason: c.supplierCount
-        ? `${c.reason} · ${c.supplierCount} supplier(s) registered`
+        ? `${c.reason} · ${language === 'sv' ? `${c.supplierCount} registrerade leverantörer` : `${c.supplierCount} supplier(s) registered`}`
         : c.reason,
     }));
   } else {
     cpvSuggestions = cpvSuggestions.map((c) => ({
       ...c,
       reason: c.supplierCount
-        ? `${c.reason} · ${c.supplierCount} supplier(s) on this CPV`
+        ? `${c.reason} · ${language === 'sv' ? `${c.supplierCount} leverantörer på denna CPV-kod` : `${c.supplierCount} supplier(s) on this CPV`}`
         : c.reason,
     }));
   }
 
   const questions = normalizeQuestions(aiData.questions);
 
-  const title = String(aiData.title || 'Supplier qualification questionnaire').trim().slice(0, 200);
+  const title = String(
+    aiData.title || (language === 'sv' ? 'Frågeformulär för leverantörskvalificering' : 'Supplier qualification questionnaire')
+  ).trim().slice(0, 200);
   const supplierDescription = normalizeSupplierDescription(
     aiData.description,
     title,

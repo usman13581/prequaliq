@@ -1,4 +1,6 @@
 const db = require('../models');
+const { checkEmailChange } = require('../utils/accountEmail');
+const { requestLanguage } = require('../utils/requestLanguage');
 const { Op } = require('sequelize');
 const fs = require('fs');
 const { profileAiUpload, mapAiErrorResponse } = require('../utils/profileAiUpload');
@@ -134,24 +136,21 @@ const updateProfile = async (req, res) => {
 
     const { firstName, lastName, email, phone, entityName, address, city, country } = req.body;
 
-    const materialFields = { entityName, address, city, country };
-    const materialChanged = Object.entries(materialFields).some(([key, val]) => {
-      if (val === undefined) return false;
-      const normalized = typeof val === 'string' ? val.trim() : val;
-      const old = entity.getDataValue(key);
-      const oldNorm = old == null ? '' : String(old).trim();
-      const newNorm = normalized == null ? '' : String(normalized);
-      return oldNorm !== newNorm;
-    });
+    // Important change = the sign-in email (and the entity's documents, handled on upload).
+    // Name, phone and address can be corrected without a new approval.
+    const emailChange = entity.user
+      ? await checkEmailChange(entity.user, email)
+      : { changed: false };
+    if (emailChange.error) return res.status(400).json({ message: emailChange.error });
     const statusUpdates =
-      entity.status === 'approved' && materialChanged ? { status: 'pending' } : {};
+      entity.status === 'approved' && emailChange.changed ? { status: 'pending' } : {};
 
     // Update User fields (firstName, lastName, email, phone)
     if (entity.user) {
       await entity.user.update({
-        ...(firstName !== undefined && { firstName: firstName.trim() }),
-        ...(lastName !== undefined && { lastName: lastName.trim() }),
-        ...(email !== undefined && { email: email.trim() }),
+        ...(firstName !== undefined && { firstName: String(firstName).trim() }),
+        ...(lastName !== undefined && { lastName: String(lastName).trim() }),
+        ...(emailChange.changed && { email: emailChange.email }),
         ...(phone !== undefined && { phone: phone?.trim() || null })
       });
     }
@@ -186,7 +185,11 @@ const updateProfile = async (req, res) => {
       ]
     });
 
-    res.json({ message: 'Profile updated successfully', procuringEntity: updatedEntity });
+    res.json({
+      message: 'Profile updated successfully',
+      procuringEntity: updatedEntity,
+      sentForApproval: Boolean(statusUpdates.status)
+    });
   } catch (error) {
     console.error('Update procuring entity profile error:', error);
     res.status(500).json({ message: 'Error updating profile', error: error.message });
@@ -606,7 +609,7 @@ const suggestProfileFromDocuments = (req, res) => {
         return res.status(404).json({ message: 'Procuring entity profile not found' });
       }
 
-      const language = (req.body?.language || 'en').slice(0, 2);
+      const language = requestLanguage(req);
       const documents = [];
 
       for (const file of req.files) {
@@ -669,7 +672,7 @@ const suggestQuestionnaireUnderstand = async (req, res) => {
     }
 
     const description = String(req.body?.description || '').trim();
-    const language = (req.body?.language || 'en').slice(0, 2);
+    const language = requestLanguage(req);
 
     const result = await understandQuestionnaireDescription(description, { language });
     return res.json({
@@ -697,7 +700,7 @@ const suggestQuestionnaireFromDescription = async (req, res) => {
     }
 
     const description = String(req.body?.description || '').trim();
-    const language = (req.body?.language || 'en').slice(0, 2);
+    const language = requestLanguage(req);
     const category = String(req.body?.category || '').trim().slice(0, 200);
     const understanding = String(req.body?.understanding || '').trim().slice(0, 2000);
     const extraKeywords = Array.isArray(req.body?.extraKeywords)

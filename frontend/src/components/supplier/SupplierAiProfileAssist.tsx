@@ -157,7 +157,7 @@ function Root({
   onStartEdit,
   children,
 }: RootProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const { enabled: aiEntitled, loading: entitlementLoading } = useEntitlement('ai.profile_assist');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -212,6 +212,7 @@ function Root({
       setSelectedNutsIds(new Set());
       const formData = new FormData();
       for (const f of files) formData.append('documents', f);
+      formData.append('language', (i18n.language || 'en').slice(0, 2));
       const res = await api.post<ProfileAiResponse>(suggestEndpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
