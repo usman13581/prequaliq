@@ -12,7 +12,7 @@ Your Railway frontend/backend stay the same. Only the **AI machine** and two env
 |-------|----------|-----------|
 | AI API code | `ai-service/` in GitHub (`main.py`, `prompts.py`, scripts) | Yes — already in git |
 | Python deps | `ai-service/requirements.txt` | Yes |
-| Model | Ollama + `qwen2.5:7b` | Re-pull on new server (~5 GB) |
+| Model | Ollama + `qwen2.5:14b` | Re-pull on new server (~9 GB) |
 | Shared secret | `AI_API_KEY` in GPU `.env` | Copy or regenerate |
 | Public URL | Trooper host + port | **Changes** on new provider |
 | App code (Railway) | Frontend + backend | No change needed except env URL |
@@ -28,7 +28,7 @@ Browser → Railway Frontend
               ↓
          Railway Backend  ──X-API-Key──→  NEW GPU SERVER
               ↓                              ├─ FastAPI (ai-service)
-         PostgreSQL                          └─ Ollama (qwen2.5:7b)
+         PostgreSQL                          └─ Ollama (qwen2.5:14b)
 ```
 
 Backend uses only:
@@ -68,7 +68,7 @@ Save:
 |--------|----------------|
 | `AI_API_KEY` | Long hex string — **keep this** if you want zero Railway key change |
 | Current `AI_SERVICE_URL` | e.g. `http://connect01.trooper.ai:17121` (old; will replace) |
-| Model name | `qwen2.5:7b` |
+| Model name | `qwen2.5:14b` |
 
 Local copies (gitignored — do not commit):
 
@@ -90,11 +90,11 @@ After termination, AI features stop until the new server is wired. The main app 
 
 ## 4. What the new monthly server needs
 
-Minimum for `qwen2.5:7b` (quantized via Ollama):
+Minimum for `qwen2.5:14b` (quantized via Ollama). One model stays loaded; this card is shared with Enterprise Hub chat.
 
 | Resource | Minimum | Comfortable |
 |----------|---------|-------------|
-| GPU VRAM | 8 GB | 12–24 GB |
+| GPU VRAM | 16 GB | 16–24 GB |
 | RAM | 16 GB | 32 GB |
 | Disk | 40 GB | 80 GB+ |
 | OS | Ubuntu 22.04+ | same |
@@ -145,7 +145,7 @@ ssh -p NEW_SSH_PORT NEW_USER@NEW_HOST
 ```bash
 # On new server
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:14b
 ollama list
 curl -s http://127.0.0.1:11434/api/tags | head
 ```
@@ -176,7 +176,7 @@ nano ~/prequaliq-ai/.env
 # AI_API_KEY=<your previous key>
 # API_PORT=NEW_API_PORT
 # OLLAMA_BASE_URL=http://127.0.0.1:11434
-# OLLAMA_MODEL=qwen2.5:7b
+# OLLAMA_MODEL=qwen2.5:14b
 cd ~/prequaliq-ai && ./restart-on-gpu.sh
 ```
 
@@ -184,7 +184,7 @@ cd ~/prequaliq-ai && ./restart-on-gpu.sh
 
 ```bash
 curl -s http://NEW_HOST:NEW_API_PORT/health
-# expect: {"status":"ok","ollama":true,"model":"qwen2.5:7b",...}
+# expect: {"status":"ok","ollama":true,"model":"qwen2.5:14b",...}
 
 curl -s http://NEW_HOST:NEW_API_PORT/endpoints | grep answers
 ```
@@ -234,7 +234,7 @@ Only after Step 6–7 pass. Cancel/terminate the Trooper order so hourly billing
 |-------|----------|---------|
 | GPU `~/prequaliq-ai/.env` | `AI_API_KEY` | Shared secret |
 | GPU `.env` | `API_PORT` | Uvicorn listen port (= public port) |
-| GPU `.env` | `OLLAMA_MODEL` | `qwen2.5:7b` |
+| GPU `.env` | `OLLAMA_MODEL` | `qwen2.5:14b` |
 | Mac `ai-service/deploy.env` | `TROOPER_HOST` / `SSH_PORT` / `AI_API_PORT` | Deploy scripts |
 | Railway + local backend | `AI_SERVICE_URL` | Public base URL of FastAPI |
 | Railway + local backend | `AI_API_KEY` | Must match GPU |
@@ -247,7 +247,7 @@ Use this when shopping — no lock-in to Trooper:
 
 1. **Monthly flat price** (or reserved), not “freeze at 10%”  
 2. **Stable public IP/hostname + fixed ports** (no migrate-on-unfreeze)  
-3. GPU ≥ **8–12 GB VRAM** for 7B  
+3. GPU ≥ **16 GB VRAM** for 14B  
 4. EU region if you care about data residency (GDPR)  
 5. Root/SSH access (you run Ollama yourself)  
 6. Enough bandwidth for occasional API calls (light traffic)
@@ -299,7 +299,7 @@ App without AI still works anytime `AI_SERVICE_URL` is unreachable (features ret
 
 ```bash
 # 1) Mac: point deploy.env at NEW_HOST / ports
-# 2) New server: install ollama + pull qwen2.5:7b + open API port
+# 2) New server: install ollama + pull qwen2.5:14b + open API port
 cd ~/Projects/Prequaliq/ai-service
 ./deploy-from-mac.sh
 curl -s http://NEW_HOST:NEW_API_PORT/health

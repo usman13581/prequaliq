@@ -2,7 +2,7 @@
 
 FastAPI wrapper around **local Ollama** on a GPU server (Trooper today; any monthly GPU VPS works). PDF text is extracted on Railway/backend; only plain text is sent to this service. The LLM never leaves the GPU machine.
 
-**Model:** `qwen2.5:7b` (via Ollama on `127.0.0.1:11434`)
+**Model:** `qwen2.5:14b` (via Ollama on `127.0.0.1:11434`). Prequaliq extraction and Enterprise Hub chat use this same loaded model. `POST /chat` is the Enterprise Hub route; it does not write business data.
 
 **Moving off Trooper / changing host:** see **[MIGRATE_AI_SERVER.md](./MIGRATE_AI_SERVER.md)**.
 
@@ -72,10 +72,10 @@ ollama list
 curl -s http://127.0.0.1:11434/api/tags | head
 ```
 
-You should see `qwen2.5:7b`. If not:
+You should see `qwen2.5:14b`. If not:
 
 ```bash
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:14b
 ```
 
 ### 4. Run the setup script
@@ -160,7 +160,7 @@ Redeploy backend after setting vars.
 |----------|---------|-------------|
 | `AI_API_KEY` | (required) | Shared secret with Railway backend |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Local Ollama |
-| `OLLAMA_MODEL` | `qwen2.5:7b` | Model tag |
+| `OLLAMA_MODEL` | `qwen2.5:14b` | Model tag |
 | `API_PORT` | `22528` | Public Trooper port for uvicorn |
 
 Copy from `.env.example` if you create `.env` manually.
