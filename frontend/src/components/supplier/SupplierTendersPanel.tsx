@@ -12,6 +12,7 @@ import { ProcedureQaChat } from '../procedures/ProcedureQaChat';
 import { ComplementHistoryThread } from '../procedures/ComplementHistoryThread';
 import { procedureStatusLabelKey } from '../../utils/procedureStatus';
 import { DynamicFilterBar } from '../search/DynamicFilterBar';
+import { useOpenRecord } from '../../lib/openRecord';
 import { emptyFilters, filterValueAsString, type FilterFieldDef, type FilterValues } from '../search/filterTypes';
 
 type TenderCategory =
@@ -237,6 +238,11 @@ export function SupplierTendersPanel({
       showToast(error.response?.data?.message || t('msg.failedLoadProcedure'), 'error');
     }
   };
+
+  // Opened from the Home screen: go straight to that tender.
+  useOpenRecord('tender', enabled && !loading, (id) => {
+    open(id);
+  });
 
   const openComplementSlideOver = (procedureId: string, title?: string) => {
     const proc = procedures.find((p) => p.id === procedureId);

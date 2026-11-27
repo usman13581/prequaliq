@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Briefcase, FileCheck, ScrollText, ShieldCheck } from 'lucide-react';
 import api from '../../services/api';
+import { requestOpenRecord } from '../../lib/openRecord';
 import { StatusBadge } from '../questionnaires/QuestionnaireSlimRow';
 import {
   DeadlinesPanel, EmptyRow, HomeHeader, HomePanel, HomeRow, HomeSkeleton, KpiTile, PanelLink, TodoPanel, formatDay,
@@ -169,7 +170,10 @@ export function SupplierOverviewTab({
               home.tenders.slice(0, 5).map((p) => (
                 <HomeRow
                   key={p.id}
-                  onClick={() => onNavigate('tenders')}
+                  onClick={() => {
+                    requestOpenRecord('tender', p.id);
+                    onNavigate('tenders');
+                  }}
                   title={p.title}
                   meta={[
                     p.reference,
@@ -199,7 +203,10 @@ export function SupplierOverviewTab({
               home.contracts.slice(0, 3).map((c) => (
                 <HomeRow
                   key={c.id}
-                  onClick={() => onNavigate('contracts')}
+                  onClick={() => {
+                    requestOpenRecord('supplierContract', c.id);
+                    onNavigate('contracts');
+                  }}
                   title={c.title}
                   meta={[c.reference, c.buyer, c.endDate ? t('home.endsOn', { date: formatDay(c.endDate) }) : null].filter(Boolean).join(' · ')}
                   right={
@@ -214,7 +221,16 @@ export function SupplierOverviewTab({
         </div>
 
         <div className="lg:col-span-2 space-y-3 min-w-0">
-          <TodoPanel todos={todos} total={todoTotal} onNavigate={onNavigate} limit={4} />
+          <TodoPanel
+            todos={todos}
+            total={todoTotal}
+            onNavigate={onNavigate}
+            onOpen={(item) => {
+              if (item.procedureId) requestOpenRecord('tender', item.procedureId);
+              else if (item.contractId) requestOpenRecord('supplierContract', item.contractId);
+            }}
+            limit={4}
+          />
           <DeadlinesPanel deadlines={home.deadlines} onNavigate={onNavigate} limit={3} />
         </div>
       </div>

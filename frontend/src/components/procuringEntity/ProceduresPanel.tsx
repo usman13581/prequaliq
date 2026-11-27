@@ -16,6 +16,7 @@ import { BrandSelect } from '../ui/BrandSelect';
 import { AiBusyButton } from '../ai/AiBusyButton';
 import { SearchField } from '../ui/SearchField';
 import { StatusPills } from '../ui/StatusPills';
+import { useOpenRecord } from '../../lib/openRecord';
 import { BidAnswersPanel } from '../procedures/BidAnswersPanel';
 
 type Procedure = {
@@ -240,6 +241,12 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
     if (enabled) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
+
+  // Opened from the Home screen: go straight to that procedure, on the tab the task belongs to.
+  useOpenRecord('procedure', enabled && !loading, (id, wantedTab) => {
+    const tabs = ['plan', 'underlag', 'qa', 'eval', 'award', 'complements'];
+    openDetail(id, tabs.includes(wantedTab || '') ? (wantedTab as typeof tab) : undefined);
+  });
 
   useEffect(() => {
     if (!detail?.id || tab !== 'qa') return;
