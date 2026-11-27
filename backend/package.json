@@ -10,6 +10,7 @@
     "force-migrate": "node scripts/forceMigrations.js",
     "seed": "npx sequelize-cli db:seed:all",
     "seed-demo": "node scripts/seedRichDemoData.js",
+    "seed-showcase": "node scripts/seedShowcaseData.js",
     "seed-prod-demo": "node scripts/seedProductionDemo.js",
     "create-admin": "node scripts/createAdmin.js",
     "clean-db": "node scripts/cleanDatabase.js",
