@@ -43,7 +43,6 @@ const FEATURE_CATALOG = [
   { key: 'ai.profile_assist', layer: 'ai-extra', liveDefault: true },
   { key: 'ai.requirements_builder', layer: 'ai-extra', liveDefault: true },
   { key: 'ai.bid_suggestions', layer: 'ai-extra', liveDefault: true },
-  { key: 'ai.completeness_conflict', layer: 'ai-extra', liveDefault: true },
   { key: 'ai.qualification_risk', layer: 'ai-extra', liveDefault: true },
   { key: 'ai.evaluation_copilot', layer: 'ai-extra', liveDefault: true },
   { key: 'ai.qa_draft_replies', layer: 'ai-extra', liveDefault: true },
@@ -70,10 +69,6 @@ const AI_FEATURE_LABELS = {
   'ai.bid_suggestions': {
     nameKey: 'aiFeatures.bidSuggestions.name',
     descKey: 'aiFeatures.bidSuggestions.desc'
-  },
-  'ai.completeness_conflict': {
-    nameKey: 'aiFeatures.completeness.name',
-    descKey: 'aiFeatures.completeness.desc'
   },
   'ai.qualification_risk': {
     nameKey: 'aiFeatures.qualificationRisk.name',

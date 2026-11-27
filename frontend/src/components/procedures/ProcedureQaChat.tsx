@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MessageSquare, Send } from 'lucide-react';
+import { MessageSquare, Send, Sparkles } from 'lucide-react';
+import { AiBusyButton } from '../ai/AiBusyButton';
 import { BrandSelect } from '../ui/BrandSelect';
 
 export type QaChatMessage = {
@@ -33,7 +34,7 @@ type Props = {
   onBodyChange: (value: string) => void;
   onSend: () => void;
   disabled?: boolean;
-  onAiDraft?: () => void;
+  onAiDraft?: () => void | Promise<void>;
 };
 
 function formatTime(iso?: string) {
@@ -64,6 +65,7 @@ export function ProcedureQaChat({
   onAiDraft
 }: Props) {
   const { t } = useTranslation();
+  const [aiDrafting, setAiDrafting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const threadMessages = useMemo(() => {
@@ -221,14 +223,23 @@ export function ProcedureQaChat({
             />
             <div className="flex flex-wrap gap-2 justify-end">
               {onAiDraft ? (
-                <button
-                  type="button"
-                  className="px-3 py-2 rounded-xl text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                <AiBusyButton
+                  busy={aiDrafting}
+                  className="!rounded-xl"
                   disabled={mode === 'buyer' && !selectedSupplierId}
-                  onClick={onAiDraft}
+                  idleIcon={<Sparkles size={16} aria-hidden />}
+                  busyLabel={t('procedures.aiWorking')}
+                  onClick={async () => {
+                    setAiDrafting(true);
+                    try {
+                      await onAiDraft();
+                    } finally {
+                      setAiDrafting(false);
+                    }
+                  }}
                 >
                   {t('procedures.aiQaDraft')}
-                </button>
+                </AiBusyButton>
               ) : null}
               <button
                 type="button"

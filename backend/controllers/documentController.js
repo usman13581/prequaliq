@@ -82,9 +82,13 @@ const uploadDocument = async (req, res) => {
     const issuer = req.body.issuer || null;
     const documentNumber = req.body.documentNumber || null;
 
-    const existing = await db.Document.findOne({
-      where: { supplierId: supplier.id, documentType, isActive: true }
-    });
+    // Profile documents replace the previous one of the same type. Bid attachments never do:
+    // each answer keeps its own file.
+    const existing = documentType === 'questionnaire_answer'
+      ? null
+      : await db.Document.findOne({
+        where: { supplierId: supplier.id, documentType, isActive: true }
+      });
     if (existing) {
       await existing.update({ isActive: false });
     }
@@ -153,9 +157,18 @@ const uploadProcuringEntityDocument = async (req, res) => {
       uploadedBy: req.user.id
     });
 
+    // An entity document is an important change: an approved buyer goes back for approval.
+    // Files attached to a questionnaire question are not profile documents.
+    let sentForApproval = false;
+    if (document.documentType !== 'question_attachment' && procuringEntity.status === 'approved') {
+      await procuringEntity.update({ status: 'pending' });
+      sentForApproval = true;
+    }
+
     res.status(201).json({
       message: 'Document uploaded successfully',
-      document
+      document,
+      sentForApproval
     });
   } catch (error) {
     console.error('Upload document error:', error);
@@ -229,6 +242,17 @@ const deleteDocument = async (req, res) => {
 
     await document.update({ isActive: false });
 
+    // Removing an important document also sends an approved profile back for approval.
+    if (req.user.role === 'supplier' && isProfileMaterialDocumentType(document.documentType)) {
+      const owner = await db.Supplier.findByPk(document.supplierId);
+      await reapprovalAfterMaterialChange(owner);
+    } else if (req.user.role === 'procuring_entity' && document.documentType !== 'question_attachment') {
+      await db.ProcuringEntity.update(
+        { status: 'pending' },
+        { where: { id: document.procuringEntityId, status: 'approved' } }
+      );
+    }
+
     res.json({ message: 'Document deleted successfully' });
   } catch (error) {
     console.error('Delete document error:', error);
@@ -262,7 +286,36 @@ const updateDocumentMetadata = async (req, res) => {
   }
 };
 
+// Open or download one document, after checking the signed-in user may see it
+const downloadDocument = async (req, res) => {
+  try {
+    const { canAccessDocument, resolveStoredFile } = require('../utils/documentAccess');
+    const document = await db.Document.findByPk(req.params.documentId);
+    if (!document || !(await canAccessDocument(req.user, document))) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+    const filePath = resolveStoredFile(document.filePath);
+    if (!filePath) return res.status(404).json({ message: 'File not found' });
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (req.query.inline === '1') {
+      // Only formats a browser shows safely are sent inline; everything else downloads.
+      const inlineTypes = ['application/pdf', 'image/png', 'image/jpeg'];
+      if (inlineTypes.includes(document.mimeType)) {
+        res.setHeader('Content-Type', document.mimeType);
+        res.setHeader('Content-Disposition', 'inline');
+        return res.sendFile(filePath);
+      }
+    }
+    return res.download(filePath, document.fileName);
+  } catch (error) {
+    console.error('Download document error:', error);
+    res.status(500).json({ message: 'Error downloading document' });
+  }
+};
+
 module.exports = {
+  downloadDocument,
   upload,
   profilePictureUpload,
   uploadDocument,

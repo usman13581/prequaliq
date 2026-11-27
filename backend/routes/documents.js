@@ -9,6 +9,7 @@ router.post('/supplier', authorize('supplier'), documentController.upload.single
 router.put('/supplier/:documentId/metadata', authorize('supplier'), documentController.updateDocumentMetadata);
 router.post('/procuring-entity', authorize('procuring_entity'), documentController.upload.single('file'), documentController.uploadProcuringEntityDocument);
 router.get('/', documentController.getDocuments);
+router.get('/:documentId/download', documentController.downloadDocument);
 router.delete('/:documentId', documentController.deleteDocument);
 
 module.exports = router;

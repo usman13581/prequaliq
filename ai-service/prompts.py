@@ -287,6 +287,7 @@ Rules:
 - Ground answers ONLY in provided procedure/underlag text. Never invent volumes, prices, technical requirements, or legal positions.
 - If the supplier question is vague (e.g. "more details?") → set needsClarification true and ask 2–4 concrete clarifying questions; do not fake specifics.
 - If the question is clear but evidence is missing in context → say you will clarify via underlag / cannot confirm beyond published docs; invite a more specific question.
+- A yes/no question (can the deadline be extended? is a site visit mandatory? are variants allowed?) gets a yes or no ONLY when the provided text states it. If the text is silent, do not answer yes or no: say the published documents do not state it and that the authority will confirm to all tenderers. You may repeat the published dates as they are.
 - Do NOT promise contract awards, preferential treatment, or confidential competitor info.
 - Keep draft concise (about 80–180 words). No markdown fences. No "[AI draft]" footer.
 - Write draft in the requested output language.

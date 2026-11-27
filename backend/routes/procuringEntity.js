@@ -2,10 +2,12 @@ const express = require('express');
 const router = express.Router();
 const procuringEntityController = require('../controllers/procuringEntityController');
 const { authenticate, authorize } = require('../middleware/auth');
+const homeController = require('../controllers/homeController');
 
 router.use(authenticate);
 router.use(authorize('procuring_entity'));
 
+router.get('/home', homeController.buyerHome);
 router.get('/dashboard/stats', procuringEntityController.getDashboardStats);
 router.get('/profile', procuringEntityController.getProfile);
 router.put('/profile', procuringEntityController.updateProfile);

@@ -20,7 +20,12 @@
   --border-strong: #d1dae6;
   --surface: #f4f6f9;
   --surface-dark: #0b1220;
-  --radius: 12px;
+  --radius: 10px;
+  /* Control metrics shared with Enterprise Hub: compact, square-cornered, flat. */
+  --control-h: 2rem;
+  --control-radius: 4px;
+  --control-pad: 0.25rem 0.5rem;
+  --focus-ring: 0 0 0 2px var(--accent-subtle);
   --shadow: 0 1px 3px rgba(15, 39, 68, 0.06), 0 1px 2px rgba(15, 39, 68, 0.04);
 
   /* Shared portal top bar height (supplier / admin / procuring entity) */
@@ -73,10 +78,11 @@ body {
   letter-spacing: -0.02em;
 }
 
+/* Same plain, compact heading on every portal (platform admin, buyer, supplier). */
 .page-title {
-  font-family: var(--font-display);
-  font-size: clamp(1.15rem, 1.6vw, 1.4rem);
-  font-weight: 650;
+  font-family: var(--font-app);
+  font-size: 1rem;
+  font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--foreground);
   line-height: 1.25;
@@ -627,7 +633,7 @@ input[type='radio'].field-check:checked {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 /*
@@ -639,17 +645,17 @@ input[type='radio'].field-check:checked {
 .input-brand {
   width: 100%;
   min-width: 0;
-  min-height: 2.25rem;
-  padding: 0.4rem 0.75rem;
+  min-height: var(--control-h);
+  padding: var(--control-pad);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   background: var(--card);
   color: var(--foreground);
   font-family: var(--font-app);
   font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.35;
-  box-shadow: inset 0 1px 2px rgba(15, 39, 68, 0.04);
+  box-shadow: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 .field-control::placeholder,
@@ -667,7 +673,7 @@ input[type='radio'].field-check:checked {
 .input-brand:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15), inset 0 1px 2px rgba(15, 39, 68, 0.04);
+  box-shadow: var(--focus-ring);
 }
 .field-control:disabled,
 .input-brand:disabled {
@@ -677,7 +683,7 @@ input[type='radio'].field-check:checked {
 }
 textarea.field-control,
 textarea.input-brand {
-  min-height: 5.5rem;
+  min-height: 4.5rem;
   padding-top: 0.55rem;
   resize: vertical;
 }
@@ -688,17 +694,17 @@ input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='h
 textarea,
 select:not(.sr-only) {
   min-width: 0 !important;
-  min-height: 2.25rem !important;
-  padding: 0.4rem 0.75rem !important;
+  min-height: var(--control-h) !important;
+  padding: var(--control-pad) !important;
   border: 1px solid var(--border-strong) !important;
-  border-radius: 6px !important;
+  border-radius: var(--control-radius) !important;
   background-color: var(--card) !important;
   color: var(--foreground) !important;
   font-family: var(--font-app) !important;
   font-size: 0.8125rem !important;
   font-weight: 500 !important;
   line-height: 1.35 !important;
-  box-shadow: inset 0 1px 2px rgba(15, 39, 68, 0.04) !important;
+  box-shadow: none !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
 }
 input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image'])::placeholder,
@@ -720,7 +726,7 @@ select:not(.sr-only):focus,
 select:not(.sr-only):focus-visible {
   outline: none !important;
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15), inset 0 1px 2px rgba(15, 39, 68, 0.04) !important;
+  box-shadow: var(--focus-ring) !important;
 }
 input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']):disabled,
 textarea:disabled,
@@ -730,7 +736,7 @@ select:not(.sr-only):disabled {
   cursor: not-allowed !important;
 }
 textarea {
-  min-height: 5.5rem !important;
+  min-height: 4.5rem !important;
   padding-top: 0.55rem !important;
   resize: vertical;
 }
@@ -765,17 +771,17 @@ input[class*='w-24']:not(.field-search) {
 input.field-search:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']),
 input.field-control.field-search {
   min-width: 0 !important;
-  min-height: 2.25rem !important;
-  padding: 0.4rem 0.75rem 0.4rem 2.5rem !important;
+  min-height: var(--control-h) !important;
+  padding: var(--control-pad) 0.4rem 2.5rem !important;
   border: 1px solid var(--border-strong) !important;
-  border-radius: 6px !important;
+  border-radius: var(--control-radius) !important;
   background-color: var(--card) !important;
   color: var(--foreground) !important;
   font-family: var(--font-app) !important;
   font-size: 0.8125rem !important;
   font-weight: 500 !important;
   line-height: 1.35 !important;
-  box-shadow: inset 0 1px 2px rgba(15, 39, 68, 0.04) !important;
+  box-shadow: none !important;
   -webkit-appearance: none !important;
   appearance: none !important;
 }
@@ -843,13 +849,13 @@ input.field-bare:focus-visible,
 
 /* LOV / CPV / NUTS / date / custom select triggers */
 .field-trigger {
-  min-height: 2.25rem;
-  padding: 0.4rem 0.75rem;
+  min-height: var(--control-h);
+  padding: var(--control-pad);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   background: var(--card);
   color: var(--foreground);
-  box-shadow: inset 0 1px 2px rgba(15, 39, 68, 0.04);
+  box-shadow: none;
   font-family: var(--font-app);
   font-size: 0.8125rem;
   font-weight: 500;
@@ -863,7 +869,7 @@ input.field-bare:focus-visible,
 .field-trigger:focus-visible,
 .field-trigger[aria-expanded='true'] {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15), inset 0 1px 2px rgba(15, 39, 68, 0.04);
+  box-shadow: var(--focus-ring);
   outline: none;
 }
 .field-trigger:disabled {
@@ -1121,4 +1127,90 @@ input.field-bare:focus-visible,
 
 .portal-main-content {
   padding-bottom: 1.5rem;
+}
+
+/*
+ * Enterprise Hub control language, applied app-wide.
+ * Buttons are flat and compact with 4px corners; secondary actions are outlined.
+ * These rules sit after the utilities on purpose, so one-off rounded-xl / px-5 / shadow-lg
+ * classes on individual buttons no longer make each screen look different.
+ */
+.btn-primary,
+.btn-save,
+.btn-update,
+.btn-ghost,
+.btn-approve,
+.btn-reject,
+.btn-cancel,
+.btn-close,
+.btn-danger,
+.btn-delete {
+  box-sizing: border-box;
+  min-height: var(--control-h) !important;
+  padding: 0 0.75rem !important;
+  border-radius: var(--control-radius) !important;
+  box-shadow: none !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.btn-primary:disabled,
+.btn-save:disabled,
+.btn-update:disabled,
+.btn-ghost:disabled,
+.btn-approve:disabled,
+.btn-reject:disabled,
+.btn-cancel:disabled,
+.btn-close:disabled,
+.btn-danger:disabled,
+.btn-delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-primary:focus-visible,
+.btn-save:focus-visible,
+.btn-update:focus-visible,
+.btn-ghost:focus-visible,
+.btn-approve:focus-visible,
+.btn-reject:focus-visible,
+.btn-cancel:focus-visible,
+.btn-close:focus-visible,
+.btn-danger:focus-visible,
+.btn-delete:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Secondary actions: outlined, quiet until hovered. */
+.btn-ghost,
+.btn-cancel,
+.btn-close {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
+}
+.btn-ghost:hover:not(:disabled),
+.btn-cancel:hover:not(:disabled),
+.btn-close:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+/* Cards and list rows inside the portals: one corner radius, a hairline border, no heavy shadows. */
+.portal-main-content .rounded-2xl,
+.portal-main-content .rounded-3xl {
+  border-radius: var(--radius);
+}
+.portal-main-content .rounded-xl {
+  border-radius: 8px;
+}
+.portal-main-content .shadow-sm,
+.portal-main-content .shadow,
+.portal-main-content .shadow-md,
+.portal-main-content .shadow-lg,
+.portal-main-content .shadow-xl {
+  box-shadow: none;
 }

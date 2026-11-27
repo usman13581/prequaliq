@@ -158,6 +158,22 @@ function normalizeUnderstandResult(raw, description, language = 'en') {
     };
   }
 
+  // The AI service softens its own verdict before answering; `raw.raw` is what the model
+  // actually said. When the model calls the text off-topic and it is phrased as a question
+  // (a procurement need is a statement, not "what is the best …?"), the rejection stands.
+  const modelRejected = raw?.raw ? raw.raw.isValid === false : raw?.isValid === false;
+  const questionShaped =
+    /^(what|which|who|where|when|why|how|vad|vilken|vilket|vilka|vem|var|när|varför|hur)\b/i.test(trimmed) &&
+    /\?\s*$/.test(trimmed);
+  if (modelRejected && questionShaped) {
+    return {
+      isValid: false,
+      understanding: '',
+      category: '',
+      rejectionReason: rejection,
+    };
+  }
+
   let isValid = Boolean(raw?.isValid);
   let understanding = String(raw?.understanding || '').trim();
   let category = String(raw?.category || '').trim();

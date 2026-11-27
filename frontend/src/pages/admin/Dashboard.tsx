@@ -20,6 +20,7 @@ import { RowActionsMenu } from '../../components/ui/RowActionsMenu';
 import { useListPagination } from '../../hooks/useListPagination';
 import { usePortalTab } from '../../hooks/usePortalTab';
 import { AdminHomeTab, AdminSupplierStatsStrip, AdminEntityStatsStrip } from '../../components/admin/AdminHomeTab';
+import { StatusPills } from '../../components/ui/StatusPills';
 import { AdminEntitlementsModal } from '../../components/admin/AdminEntitlementsModal';
 import type { AdminDashboardStats } from '../../lib/adminStats';
 import { statsFromSuppliers, statsFromEntities } from '../../lib/adminStats';
@@ -316,6 +317,7 @@ const AdminDashboard = () => {
           <AdminHomeTab
             stats={dashboardStats}
             loading={statsLoading}
+            onNavigate={setActiveTab}
           />
         )}
 
@@ -337,8 +339,7 @@ const AdminDashboard = () => {
             {loading && <LoadingBlock label={t('sections.loadingData')} />}
 
             {!loading && activeTab === 'suppliers' && (
-              <div className="space-y-5">
-                <AdminSupplierStatsStrip stats={statsFromSuppliers(suppliers)} />
+              <div className="space-y-3">
               <div className="px-0 sm:px-1">
                 <PageHeader
                   title={t('sections.supplierManagement')}
@@ -357,33 +358,41 @@ const AdminDashboard = () => {
                   }
                 />
 
-                <div className="mb-4 flex flex-col sm:flex-row gap-3">
+                <div className="mb-3">
+                  <AdminSupplierStatsStrip stats={statsFromSuppliers(suppliers)} />
+                </div>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <SearchField
-                    wrapperClassName="flex-1"
+                    wrapperClassName="flex-1 min-w-[14rem] max-w-md"
                     placeholder={t('adminPortal.listSearchPlaceholder')}
                     value={supplierSearch}
                     onChange={(e) => setSupplierSearch(e.target.value)}
                   />
-                  <BrandSelect
-                    wrapperClassName="sm:w-44"
+                  <StatusPills
                     value={supplierStatusFilter}
-                    onChange={(e) => setSupplierStatusFilter(e.target.value as typeof supplierStatusFilter)}
-                  >
-                    <option value="all">{t('adminPortal.filterStatusAll')}</option>
-                    <option value="pending">{t('common.pending')}</option>
-                    <option value="approved">{t('common.approved')}</option>
-                    <option value="rejected">{t('common.rejected')}</option>
-                    <option value="requalification_required">{t('supplierPortal.requalificationTitle')}</option>
-                  </BrandSelect>
-                  <BrandSelect
-                    wrapperClassName="sm:w-40"
-                    value={supplierActiveFilter}
-                    onChange={(e) => setSupplierActiveFilter(e.target.value as typeof supplierActiveFilter)}
-                  >
-                    <option value="all">{t('adminPortal.filterActiveAll')}</option>
-                    <option value="active">{t('common.active')}</option>
-                    <option value="inactive">{t('common.inactive')}</option>
-                  </BrandSelect>
+                    onChange={setSupplierStatusFilter}
+                    pills={(['all', 'pending', 'approved', 'requalification_required', 'rejected'] as const).map((id) => ({
+                      id,
+                      label:
+                        id === 'all'
+                          ? t('common.all')
+                          : id === 'requalification_required'
+                            ? t('supplierPortal.requalificationTitle')
+                            : t(`common.${id}`),
+                      count: id === 'all' ? suppliers.length : suppliers.filter((x) => x.status === id).length
+                    }))}
+                  />
+                  <div className="w-40 shrink-0 sm:ml-auto">
+                    <BrandSelect
+                      wrapperClassName="w-full"
+                      value={supplierActiveFilter}
+                      onChange={(e) => setSupplierActiveFilter(e.target.value as typeof supplierActiveFilter)}
+                    >
+                      <option value="all">{t('adminPortal.filterActiveAll')}</option>
+                      <option value="active">{t('common.active')}</option>
+                      <option value="inactive">{t('common.inactive')}</option>
+                    </BrandSelect>
+                  </div>
                 </div>
 
                 {suppliers.length === 0 ? (
@@ -464,7 +473,7 @@ const AdminDashboard = () => {
                                     label: t('buttons.approve'),
                                     icon: <CheckCircle size={14} />,
                                     tone: 'success',
-                                    hidden: supplier.status !== 'pending',
+                                    hidden: supplier.status === 'approved',
                                     onClick: () => reviewSupplier(supplier.id, 'approve')
                                   },
                                   {
@@ -472,7 +481,7 @@ const AdminDashboard = () => {
                                     label: t('buttons.reject'),
                                     icon: <XCircle size={14} />,
                                     tone: 'danger',
-                                    hidden: supplier.status !== 'pending',
+                                    hidden: supplier.status === 'rejected',
                                     onClick: () => reviewSupplier(supplier.id, 'reject')
                                   },
                                   {
@@ -532,8 +541,7 @@ const AdminDashboard = () => {
             )}
 
             {!loading && activeTab === 'entities' && (
-              <div className="space-y-5">
-                <AdminEntityStatsStrip stats={statsFromEntities(procuringEntities)} />
+              <div className="space-y-3">
               <div className="px-0 sm:px-1">
                 <PageHeader
                   title={t('sections.entityManagement')}
@@ -548,32 +556,39 @@ const AdminDashboard = () => {
                   }
                 />
 
-                <div className="mb-4 flex flex-col sm:flex-row gap-3">
+                <div className="mb-3">
+                  <AdminEntityStatsStrip stats={statsFromEntities(procuringEntities)} />
+                </div>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <SearchField
-                    wrapperClassName="flex-1"
+                    wrapperClassName="flex-1 min-w-[14rem] max-w-md"
                     placeholder={t('adminPortal.listSearchPlaceholder')}
                     value={entitySearch}
                     onChange={(e) => setEntitySearch(e.target.value)}
                   />
-                  <BrandSelect
-                    wrapperClassName="sm:w-44"
+                  <StatusPills
                     value={entityStatusFilter}
-                    onChange={(e) => setEntityStatusFilter(e.target.value as typeof entityStatusFilter)}
-                  >
-                    <option value="all">{t('adminPortal.filterStatusAll')}</option>
-                    <option value="pending">{t('common.pending')}</option>
-                    <option value="approved">{t('common.approved')}</option>
-                    <option value="rejected">{t('common.rejected')}</option>
-                  </BrandSelect>
-                  <BrandSelect
-                    wrapperClassName="sm:w-40"
-                    value={entityActiveFilter}
-                    onChange={(e) => setEntityActiveFilter(e.target.value as typeof entityActiveFilter)}
-                  >
-                    <option value="all">{t('adminPortal.filterActiveAll')}</option>
-                    <option value="active">{t('common.active')}</option>
-                    <option value="inactive">{t('common.inactive')}</option>
-                  </BrandSelect>
+                    onChange={setEntityStatusFilter}
+                    pills={(['all', 'pending', 'approved', 'rejected'] as const).map((id) => ({
+                      id,
+                      label: id === 'all' ? t('common.all') : t(`common.${id}`),
+                      count:
+                        id === 'all'
+                          ? procuringEntities.length
+                          : procuringEntities.filter((x) => (x.status || 'pending') === id).length
+                    }))}
+                  />
+                  <div className="w-40 shrink-0 sm:ml-auto">
+                    <BrandSelect
+                      wrapperClassName="w-full"
+                      value={entityActiveFilter}
+                      onChange={(e) => setEntityActiveFilter(e.target.value as typeof entityActiveFilter)}
+                    >
+                      <option value="all">{t('adminPortal.filterActiveAll')}</option>
+                      <option value="active">{t('common.active')}</option>
+                      <option value="inactive">{t('common.inactive')}</option>
+                    </BrandSelect>
+                  </div>
                 </div>
 
                 {procuringEntities.length === 0 ? (
@@ -661,7 +676,7 @@ const AdminDashboard = () => {
                                     label: t('buttons.reject'),
                                     icon: <XCircle size={14} />,
                                     tone: 'danger',
-                                    hidden: entity.status === 'approved' || entity.status === 'rejected',
+                                    hidden: entity.status === 'rejected',
                                     onClick: () => reviewEntity(entity.id, 'reject')
                                   },
                                   {

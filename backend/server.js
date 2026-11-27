@@ -15,6 +15,14 @@ app.use(cors({
   origin: resolveCorsOrigin(),
   credentials: true
 }));
+// Baseline response headers: no MIME sniffing, no framing by other sites, no referrer leakage.
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -88,7 +96,9 @@ app.get('/api/health', (req, res) => {
 // Error handling middleware — never expose internals in production (rule 01)
 app.use((err, req, res, next) => {
   console.error(err.stack || err);
-  const status = err.status || 500;
+  // A refused upload (wrong type, too large) is the caller's mistake, not a server fault.
+  const uploadRefused = err.name === 'MulterError' || /^Invalid file type/.test(err.message || '');
+  const status = err.status || (uploadRefused ? 400 : 500);
   const safeMessage =
     status < 500
       ? err.message || 'Request failed'

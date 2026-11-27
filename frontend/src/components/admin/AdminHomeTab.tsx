@@ -1,180 +1,181 @@
 import { useTranslation } from 'react-i18next';
 import {
-  Users, Building2, FileText, ClipboardList, Clock, CheckCircle,
+  Users, Building2, FileText, Clock, CheckCircle,
   AlertTriangle, UserPlus, Activity
 } from 'lucide-react';
 import type { AdminDashboardStats } from '../../lib/adminStats';
+import { StatusBadge } from '../questionnaires/QuestionnaireSlimRow';
 import {
-  AdminStatCard, AdminStatsGrid, AdminStatusBreakdown, AdminSectionTitle, AdminRecentList
-} from './AdminStatCards';
+  EmptyRow, HomeHeader, HomePanel, HomeRow, HomeSkeleton, KpiTile, PanelLink, TodoPanel, formatDay, type HomeTodo
+} from '../home/HomeParts';
+import { AdminStatCard, AdminStatsGrid } from './AdminStatCards';
 
+const ACCOUNT_TONE: Record<string, 'green' | 'yellow' | 'red' | 'orange'> = {
+  approved: 'green',
+  pending: 'yellow',
+  rejected: 'red',
+  requalification_required: 'orange'
+};
+
+/**
+ * Platform admin Home: accounts waiting for a decision, the newest sign-ups on both sides and
+ * the account mix. Same building blocks as the buyer and supplier Home, sized for a laptop screen.
+ */
 export function AdminHomeTab({
   stats,
-  loading
+  loading,
+  onNavigate
 }: {
   stats: AdminDashboardStats | null;
   loading: boolean;
+  onNavigate: (tab: string) => void;
 }) {
   const { t } = useTranslation();
 
-  if (loading || !stats) {
-    return (
-      <div className="text-center py-16">
-        <div className="w-14 h-14 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto" />
-        <p className="mt-4 text-muted text-sm">{t('sections.loadingData')}</p>
-      </div>
-    );
+  if (loading || !stats) return <HomeSkeleton />;
+
+  const { suppliers, questionnaires } = stats;
+  // Older API responses may leave the buyer breakdown out.
+  const entities = {
+    ...stats.entities,
+    pending: stats.entities.pending ?? 0,
+    approved: stats.entities.approved ?? 0,
+    rejected: stats.entities.rejected ?? 0
+  };
+  const waiting = suppliers.pending + entities.pending;
+  const inactive = suppliers.inactive + entities.inactive;
+
+  const todos: HomeTodo[] = [];
+  if (suppliers.pending > 0) todos.push({ type: 'admin_suppliers_pending', tab: 'suppliers', count: suppliers.pending });
+  if (entities.pending > 0) todos.push({ type: 'admin_entities_pending', tab: 'entities', count: entities.pending });
+  if (suppliers.requalification_required > 0) {
+    todos.push({ type: 'admin_requalification', tab: 'suppliers', count: suppliers.requalification_required });
   }
+  if (inactive > 0) todos.push({ type: 'admin_inactive', tab: suppliers.inactive > 0 ? 'suppliers' : 'entities', count: inactive });
 
-  const { suppliers, entities, questionnaires, responses, pendingSubmissions } = stats;
-
-  const supplierBreakdown = [
-    { key: 'approved', label: t('common.approved'), value: suppliers.approved, color: 'bg-emerald-500' },
-    { key: 'pending', label: t('common.pending'), value: suppliers.pending, color: 'bg-amber-400' },
-    { key: 'requalification_required', label: t('adminPortal.requalification'), value: suppliers.requalification_required, color: 'bg-orange-500' },
-    { key: 'rejected', label: t('common.rejected'), value: suppliers.rejected, color: 'bg-red-500' }
-  ];
+  const statusLabel = (status: string) =>
+    status === 'requalification_required' ? t('supplierPortal.requalificationTitle') : t(`common.${status}`);
+  // Label on the left, one chip per status with accounts in it; chips wrap instead of squeezing the label.
+  const mixRow = (label: string, parts: Array<[string, number]>, tab: string) => (
+    <button
+      type="button"
+      onClick={() => onNavigate(tab)}
+      className="w-full text-left px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border last:border-b-0 hover:bg-surface transition-colors"
+    >
+      <span className="text-sm font-semibold text-foreground w-20 shrink-0">{label}</span>
+      <span className="flex flex-wrap gap-1.5 min-w-0">
+        {parts
+          .filter(([, n]) => n > 0)
+          .map(([status, n]) => (
+            <StatusBadge key={status} tone={ACCOUNT_TONE[status] || 'yellow'}>
+              {statusLabel(status)} {n}
+            </StatusBadge>
+          ))}
+      </span>
+    </button>
+  );
 
   return (
-    <div className="space-y-6">
-      <AdminSectionTitle
-        title={t('adminPortal.homeTitle')}
-        subtitle={t('adminPortal.homeSubtitle')}
-      />
+    <div className="space-y-3">
+      <HomeHeader title={t('home.adminTitle')} subtitle={t('home.adminSubtitle')} />
 
-      {/* Platform overview */}
-      <AdminStatsGrid>
-        <AdminStatCard
-          label={t('nav.totalSuppliers')}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiTile
+          label={t('home.kpi.waiting')}
+          value={waiting}
+          icon={Clock}
+          accent={waiting > 0 ? 'amber' : 'green'}
+          onClick={() => onNavigate(suppliers.pending > 0 || entities.pending === 0 ? 'suppliers' : 'entities')}
+        />
+        <KpiTile
+          label={t('home.kpi.suppliers')}
           value={suppliers.total}
-          hint={`${suppliers.active} ${t('nav.active')} · ${suppliers.newThisMonth} ${t('adminPortal.newThisMonth')}`}
+          hint={t('home.kpi.newHint', { count: suppliers.newThisMonth })}
           icon={Users}
           accent="blue"
+          onClick={() => onNavigate('suppliers')}
         />
-        <AdminStatCard
-          label={t('nav.procuringEntities')}
+        <KpiTile
+          label={t('home.kpi.buyers')}
           value={entities.total}
-          hint={`${entities.active} ${t('nav.active')} · ${entities.newThisMonth} ${t('adminPortal.newThisMonth')}`}
+          hint={t('home.kpi.newHint', { count: entities.newThisMonth })}
           icon={Building2}
           accent="slate"
+          onClick={() => onNavigate('entities')}
         />
-        <AdminStatCard
-          label={t('adminPortal.questionnaires')}
+        <KpiTile
+          label={t('home.kpi.questionnaires')}
           value={questionnaires.total}
-          hint={`${questionnaires.active} ${t('adminPortal.activeNow')} · ${questionnaires.overdue} ${t('adminPortal.overdue')}`}
+          hint={questionnaires.overdue ? t('home.kpi.overdueHint', { count: questionnaires.overdue }) : undefined}
           icon={FileText}
           accent="violet"
         />
-        <AdminStatCard
-          label={t('adminPortal.pendingReview')}
-          value={pendingSubmissions}
-          hint={t('adminPortal.pendingReviewHint')}
-          icon={ClipboardList}
-          accent="amber"
-          badge={pendingSubmissions > 0 ? t('adminPortal.actionNeeded') : undefined}
-        />
-      </AdminStatsGrid>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <AdminStatusBreakdown
-          title={t('adminPortal.supplierStatusMix')}
-          items={supplierBreakdown}
-          total={suppliers.total}
-        />
-        <div className="bg-white rounded-2xl border border-border p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-foreground mb-4">{t('adminPortal.platformActivity')}</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-xl bg-surface/80">
-              <div className="flex items-center gap-3">
-                <Activity className="text-accent" size={20} />
-                <span className="text-sm font-medium">{t('adminPortal.questionnaireResponses')}</span>
-              </div>
-              <span className="text-lg font-bold tabular-nums">{responses.total}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-green-50/80">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="text-green-600" size={20} />
-                <span className="text-sm font-medium">{t('adminPortal.submittedResponses')}</span>
-              </div>
-              <span className="text-lg font-bold tabular-nums text-green-800">{responses.submitted}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/80">
-              <div className="flex items-center gap-3">
-                <Clock className="text-amber-600" size={20} />
-                <span className="text-sm font-medium">{t('adminPortal.draftResponses')}</span>
-              </div>
-              <span className="text-lg font-bold tabular-nums text-amber-800">{responses.draft}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-orange-50/80">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="text-orange-600" size={20} />
-                <span className="text-sm font-medium">{t('adminPortal.inactiveAccounts')}</span>
-              </div>
-              <span className="text-lg font-bold tabular-nums text-orange-800">
-                {suppliers.inactive + entities.inactive}
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div>
-          <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
-            <Users size={14} className="text-primary-600" />
-            {t('nav.suppliers')}
-          </p>
-        <AdminRecentList
-          title={t('adminPortal.recentSuppliers')}
-          emptyLabel={t('sections.noSuppliersFound')}
-          items={stats.recentSuppliers}
-          renderItem={(item) => {
-            const s = item as AdminDashboardStats['recentSuppliers'][0];
-            return (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{s.companyName}</p>
-                  <p className="text-xs text-muted">{s.user?.email}</p>
-                </div>
-                <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
-                  s.status === 'approved' ? 'bg-green-100 text-green-800' :
-                  s.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                  s.status === 'requalification_required' ? 'bg-orange-100 text-orange-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {s.status === 'requalification_required' ? t('adminPortal.requalification') : t(`common.${s.status}`)}
-                </span>
-              </div>
-            );
-          }}
-        />
+      <div className="grid lg:grid-cols-5 gap-3 items-start">
+        <div className="lg:col-span-3 space-y-3 min-w-0">
+          <HomePanel
+            title={t('home.recentSuppliers')}
+            action={<PanelLink label={t('home.viewAll')} onClick={() => onNavigate('suppliers')} />}
+          >
+            {stats.recentSuppliers.length === 0 ? (
+              <EmptyRow>{t('home.noneYet')}</EmptyRow>
+            ) : (
+              stats.recentSuppliers.slice(0, 4).map((s) => (
+                <HomeRow
+                  key={s.id}
+                  onClick={() => onNavigate('suppliers')}
+                  title={s.companyName}
+                  meta={[[s.user?.firstName, s.user?.lastName].filter(Boolean).join(' '), s.user?.email, formatDay(s.createdAt)].filter(Boolean).join(' · ')}
+                  right={<StatusBadge tone={ACCOUNT_TONE[s.status] || 'yellow'}>{statusLabel(s.status)}</StatusBadge>}
+                />
+              ))
+            )}
+          </HomePanel>
+
+          <HomePanel
+            title={t('home.recentBuyers')}
+            action={<PanelLink label={t('home.viewAll')} onClick={() => onNavigate('entities')} />}
+          >
+            {stats.recentEntities.length === 0 ? (
+              <EmptyRow>{t('home.noneYet')}</EmptyRow>
+            ) : (
+              stats.recentEntities.slice(0, 3).map((e) => (
+                <HomeRow
+                  key={e.id}
+                  onClick={() => onNavigate('entities')}
+                  title={e.entityName}
+                  meta={[[e.user?.firstName, e.user?.lastName].filter(Boolean).join(' '), e.user?.email, formatDay(e.createdAt)].filter(Boolean).join(' · ')}
+                  right={<StatusBadge tone={ACCOUNT_TONE[e.status || 'pending'] || 'yellow'}>{statusLabel(e.status || 'pending')}</StatusBadge>}
+                />
+              ))
+            )}
+          </HomePanel>
         </div>
-        <div>
-          <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
-            <Building2 size={14} className="text-primary-600" />
-            {t('nav.entities')}
-          </p>
-        <AdminRecentList
-          title={t('adminPortal.recentEntities')}
-          emptyLabel={t('adminPortal.noEntities')}
-          items={stats.recentEntities}
-          renderItem={(item) => {
-            const e = item as AdminDashboardStats['recentEntities'][0];
-            return (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{e.entityName}</p>
-                  <p className="text-xs text-muted">{e.user?.email}</p>
-                </div>
-                <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
-                  e.user?.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {e.user?.isActive !== false ? t('common.active') : t('common.inactive')}
-                </span>
-              </div>
-            );
-          }}
-        />
+
+        <div className="lg:col-span-2 space-y-3 min-w-0">
+          <TodoPanel todos={todos} total={todos.length} onNavigate={onNavigate} limit={4} />
+          <HomePanel title={t('home.accountMix')}>
+            {mixRow(
+              t('home.kpi.suppliers'),
+              [
+                ['approved', suppliers.approved],
+                ['pending', suppliers.pending],
+                ['requalification_required', suppliers.requalification_required],
+                ['rejected', suppliers.rejected]
+              ],
+              'suppliers'
+            )}
+            {mixRow(
+              t('home.kpi.buyers'),
+              [
+                ['approved', entities.approved],
+                ['pending', entities.pending],
+                ['rejected', entities.rejected]
+              ],
+              'entities'
+            )}
+          </HomePanel>
         </div>
       </div>
     </div>

@@ -1,12 +1,16 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import api from '../../services/api';
+import { procedureStatusLabelKey } from '../../utils/procedureStatus';
+import { StatusBadge } from '../questionnaires/QuestionnaireSlimRow';
 import {
-  FileText, Users, Clock, CheckCircle, AlertTriangle, Calendar, Activity
+  DeadlinesPanel, EmptyRow, HomeHeader, HomePanel, HomeRow, HomeSkeleton, KpiTile, PanelLink, TodoPanel, formatDay,
+  type HomeDeadline, type HomeTodo
+} from '../home/HomeParts';
+import {
+  FileText, Clock, CheckCircle, AlertTriangle, Activity, Plus, ClipboardList, Send, Scale, ScrollText
 } from 'lucide-react';
-import {
-  AdminStatCard, AdminStatsGrid, AdminSectionTitle, AdminRecentList
-} from '../admin/AdminStatCards';
-import { useListPagination } from '../../hooks/useListPagination';
-import { ListPagination } from '../ui/ListPagination';
+import { AdminStatCard, AdminStatsGrid } from '../admin/AdminStatCards';
 
 export type EntityDashboardStats = {
   entityName?: string;
@@ -34,194 +38,158 @@ export type EntityDashboardStats = {
   nextAction: { labelKey?: string; tab: string | null };
 };
 
-function HomeTabSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div>
-        <div className="h-7 w-48 bg-surface rounded-lg" />
-        <div className="h-4 w-72 bg-surface rounded mt-2" />
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white rounded-2xl border border-border p-5 h-28" />
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl border border-border h-64" />
-        <div className="bg-white rounded-2xl border border-border h-64" />
-      </div>
-    </div>
-  );
-}
+type BuyerHomeData = {
+  status: string;
+  entityName?: string;
+  counts: { preparing: number; open: number; evaluation: number; awarded: number; contractsActive: number; questionnaires: number };
+  todo: HomeTodo[];
+  todoTotal: number;
+  procedures: Array<{
+    id: string;
+    title: string;
+    reference?: string | null;
+    status: string;
+    bidDeadline?: string | null;
+    bidCount: number;
+    sealed: boolean;
+    winner?: string | null;
+  }>;
+  contracts: Array<{
+    id: string;
+    title: string;
+    reference?: string | null;
+    status: string;
+    supplier?: string | null;
+    endDate?: string | null;
+    deliveryStatus: string;
+  }>;
+  deadlines: HomeDeadline[];
+};
 
+const PROCEDURE_TONE: Record<string, 'green' | 'yellow' | 'gray' | 'blue' | 'purple'> = {
+  draft: 'gray', planned: 'gray', underlag_ready: 'gray',
+  published: 'blue', qa_open: 'blue', bidding: 'blue',
+  evaluation: 'purple', awarded: 'green', standstill: 'yellow', closed: 'gray', cancelled: 'gray'
+};
+
+/**
+ * Buyer Home: what needs the buyer now (questions, unsealing, scoring, deliveries), the procedures in
+ * progress, the contracts in progress and the next dates. Sized to fit a laptop screen without scrolling.
+ */
 export function ProcuringEntityHomeTab({
-  stats,
-  loading,
   onNavigate
 }: {
-  stats: EntityDashboardStats | null;
-  loading: boolean;
+  stats?: EntityDashboardStats | null;
+  loading?: boolean;
   onNavigate: (tab: string) => void;
 }) {
   const { t } = useTranslation();
-  const homeQuestionnairePager = useListPagination(stats?.recentQuestionnaires || []);
+  const [data, setData] = useState<BuyerHomeData | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  if (loading || !stats) {
-    return <HomeTabSkeleton />;
-  }
+  useEffect(() => {
+    let alive = true;
+    api
+      .get('/procuring-entity/home')
+      .then((res) => { if (alive) setData(res.data); })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, []);
 
-  const { questionnaires, responses, matchingSuppliers } = stats;
-  const nextKey = stats.nextAction.labelKey || 'allSet';
-  const nextLabel = t(`entityPortal.nextActions.${nextKey}`);
-  const hasAction = Boolean(stats.nextAction.tab);
+  if (failed) return <EmptyRow>{t('home.loadFailed')}</EmptyRow>;
+  if (!data) return <HomeSkeleton />;
+
+  const { counts } = data;
+  const approved = data.status === 'approved';
 
   return (
-    <div className="space-y-6">
-      <AdminSectionTitle
-        title={t('entityPortal.homeTitle')}
-        subtitle={t('entityPortal.homeSubtitle')}
+    <div className="space-y-3">
+      <HomeHeader
+        title={data.entityName || t('home.buyerTitle')}
+        subtitle={t('home.buyerSubtitle')}
+        action={
+          <button
+            type="button"
+            disabled={!approved}
+            onClick={() => onNavigate('procedures')}
+            className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+          >
+            <Plus size={14} aria-hidden /> {t('procedures.create')}
+          </button>
+        }
       />
 
-      <AdminStatsGrid>
-        <AdminStatCard
-          label={t('nav.questionnaires')}
-          value={questionnaires.total}
-          hint={`${questionnaires.active} ${t('entityPortal.activeNow')} · ${questionnaires.open} ${t('entityPortal.open')}`}
-          icon={FileText}
-          accent="blue"
-        />
-        <AdminStatCard
-          label={t('entityPortal.submittedResponses')}
-          value={responses.submitted}
-          hint={`${responses.draft} ${t('entityPortal.draftResponses')}`}
-          icon={CheckCircle}
-          accent="green"
-        />
-        <AdminStatCard
-          label={t('entityPortal.matchingSuppliers')}
-          value={matchingSuppliers}
-          hint={t('entityPortal.matchingSuppliersHint')}
-          icon={Users}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiTile label={t('home.kpi.preparing')} value={counts.preparing} icon={ClipboardList} accent="slate" onClick={() => onNavigate('procedures')} />
+        <KpiTile label={t('home.kpi.open')} value={counts.open} icon={Send} accent="blue" onClick={() => onNavigate('procedures')} />
+        <KpiTile
+          label={t('home.kpi.evaluation')}
+          value={counts.evaluation}
+          hint={counts.awarded ? t('home.kpi.awardedHint', { count: counts.awarded }) : undefined}
+          icon={Scale}
           accent="violet"
+          onClick={() => onNavigate('procedures')}
         />
-        <AdminStatCard
-          label={t('entityPortal.overdue')}
-          value={questionnaires.overdue}
-          hint={
-            stats.nearestDeadline
-              ? `${t('entityPortal.nearestDeadline')}: ${new Date(stats.nearestDeadline).toLocaleDateString()}`
-              : undefined
-          }
-          icon={AlertTriangle}
-          accent="amber"
-          badge={questionnaires.overdue > 0 ? t('entityPortal.actionNeeded') : undefined}
-        />
-      </AdminStatsGrid>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl border border-border p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-foreground mb-4">{t('entityPortal.activitySummary')}</h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-xl bg-surface/80">
-              <span className="text-sm font-medium flex items-center gap-2">
-                <Activity size={18} className="text-accent" />
-                {t('entityPortal.totalResponses')}
-              </span>
-              <span className="text-lg font-bold tabular-nums">{responses.total}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-green-50/80">
-              <span className="text-sm font-medium flex items-center gap-2">
-                <CheckCircle size={18} className="text-green-600" />
-                {t('entityPortal.submittedResponses')}
-              </span>
-              <span className="text-lg font-bold text-green-800 tabular-nums">{responses.submitted}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/80">
-              <span className="text-sm font-medium flex items-center gap-2">
-                <Clock size={18} className="text-amber-600" />
-                {t('entityPortal.draftResponses')}
-              </span>
-              <span className="text-lg font-bold text-amber-800 tabular-nums">{responses.draft}</span>
-            </div>
-            {stats.nearestDeadlineTitle && (
-              <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-primary-50/60">
-                <span className="text-sm font-medium flex items-center gap-2 min-w-0">
-                  <Calendar size={18} className="text-primary-600 shrink-0" />
-                  <span className="truncate">{stats.nearestDeadlineTitle}</span>
-                </span>
-                <span className="text-xs font-semibold text-primary-800 shrink-0">
-                  {new Date(stats.nearestDeadline!).toLocaleDateString()}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div
-          className={`rounded-2xl p-6 border shadow-sm flex flex-col justify-center gap-4 ${
-            hasAction ? 'bg-white border-border' : 'bg-green-50/80 border-green-200'
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            {!hasAction && <CheckCircle className="text-green-600 shrink-0 mt-0.5" size={22} />}
-            <div>
-              <p className="text-sm text-muted">{t('supplierPortal.nextAction')}</p>
-              <p className={`text-lg font-semibold mt-0.5 ${hasAction ? 'text-foreground' : 'text-green-800'}`}>
-                {nextLabel}
-              </p>
-            </div>
-          </div>
-          {hasAction && (
-            <button
-              type="button"
-              onClick={() => onNavigate(stats.nextAction.tab!)}
-              className="btn-save self-start inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold"
-            >
-              {nextLabel}
-            </button>
-          )}
-        </div>
+        <KpiTile label={t('home.kpi.contractsActive')} value={counts.contractsActive} icon={ScrollText} accent="green" onClick={() => onNavigate('contracts')} />
       </div>
 
-      <div>
-        <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
-          <FileText size={14} className="text-primary-600" />
-          {t('nav.questionnaires')}
-        </p>
-        <AdminRecentList
-          title={t('entityPortal.recentQuestionnaires')}
-          emptyLabel={t('dashboard.noQuestionnaires')}
-          items={homeQuestionnairePager.paginatedItems}
-          renderItem={(item) => {
-            const q = item as EntityDashboardStats['recentQuestionnaires'][0];
-            const overdue = new Date(q.deadline) < new Date();
-            return (
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{q.title}</p>
-                  <p className="text-xs text-muted">
-                    {q.cpvCode?.code}
-                    {q.cpvCode?.description ? ` · ${q.cpvCode.description}` : ''}
-                  </p>
-                </div>
-                <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${
-                  !q.isActive ? 'bg-gray-100 text-gray-600' :
-                  overdue ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                }`}>
-                  {!q.isActive ? t('common.inactive') : overdue ? t('entityPortal.overdue') : t('entityPortal.open')}
-                </span>
-              </div>
-            );
-          }}
-        />
-        <ListPagination
-          page={homeQuestionnairePager.page}
-          pageSize={homeQuestionnairePager.pageSize}
-          total={homeQuestionnairePager.total}
-          onPageChange={homeQuestionnairePager.setPage}
-          onPageSizeChange={homeQuestionnairePager.setPageSize}
-          itemLabel={t('nav.questionnaires').toLowerCase()}
-        />
+      <div className="grid lg:grid-cols-5 gap-3 items-start">
+        <div className="lg:col-span-3 space-y-3 min-w-0">
+          <HomePanel
+            title={t('home.proceduresTitle')}
+            action={<PanelLink label={t('home.viewAll')} onClick={() => onNavigate('procedures')} />}
+          >
+            {data.procedures.length === 0 ? (
+              <EmptyRow>{t('home.proceduresEmpty')}</EmptyRow>
+            ) : (
+              data.procedures.slice(0, 5).map((p) => (
+                <HomeRow
+                  key={p.id}
+                  onClick={() => onNavigate('procedures')}
+                  title={p.title}
+                  meta={[
+                    p.reference,
+                    p.bidDeadline ? t('home.deadlineOn', { date: formatDay(p.bidDeadline) }) : null,
+                    p.winner
+                      ? t('home.winner', { name: p.winner })
+                      : p.bidCount || p.sealed
+                        ? `${t('home.bids', { count: p.bidCount })}${p.sealed ? ` · ${t('home.sealed')}` : ''}`
+                        : null
+                  ].filter(Boolean).join(' · ')}
+                  right={<StatusBadge tone={PROCEDURE_TONE[p.status] || 'gray'}>{t(procedureStatusLabelKey(p.status))}</StatusBadge>}
+                />
+              ))
+            )}
+          </HomePanel>
+
+          <HomePanel
+            title={t('home.contractsTitle')}
+            action={<PanelLink label={t('home.viewAll')} onClick={() => onNavigate('contracts')} />}
+          >
+            {data.contracts.length === 0 ? (
+              <EmptyRow>{t('home.contractsEmpty')}</EmptyRow>
+            ) : (
+              data.contracts.slice(0, 3).map((c) => (
+                <HomeRow
+                  key={c.id}
+                  onClick={() => onNavigate('contracts')}
+                  title={c.title}
+                  meta={[c.reference, c.supplier, c.endDate ? t('home.endsOn', { date: formatDay(c.endDate) }) : null].filter(Boolean).join(' · ')}
+                  right={
+                    <StatusBadge tone={c.deliveryStatus === 'marked_done' ? 'yellow' : c.deliveryStatus === 'accepted' ? 'green' : c.status === 'draft' ? 'gray' : 'blue'}>
+                      {c.status === 'draft' ? t('contracts.status.draft') : t(`home.delivery.${c.deliveryStatus}`)}
+                    </StatusBadge>
+                  }
+                />
+              ))
+            )}
+          </HomePanel>
+        </div>
+
+        <div className="lg:col-span-2 space-y-3 min-w-0">
+          <TodoPanel todos={data.todo} total={data.todoTotal} onNavigate={onNavigate} limit={4} />
+          <DeadlinesPanel deadlines={data.deadlines} onNavigate={onNavigate} limit={3} />
+        </div>
       </div>
     </div>
   );
@@ -245,16 +213,17 @@ export function EntityQuestionnaireStatsStrip({
   const withResponses = questionnaires.filter((q) => (q.responses?.length || 0) > 0).length;
 
   return (
-    <AdminStatsGrid>
-      <AdminStatCard label={t('nav.questionnaires')} value={total} icon={FileText} accent="blue" />
-      <AdminStatCard label={t('entityPortal.activeNow')} value={active} icon={CheckCircle} accent="green" />
-      <AdminStatCard label={t('entityPortal.open')} value={open} icon={Clock} accent="violet" />
-      <AdminStatCard label={t('entityPortal.overdue')} value={overdue} icon={AlertTriangle} accent="amber" />
+    <AdminStatsGrid compact>
+      <AdminStatCard label={t('nav.questionnaires')} value={total} icon={FileText} accent="blue" compact />
+      <AdminStatCard label={t('entityPortal.activeNow')} value={active} icon={CheckCircle} accent="green" compact />
+      <AdminStatCard label={t('entityPortal.open')} value={open} icon={Clock} accent="violet" compact />
+      <AdminStatCard label={t('entityPortal.overdue')} value={overdue} icon={AlertTriangle} accent="amber" compact />
       <AdminStatCard
         label={t('entityPortal.withResponses')}
         value={withResponses}
         icon={Activity}
         accent="slate"
+        compact
       />
     </AdminStatsGrid>
   );

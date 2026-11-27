@@ -38,6 +38,7 @@ import { useNutsCatalogSearch } from '../../hooks/useNutsCatalogSearch';
 import { useListPagination, useServerListPagination } from '../../hooks/useListPagination';
 import { ListPagination } from '../../components/ui/ListPagination';
 import { PortaledDropdown } from '../../components/ui/PortaledDropdown';
+import { openDocumentFile } from '../../utils/documentFile';
 import { SearchField } from '../../components/ui/SearchField';
 import { BrandSelect } from '../../components/ui/BrandSelect';
 import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../components/questionnaires/QuestionnaireSlimRow';
@@ -48,7 +49,8 @@ import {
   FileText, Search, User, Plus, Edit2, Trash2, Eye, 
   Upload, X, Calendar, Building2, Save, XCircle, Camera,
   CheckCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Users, Power, PowerOff,
-  LayoutDashboard, Briefcase, ScrollText, Wallet, Award, Shield, Copy
+  LayoutDashboard, Briefcase, ScrollText, Wallet, Award, Shield, Copy,
+  Loader2
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { NotificationsBell } from '../../components/notifications/NotificationsBell';
@@ -272,13 +274,17 @@ const ProcuringEntityDashboard = () => {
   };
 
   // Fetch profile and documents
-  const fetchProfile = async (opts?: { silent?: boolean }) => {
+  // keepForm: refresh documents and status only, leaving what the user is typing untouched.
+  const editingProfileRef = useRef(false);
+  editingProfileRef.current = editingProfile;
+  const fetchProfile = async (opts?: { silent?: boolean; keepForm?: boolean }) => {
     try {
       if (!opts?.silent) setLoading(true);
       const response = await api.get('/procuring-entity/profile');
       const entity = response.data.procuringEntity;
       setProfile(entity);
-      setProfileData({
+      const keepForm = !!opts?.keepForm && editingProfileRef.current;
+      if (!keepForm) setProfileData({
         firstName: entity.user?.firstName || '',
         lastName: entity.user?.lastName || '',
         email: entity.user?.email || '',
@@ -449,10 +455,13 @@ const ProcuringEntityDashboard = () => {
   const handleUpdateProfile = async () => {
     try {
       setLoading(true);
-      await api.put('/procuring-entity/profile', profileData);
-      showToast(t('msg.profileUpdated'), 'success');
+      const res = await api.put('/procuring-entity/profile', profileData);
+      showToast(
+        res.data?.sentForApproval ? t('msg.profileSentForApproval') : t('msg.profileUpdated'),
+        res.data?.sentForApproval ? 'warning' : 'success'
+      );
       setEditingProfile(false);
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedUpdateProfile'), 'error');
     } finally {
@@ -475,7 +484,7 @@ const ProcuringEntityDashboard = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       await refreshUser();
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
       showToast(t('msg.profilePictureUpdated'), 'success');
       if (profilePictureRef.current) profilePictureRef.current.value = '';
     } catch (error: any) {
@@ -489,7 +498,7 @@ const ProcuringEntityDashboard = () => {
     try {
       await api.delete('/auth/profile-picture');
       await refreshUser();
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
       showToast(t('msg.profilePictureRemoved'), 'success');
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedRemoveProfilePicture'), 'error');
@@ -511,7 +520,7 @@ const ProcuringEntityDashboard = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       showToast(t('msg.documentUploaded'), 'success');
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedUploadDocument'), 'error');
     } finally {
@@ -527,7 +536,7 @@ const ProcuringEntityDashboard = () => {
     try {
       await api.delete(`/documents/${documentId}`);
       showToast(t('msg.documentDeleted'), 'success');
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedDeleteDocument'), 'error');
     }
@@ -1031,27 +1040,27 @@ const ProcuringEntityDashboard = () => {
             {/* Questionnaires Tab */}
             {activeTab === 'questionnaires' && (
               <ProcuringEntityQuestionnaireAiAssist.Root onApply={handleAiQuestionnaireApply}>
-              <div className="space-y-6">
-                <ProcuringEntityQuestionnaireAiAssist.InputBar />
-                {questionnaires.length > 0 && (
-                  <EntityQuestionnaireStatsStrip questionnaires={questionnaires} />
-                )}
-                <div className="flex justify-between items-center">
-                  <div>
+              <div className="space-y-3">
+                <div className="flex flex-wrap justify-between items-center gap-2">
+                  <div className="min-w-0">
                     <h2 className="text-base font-bold text-gray-900">{t('sections.questionnaireManagement')}</h2>
-                    <p className="text-sm text-gray-500 mt-1">{t('dashboard.createAndManageQuestionnaires')}</p>
+                    <p className="text-sm text-gray-500">{t('dashboard.createAndManageQuestionnaires')}</p>
                   </div>
                   <button
                     onClick={() => {
                       setShowCreateQuestionnaire(true);
                       cpvCatalog.fetchCodes('', newQuestionnaire.cpvCodeId);
                     }}
-                    className="btn-save flex items-center gap-2 px-5 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold"
+                    className="btn-save px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 shrink-0"
                   >
-                    <Plus size={20} />
+                    <Plus size={14} />
                     {t('dashboard.createQuestionnaire')}
                   </button>
                 </div>
+                <ProcuringEntityQuestionnaireAiAssist.InputBar />
+                {questionnaires.length > 0 && (
+                  <EntityQuestionnaireStatsStrip questionnaires={questionnaires} />
+                )}
 
                 {questionnaires.length > 0 ? (
                   <DynamicFilterBar
@@ -1210,120 +1219,126 @@ const ProcuringEntityDashboard = () => {
                 ) : (
                   <div className="flex flex-col lg:flex-row gap-6 items-start mt-0">
                     <div className="flex-1 min-w-0 space-y-6">
-                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl border border-gray-200/50 flex flex-col max-h-[calc(100vh-var(--portal-header-height)-5.5rem)] lg:max-h-[calc(100vh-var(--portal-header-height)-4rem)] min-h-[280px]">
-                        <div className="shrink-0 px-3 sm:px-4 pt-3 pb-2 border-b border-gray-200 bg-white/95 backdrop-blur-sm rounded-t-2xl z-10">
-                          <h3 className="text-base font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                              <div className="relative group shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-gray-200">
-                                <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
-                                  {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
-                                    <img
-                                      src={uploadsUrl(profile?.user?.profilePicture ?? user?.profilePicture) || undefined}
-                                      alt={t('common.profilePhotoAlt')}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
-                                  )}
-                                </div>
-                                <input
-                                  ref={profilePictureRef}
-                                  type="file"
-                                  accept="image/jpeg,image/jpg,image/png"
-                                  onChange={handleProfilePictureUpload}
-                                  className="hidden"
+                      <div className="bg-gradient-to-br from-white to-primary-50/30 rounded-2xl border border-gray-200/50 flex flex-col">
+                        {/* One compact row: photo, name, approval status, edit/save/cancel. Stays in view while the page scrolls. */}
+                        <div className="sticky top-[var(--portal-header-height)] z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-4 py-2 lg:h-14 border-b border-gray-200 bg-white rounded-t-2xl">
+                          <div className="relative group shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-gray-200">
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-sm font-bold">
+                              {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
+                                <img
+                                  src={uploadsUrl(profile?.user?.profilePicture ?? user?.profilePicture) || undefined}
+                                  alt={t('common.profilePhotoAlt')}
+                                  className="w-full h-full object-cover"
                                 />
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                  <button
-                                    type="button"
-                                    onClick={() => profilePictureRef.current?.click()}
-                                    disabled={uploadingPicture}
-                                    className="p-2 bg-white/90 rounded-lg hover:bg-white"
-                                  >
-                                    <Camera size={18} className="text-gray-800" />
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="min-w-0">
-                                <button
-                                  type="button"
-                                  onClick={() => profilePictureRef.current?.click()}
-                                  disabled={uploadingPicture}
-                                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                                >
-                                  <Upload size={14} />
-                                  {uploadingPicture ? t('common.loading') : ((profile?.user?.profilePicture ?? user?.profilePicture) ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto'))}
-                                </button>
-                                {(profile?.user?.profilePicture ?? user?.profilePicture) && (
-                                  <button
-                                    type="button"
-                                    onClick={handleRemoveProfilePicture}
-                                    className="block mt-1 text-sm text-gray-500 hover:text-red-600 text-left"
-                                  >
-                                    {t('supplierPortal.removePhoto')}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-                              {editingProfile ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={handleUpdateProfile}
-                                    disabled={loading}
-                                    className="btn-save flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
-                                  >
-                                    <Save size={16} />
-                                    {t('actions.saveChanges')}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingProfile(false);
-                                      fetchProfile();
-                                    }}
-                                    className="btn-cancel px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
-                                  >
-                                    {t('common.cancel')}
-                                  </button>
-                                </>
                               ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingProfile(true)}
-                                  className="btn-save flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
-                                >
-                                  <Edit2 size={16} />
-                                  {t('actions.editProfile')}
-                                </button>
+                                <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
                               )}
                             </div>
+                            <input
+                              ref={profilePictureRef}
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png"
+                              onChange={handleProfilePictureUpload}
+                              className="hidden"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => profilePictureRef.current?.click()}
+                              disabled={uploadingPicture}
+                              title={(profile?.user?.profilePicture ?? user?.profilePicture) ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto')}
+                              aria-label={(profile?.user?.profilePicture ?? user?.profilePicture) ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto')}
+                              className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
+                            >
+                              {uploadingPicture ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                            </button>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-gray-900 truncate leading-tight">
+                              {profileData.entityName || t('common.profile')}
+                            </p>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${
+                                  profile?.status === 'approved'
+                                    ? 'bg-green-100 text-green-700'
+                                    : profile?.status === 'rejected'
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-yellow-100 text-yellow-700'
+                                }`}
+                              >
+                                {profile?.status === 'approved'
+                                  ? t('common.approved')
+                                  : profile?.status === 'rejected'
+                                    ? t('common.rejected')
+                                    : t('common.pending')}
+                              </span>
+                              {(profile?.user?.profilePicture ?? user?.profilePicture) && editingProfile ? (
+                                <button
+                                  type="button"
+                                  onClick={handleRemoveProfilePicture}
+                                  className="text-xs text-gray-500 hover:text-red-600 whitespace-nowrap"
+                                >
+                                  {t('supplierPortal.removePhoto')}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {editingProfile ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={handleUpdateProfile}
+                                  disabled={loading}
+                                  className="btn-save flex items-center gap-1.5 px-3 sm:px-4 h-9 rounded-xl text-sm font-semibold disabled:opacity-50"
+                                >
+                                  {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                  {t('actions.saveChanges')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingProfile(false);
+                                    fetchProfile();
+                                  }}
+                                  className="btn-cancel px-3 sm:px-4 h-9 rounded-xl text-sm font-semibold"
+                                >
+                                  {t('common.cancel')}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setEditingProfile(true)}
+                                className="btn-save flex items-center gap-1.5 px-3 sm:px-4 h-9 rounded-xl text-sm font-semibold"
+                              >
+                                <Edit2 size={16} />
+                                {t('actions.editProfile')}
+                              </button>
+                            )}
                           </div>
                         </div>
-
-                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                        <div className="flex flex-col">
                           <ProcuringEntityAiProfileAssist.Root
                             enabled={editingProfile}
                             onApply={handleAiProfileApply}
                             onStartEdit={() => { if (!editingProfile) setEditingProfile(true); }}
                           >
-                            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                            <div className="flex flex-col">
                               {editingProfile && (
                                 <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 border-b border-gray-100 bg-white/80 space-y-2">
                                   <ProcuringEntityAiProfileAssist.UploadBar />
                                 </div>
                               )}
-                              <div className="flex flex-col flex-1 min-w-0 min-h-0">
-                                <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-gray-100 bg-white/80">
+                              <div className="flex flex-col min-w-0">
+                                <div className="px-3 sm:px-4 py-1.5 border-b border-gray-100 bg-white lg:sticky lg:top-[calc(var(--portal-header-height)+3.5rem)] z-[9]">
                                   <ProcuringEntityProfileTabsNav
                                     activeTab={activeProfileTab}
                                     onTabChange={setActiveProfileTab}
                                     completeness={entityCompleteness}
                                   />
                                 </div>
-                                <div className="flex-1 overflow-y-auto min-h-0 overscroll-behavior-contain px-3 sm:px-4 py-4">
+                                <div className="px-3 sm:px-4 py-4">
                                   {activeProfileTab === 'contact' && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                       <div>
@@ -2917,6 +2932,7 @@ const EditQuestionnaireModal = ({
 // View Responses Modal
 const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnaire: Questionnaire; responses: any[]; onClose: () => void }) => {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const [expandedResponseId, setExpandedResponseId] = useState<string | null>(null);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -3025,14 +3041,17 @@ const ViewResponsesModal = ({ questionnaire, responses, onClose }: { questionnai
                             {answer?.document && (
                               <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
                                 <FileText size={16} />
-                                <a
-                                  href={uploadsUrl(answer.document.filePath.replace(/^.*[\\\/]/, '')) || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="hover:underline"
+                                <button
+                                  type="button"
+                                  className="hover:underline text-left"
+                                  onClick={() =>
+                                    openDocumentFile(answer.document.id, answer.document.fileName, 'view').catch(() =>
+                                      showToast(t('procedures.answers.fileFailed'), 'error')
+                                    )
+                                  }
                                 >
                                   {answer.document.fileName}
-                                </a>
+                                </button>
                               </div>
                             )}
                           </div>

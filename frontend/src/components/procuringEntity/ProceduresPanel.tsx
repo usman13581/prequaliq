@@ -15,6 +15,8 @@ import { DateOnlyPicker } from '../DateOnlyPicker';
 import { BrandSelect } from '../ui/BrandSelect';
 import { AiBusyButton } from '../ai/AiBusyButton';
 import { SearchField } from '../ui/SearchField';
+import { StatusPills } from '../ui/StatusPills';
+import { BidAnswersPanel } from '../procedures/BidAnswersPanel';
 
 type Procedure = {
   id: string;
@@ -78,6 +80,16 @@ const STATUS_TONE: Record<string, 'gray' | 'blue' | 'yellow' | 'green' | 'orange
   cancelled: 'red'
 };
 
+type ProcedureStatusGroup = 'all' | 'preparing' | 'open' | 'evaluation' | 'awarded' | 'closed';
+
+function procedureStatusGroup(status?: string): ProcedureStatusGroup {
+  if (status === 'published' || status === 'qa_open' || status === 'bidding') return 'open';
+  if (status === 'evaluation') return 'evaluation';
+  if (status === 'awarded' || status === 'standstill') return 'awarded';
+  if (status === 'closed' || status === 'cancelled') return 'closed';
+  return 'preparing';
+}
+
 export function ProceduresPanel({ accountApproved = true }: { accountApproved?: boolean }) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
@@ -129,6 +141,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
   const [evalEdits, setEvalEdits] = useState<Record<string, { score: string; notes: string }>>({});
   const [evalSavingId, setEvalSavingId] = useState<string | null>(null);
   const [evalAiLoading, setEvalAiLoading] = useState(false);
+  const [aiBusy, setAiBusy] = useState<'announcement' | 'award' | null>(null);
   const [evalAiPanel, setEvalAiPanel] = useState<{
     summary: string;
     recommendation?: string | null;
@@ -156,10 +169,24 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
 
   const runListSearch = () => setAppliedListSearch(listSearch.trim());
 
+  // Status chips group the eleven procedure statuses into the five stages a buyer thinks in.
+  const [statusGroup, setStatusGroup] = useState<ProcedureStatusGroup>('all');
+  const statusPills = useMemo(
+    () =>
+      (['all', 'preparing', 'open', 'evaluation', 'awarded', 'closed'] as ProcedureStatusGroup[]).map((id) => ({
+        id,
+        label: t(`procedures.filter.${id}`),
+        count: id === 'all' ? procedures.length : procedures.filter((p) => procedureStatusGroup(p.status) === id).length
+      })),
+    [procedures, t]
+  );
+
   const filteredProcedures = useMemo(() => {
     const q = appliedListSearch.trim().toLowerCase();
-    if (!q) return procedures;
-    return procedures.filter((p) => {
+    const inGroup =
+      statusGroup === 'all' ? procedures : procedures.filter((p) => procedureStatusGroup(p.status) === statusGroup);
+    if (!q) return inGroup;
+    return inGroup.filter((p) => {
       const typeLabel = t(`procedures.types.${p.procedureType}`, { defaultValue: p.procedureType }).toLowerCase();
       const statusLabel = t(procedureStatusLabelKey(p.status)).toLowerCase();
       return (
@@ -173,7 +200,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         (p.awardDecision?.winner?.companyName || '').toLowerCase().includes(q)
       );
     });
-  }, [procedures, appliedListSearch, t]);
+  }, [procedures, appliedListSearch, statusGroup, t]);
 
   const {
     page,
@@ -337,7 +364,6 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
     try {
       await api.put(`/procedures/${detail.id}`, {
         title: detail.title,
-        referenceNumber: detail.referenceNumber,
         procedureType: detail.procedureType,
         description: detail.description,
         bidDeadline: detail.bidDeadline,
@@ -498,6 +524,8 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
   }, [detail]);
 
   const evalPager = useListPagination(evalRows, 5);
+  // Submitted-answers panel: null = closed, '' = every bid, otherwise one supplier
+  const [answersFor, setAnswersFor] = useState<string | null>(null);
 
   const evalSyncKey = useMemo(
     () => evalRows.map((r) => `${r.supplierId}:${r.score}:${r.notes}`).join('|'),
@@ -783,9 +811,9 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         </div>
       ) : null}
 
-      <div className="flex flex-col sm:flex-row gap-2 sm:items-center max-w-xl">
+      <div className="flex flex-wrap gap-2 items-center">
         <SearchField
-          wrapperClassName="flex-1 min-w-0"
+          wrapperClassName="flex-1 min-w-[14rem] max-w-md"
           value={listSearch}
           onChange={(e) => setListSearch(e.target.value)}
           onKeyDown={(e) => {
@@ -800,6 +828,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         >
           {t('buttons.search')}
         </button>
+        <StatusPills pills={statusPills} value={statusGroup} onChange={setStatusGroup} />
       </div>
 
       <div className="space-y-3">
@@ -892,7 +921,13 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('procedures.reference')}</label>
-            <input className="input-brand" value={form.referenceNumber} onChange={(e) => setForm({ ...form, referenceNumber: e.target.value })} />
+            <input
+              className="input-brand bg-surface text-muted cursor-not-allowed"
+              value={t('procedures.referenceAuto')}
+              readOnly
+              disabled
+              aria-readonly="true"
+            />
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('procedures.procedureType')}</label>
@@ -991,7 +1026,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
         onClose={() => { setDetail(null); }}
         title={detail?.title || t('procedures.title')}
         subtitle={detail ? t(procedureStatusLabelKey(detail.status)) : undefined}
-        widthClass="max-w-[50%]"
+        widthClass="max-w-full lg:max-w-[58%]"
         footer={
           detail ? (
             <div className="flex flex-wrap gap-2 justify-end">
@@ -1102,7 +1137,14 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('procedures.reference')}</label>
-                    <input className="input-brand" value={detail.referenceNumber || ''} onChange={(e) => setDetail({ ...detail, referenceNumber: e.target.value })} />
+                    <input
+                      className="input-brand bg-surface text-muted cursor-not-allowed"
+                      value={detail.referenceNumber || t('procedures.referenceAuto')}
+                      readOnly
+                      disabled
+                      aria-readonly="true"
+                      title={t('procedures.referenceLocked')}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('procedures.procedureType')}</label>
@@ -1188,6 +1230,48 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                       ))}
                       {suppliers.length === 0 ? <p className="text-xs text-muted">{t('procedures.noSuppliers')}</p> : null}
                     </div>
+                  </div>
+                ) : null}
+                {canAiAnnouncement || detail.announcementText ? (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-gray-700">
+                      {t('procedures.announcementText', { defaultValue: 'Announcement text' })}
+                    </label>
+                    <p className="text-xs text-muted">{t('procedures.announcementHint')}</p>
+                    <textarea
+                      className="input-brand"
+                      rows={4}
+                      placeholder={t('procedures.announcementPlaceholder', {
+                        defaultValue: 'Public announcement / after-announce text…',
+                      })}
+                      value={detail.announcementText || ''}
+                      onChange={(e) => setDetail({ ...detail, announcementText: e.target.value })}
+                    />
+                    {canAiAnnouncement ? (
+                      <AiBusyButton
+                        busy={aiBusy === 'announcement'}
+                        disabled={aiBusy !== null}
+                        className="!rounded-xl !px-4"
+                        idleIcon={<Sparkles size={16} aria-hidden />}
+                        busyLabel={t('procedures.aiWorking')}
+                        onClick={async () => {
+                          setAiBusy('announcement');
+                          try {
+                            const res = await api.get(`/ai-extras/announcement/${detail.id}`, {
+                              params: { language: (i18n.language || 'en').slice(0, 2) },
+                            });
+                            setDetail({ ...detail, announcementText: res.data.draft });
+                            showToast(t('procedures.aiDraftReady'), 'success');
+                          } catch (error: any) {
+                            showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
+                          } finally {
+                            setAiBusy(null);
+                          }
+                        }}
+                      >
+                        {t('procedures.aiAnnonsDraft')}
+                      </AiBusyButton>
+                    ) : null}
                   </div>
                 ) : null}
                 <div className="flex flex-wrap gap-2 items-center">
@@ -1399,13 +1483,30 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                   </div>
                 ) : null}
 
+                {(detail.bidResponses || []).length > 0 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface px-3 py-2">
+                    <p className="text-xs text-muted">{t('procedures.answers.hint')}</p>
+                    <button
+                      type="button"
+                      className="btn-save inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0"
+                      onClick={() => setAnswersFor('')}
+                    >
+                      <FileText size={14} /> {t('procedures.answers.openAll')}
+                    </button>
+                  </div>
+                ) : detail.isSealed && (detail.bidCount || 0) > 0 ? (
+                  <p className="text-xs text-amber-800 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                    {t('procedures.answers.sealedCount', { count: detail.bidCount })}
+                  </p>
+                ) : null}
+
                 {evalRows.length === 0 ? (
                   <p className="text-sm text-muted py-4">
                     {t('procedures.evalEmpty', { defaultValue: 'No submitted bids to score yet.' })}
                   </p>
                 ) : (
                   <div className="space-y-1.5">
-                    <div className="grid grid-cols-[minmax(0,1.1fr)_4.75rem_minmax(0,1.6fr)] gap-2 px-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                    <div className="grid grid-cols-[minmax(0,1.1fr)_4.75rem_minmax(0,1.6fr)] gap-2 px-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
                       <span className="truncate">{t('procedures.supplier', { defaultValue: 'Supplier' })}</span>
                       <span className="text-center">{t('procedures.score')}</span>
                       <span>{t('procedures.notes')}</span>
@@ -1415,19 +1516,20 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                       return (
                         <div
                           key={row.key}
-                          className="grid grid-cols-[minmax(0,1.1fr)_4.75rem_minmax(0,1.6fr)] gap-2 items-center px-2.5 py-1 rounded-md border border-border bg-white min-h-[2.15rem]"
+                          className="grid grid-cols-[minmax(0,1.1fr)_4.75rem_minmax(0,1.6fr)] gap-2 items-center px-2.5 py-1 rounded-md border border-border bg-white min-h-[2.75rem]"
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-foreground truncate leading-snug">
                               {row.companyName}
                             </p>
-                            {row.answerCount != null ? (
-                              <p className="text-[10px] text-muted truncate leading-tight">
-                                {t('procedures.evalAnswersCount', {
-                                  defaultValue: '{{count}} answers submitted',
-                                  count: row.answerCount,
-                                })}
-                              </p>
+                            {row.responseId ? (
+                              <button
+                                type="button"
+                                onClick={() => setAnswersFor(row.supplierId)}
+                                className="text-xs font-semibold text-accent hover:underline truncate leading-tight max-w-full text-left"
+                              >
+                                {t('procedures.answers.viewCount', { count: row.answerCount ?? 0 })}
+                              </button>
                             ) : null}
                           </div>
                           <input
@@ -1537,9 +1639,12 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                     <div className="flex flex-wrap gap-2">
                       <button type="button" className="btn-approve px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50" disabled={!accountApproved || detail.isSealed} onClick={saveAward}>{t('procedures.saveAward')}</button>
                       {canAiAwardMemo ? (
-                      <button
-                        type="button"
-                        className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700"
+                      <AiBusyButton
+                        busy={aiBusy === 'award'}
+                        disabled={aiBusy !== null}
+                        className="!rounded-xl !px-4"
+                        idleIcon={<Sparkles size={16} aria-hidden />}
+                        busyLabel={t('procedures.aiWorking')}
                         onClick={async () => {
                           const evals = (detail.evaluations as Evaluation[]) || [];
                           if (!evals.length) {
@@ -1574,6 +1679,7 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                           const winnerSupplierId = pick.supplierId;
                           const winnerName = pick.supplier?.companyName || '';
                           setAwardForm((prev) => ({ ...prev, winnerSupplierId }));
+                          setAiBusy('award');
                           try {
                             const res = await api.get(`/ai-extras/award-memo/${detail.id}`, {
                               params: {
@@ -1597,50 +1703,16 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
                             );
                           } catch (error: any) {
                             showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
+                          } finally {
+                            setAiBusy(null);
                           }
                         }}
                       >
                         {t('procedures.aiAwardMemo')}
-                      </button>
+                      </AiBusyButton>
                       ) : null}
                     </div>
                   </>
-                ) : null}
-
-                {canAiAnnouncement || detail.announcementText ? (
-                  <div className="space-y-2 pt-2 border-t border-border">
-                    <label className="text-xs font-semibold text-muted">
-                      {t('procedures.announcementText', { defaultValue: 'Announcement text' })}
-                    </label>
-                    <textarea
-                      className="input-brand"
-                      rows={4}
-                      placeholder={t('procedures.announcementPlaceholder', {
-                        defaultValue: 'Public announcement / after-announce text…',
-                      })}
-                      value={detail.announcementText || ''}
-                      onChange={(e) => setDetail({ ...detail, announcementText: e.target.value })}
-                    />
-                    {canAiAnnouncement ? (
-                      <button
-                        type="button"
-                        className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-50 text-violet-700 border border-violet-200"
-                        onClick={async () => {
-                          try {
-                            const res = await api.get(`/ai-extras/announcement/${detail.id}`, {
-                              params: { language: (i18n.language || 'en').slice(0, 2) },
-                            });
-                            setDetail({ ...detail, announcementText: res.data.draft });
-                            showToast(t('procedures.aiDraftReady'), 'success');
-                          } catch (error: any) {
-                            showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
-                          }
-                        }}
-                      >
-                        {t('procedures.aiAnnonsDraft')}
-                      </button>
-                    ) : null}
-                  </div>
                 ) : null}
               </>
             )}
@@ -1666,6 +1738,18 @@ export function ProceduresPanel({ accountApproved = true }: { accountApproved?: 
           </>
         ) : null}
       </SlideOver>
+
+      {detail ? (
+        <BidAnswersPanel
+          open={answersFor !== null}
+          onClose={() => setAnswersFor(null)}
+          procedureId={detail.id}
+          questionnaireId={detail.questionnaireId}
+          procedureTitle={detail.title}
+          bidIds={(detail.bidResponses || []).map((b: { id: string }) => b.id)}
+          focusSupplierId={answersFor || null}
+        />
+      ) : null}
     </div>
   );
 }

@@ -35,14 +35,17 @@ export function DynamicFilterBar({
 
   return (
     <>
-      <div className="space-y-3 rounded-2xl border border-border bg-white p-3 sm:p-4 shadow-sm">
-        <FilterFieldsGrid fields={fields} values={values} onChange={onChange} />
+      {/* Fields and actions share one row on wide screens, so the list below starts higher. */}
+      <div className="flex flex-col lg:flex-row lg:items-end gap-2 lg:gap-3 rounded-xl border border-border bg-white p-3 shadow-sm">
+        <div className="flex-1 min-w-0">
+          <FilterFieldsGrid fields={fields} values={values} onChange={onChange} />
+        </div>
 
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {filtersActive ? (
             <button
               type="button"
-              className="btn-cancel px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1"
+              className="btn-cancel px-3 h-9 rounded-xl text-xs font-semibold inline-flex items-center gap-1"
               onClick={clearAll}
             >
               <X size={14} />
@@ -53,7 +56,7 @@ export function DynamicFilterBar({
           {!hideSavedSearches ? (
             <button
               type="button"
-              className="btn-save px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1 sm:ml-auto"
+              className="btn-save px-3 h-9 rounded-xl text-xs font-semibold inline-flex items-center gap-1 sm:ml-auto"
               onClick={() => setSavedOpen(true)}
             >
               <Bookmark size={14} />

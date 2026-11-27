@@ -1,4 +1,5 @@
 const db = require('../models');
+const { requestLanguage } = require('../utils/requestLanguage');
 const { Op } = require('sequelize');
 const multer = require('multer');
 const os = require('os');
@@ -13,7 +14,8 @@ const {
 } = require('../services/aiExtractionService');
 const { processDocumentsForProfile } = require('../services/supplierProfileAiService');
 const { getEffectiveEntitlementsForUser } = require('../services/entitlementService');
-const { valuesDiffer, supplierMaterialFieldsChanged } = require('../utils/supplierMaterialDiff');
+const { valuesDiffer, supplierMaterialFieldsChanged, idSetsDiffer } = require('../utils/supplierMaterialDiff');
+const { checkEmailChange } = require('../utils/accountEmail');
 
 async function assertEntitlement(userId, key) {
   try {
@@ -194,8 +196,15 @@ const updateProfile = async (req, res) => {
 
     const { status, ...body } = req.body;
     const updateData = buildSupplierUpdateData(body);
-    const materialChanged = supplierMaterialFieldsChanged(supplier, updateData);
+    // A new sign-in email is an important change; name, phone and address are not.
+    const emailChange = await checkEmailChange({ id: req.user.id, email: req.user.email }, body.email);
+    if (emailChange.error) return res.status(400).json({ message: emailChange.error });
+    const materialChanged = supplierMaterialFieldsChanged(supplier, updateData) || emailChange.changed;
     await supplier.update(updateData);
+    if (emailChange.changed) {
+      await db.User.update({ email: emailChange.email }, { where: { id: req.user.id } });
+      if (supplier.user) supplier.user.email = emailChange.email;
+    }
     if (materialChanged) {
       await reapprovalAfterMaterialChange(supplier);
     }
@@ -392,8 +401,12 @@ const updateCPVCodes = async (req, res) => {
     const { cpvCodeIds } = req.body;
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
     if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
-    await supplier.setCpvCodes(cpvCodeIds);
-    await reapprovalAfterMaterialChange(supplier);
+    const nextCpvIds = Array.isArray(cpvCodeIds) ? cpvCodeIds : [];
+    const currentCpv = await supplier.getCpvCodes({ attributes: ['id'], joinTableAttributes: [] });
+    const cpvChanged = idSetsDiffer(currentCpv.map((c) => c.id), nextCpvIds);
+    await supplier.setCpvCodes(nextCpvIds);
+    // Saving the same codes again does not send the profile back for approval.
+    if (cpvChanged) await reapprovalAfterMaterialChange(supplier);
     const updatedSupplier = await loadSupplierForUser(req.user.id);
     res.json({ message: 'CPV codes saved', supplier: updatedSupplier });
   } catch (error) {
@@ -410,8 +423,11 @@ const updateNUTSCodes = async (req, res) => {
     const { nutsCodeIds } = req.body;
     const supplier = await db.Supplier.findOne({ where: { userId: req.user.id } });
     if (!supplier) return res.status(404).json({ message: 'Supplier profile not found' });
-    await supplier.setNutsCodes(nutsCodeIds || []);
-    await reapprovalAfterMaterialChange(supplier);
+    const nextNutsIds = Array.isArray(nutsCodeIds) ? nutsCodeIds : [];
+    const currentNuts = await supplier.getNutsCodes({ attributes: ['id'], joinTableAttributes: [] });
+    const nutsChanged = idSetsDiffer(currentNuts.map((n) => n.id), nextNutsIds);
+    await supplier.setNutsCodes(nextNutsIds);
+    if (nutsChanged) await reapprovalAfterMaterialChange(supplier);
     const updatedSupplier = await loadSupplierForUser(req.user.id);
     res.json({ message: 'NUTS codes saved', supplier: updatedSupplier });
   } catch (error) {
@@ -775,7 +791,7 @@ const suggestInsuranceFromDocument = (req, res) => {
       }
 
       const text = await extractTextFromPdf(tmpPath);
-      const language = (req.body?.language || 'en').slice(0, 2);
+      const language = requestLanguage(req);
       const suggestions = await suggestInsuranceFields(text, { language });
 
       res.json({
@@ -816,7 +832,7 @@ const suggestProfileFromDocuments = (req, res) => {
         return res.status(404).json({ message: 'Supplier not found' });
       }
 
-      const language = (req.body?.language || 'en').slice(0, 2);
+      const language = requestLanguage(req);
       const documents = [];
 
       for (const file of req.files) {
@@ -863,7 +879,7 @@ const suggestAnswersForQuestionnaire = async (req, res) => {
     if (!ent.ok) return res.status(403).json({ message: ent.message, code: 'FEATURE_DISABLED' });
 
     const questionnaireId = req.params.questionnaireId;
-    const language = (req.body?.language || 'en').slice(0, 2);
+    const language = requestLanguage(req);
     const { suggestAnswersForQuestionnaire: runSuggest } = require('../services/questionnaireAnswerAiService');
     const result = await runSuggest(req.user.id, questionnaireId, { language });
     return res.json(result);
