@@ -7,7 +7,8 @@ const {
   getEffectiveEntitlementsForUser
 } = require('../services/entitlementService');
 const { logAudit } = require('../services/auditService');
-const { sendSimpleHtmlEmail } = require('../services/emailService');
+const { sendContractActivityEmail } = require('../services/emailService');
+const { createForUser: createUserNotification } = require('../services/notificationService');
 const {
   notifyContractUpdated,
   notifyContractActivity
@@ -131,39 +132,61 @@ async function saveContractAttachments(contractId, messageId, files, userId) {
   return rows;
 }
 
-async function notifyBuyerContractActivity(contract, summary) {
-  const entity =
-    contract.procuringEntity ||
-    (await db.ProcuringEntity.findByPk(contract.procuringEntityId, {
-      include: [{ model: db.User, as: 'user', attributes: ['email', 'firstName', 'lastName'] }]
-    }));
-  const email = entity?.user?.email;
-  if (!email) return;
-  const subject = `Contract update: ${contract.title}`;
-  const html = `<p>${summary}</p><p>Log in to Prequaliq to view the contract thread.</p>`;
-  sendSimpleHtmlEmail(email, subject, html).catch((err) => {
+/** Loads the two parties with the sign-in user of each, for notices about a contract. */
+async function loadContractParties(contract) {
+  const userInclude = [{ model: db.User, as: 'user', attributes: ['id', 'email', 'firstName', 'lastName'] }];
+  const [entity, supplier] = await Promise.all([
+    db.ProcuringEntity.findByPk(contract.procuringEntityId, { include: userInclude }),
+    contract.supplierId ? db.Supplier.findByPk(contract.supplierId, { include: userInclude }) : null
+  ]);
+  return { entity, supplier };
+}
+
+/** Buyer side: bell notification plus an email with the contract facts. extra: { message, reason } */
+async function notifyBuyerContractActivity(contract, summary, extra = {}) {
+  const { entity, supplier } = await loadContractParties(contract);
+  if (!entity?.user) return;
+  try {
+    await createUserNotification(entity.user.id, {
+      type: 'contract_activity',
+      title: 'Contract activity',
+      message: `${contract.title}: ${summary}`,
+      linkTab: 'contracts',
+      meta: { contractId: contract.id }
+    });
+  } catch (err) {
+    console.warn('[contracts] buyer notification failed:', err.message);
+  }
+  if (!entity.user.email) return;
+  sendContractActivityEmail(entity.user.email, entity.user.firstName, {
+    contractTitle: contract.title,
+    contractNumber: contract.contractNumber,
+    counterpart: supplier?.companyName,
+    counterpartLabel: 'Supplier',
+    summary,
+    ...extra
+  }).catch((err) => {
     console.error('Failed to email buyer about contract activity:', err);
   });
 }
 
-async function notifySupplierOnContract(contract, summary) {
+/** Supplier side: bell notification plus an email with the contract facts. extra: { message, reason } */
+async function notifySupplierOnContract(contract, summary, extra = {}) {
   if (!contract.supplierId) return;
-  const supplier =
-    contract.supplier ||
-    (await db.Supplier.findByPk(contract.supplierId, {
-      include: [{ model: db.User, as: 'user', attributes: ['email', 'firstName', 'lastName'] }]
-    }));
-  if (supplier) {
-    await notifyContractActivity(supplier, contract.title, summary);
-    const email = supplier.user?.email;
-    if (email) {
-      const subject = `Contract update: ${contract.title}`;
-      const html = `<p>${summary}</p><p>Log in to Prequaliq to view the contract.</p>`;
-      sendSimpleHtmlEmail(email, subject, html).catch((err) => {
-        console.error('Failed to email supplier about contract:', err);
-      });
-    }
-  }
+  const { entity, supplier } = await loadContractParties(contract);
+  if (!supplier) return;
+  await notifyContractActivity(supplier, contract.title, summary);
+  if (!supplier.user?.email) return;
+  sendContractActivityEmail(supplier.user.email, supplier.user.firstName, {
+    contractTitle: contract.title,
+    contractNumber: contract.contractNumber,
+    counterpart: entity?.entityName,
+    counterpartLabel: 'Buyer',
+    summary,
+    ...extra
+  }).catch((err) => {
+    console.error('Failed to email supplier about contract:', err);
+  });
 }
 
 async function assertEntitlement(userId, key) {
@@ -174,6 +197,44 @@ async function assertEntitlement(userId, key) {
     if (map[key] === false) return { ok: false, message: `Feature not enabled: ${key}` };
   } catch (_e) {}
   return { ok: true };
+}
+
+const CREATABLE_CONTRACT_TYPES = ['standard', 'framework', 'dis'];
+const CLOSED_CONTRACT_STATUSES = ['terminated', 'expired'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** A buyer may only link an approved supplier and one of their own procedures. */
+async function resolveContractLinks(entity, body) {
+  let supplierId = null;
+  let procedureId = null;
+  if (body.supplierId) {
+    if (!UUID_RE.test(String(body.supplierId))) return { ok: false, status: 400, message: 'Invalid supplier' };
+    const supplier = await db.Supplier.findOne({ where: { id: body.supplierId, status: 'approved' } });
+    if (!supplier) return { ok: false, status: 404, message: 'Supplier not found' };
+    supplierId = supplier.id;
+  }
+  if (body.procedureId) {
+    if (!UUID_RE.test(String(body.procedureId))) return { ok: false, status: 400, message: 'Invalid procedure' };
+    const procedure = await db.Procedure.findOne({
+      where: { id: body.procedureId, procuringEntityId: entity.id }
+    });
+    if (!procedure) return { ok: false, status: 404, message: 'Procedure not found' };
+    procedureId = procedure.id;
+  }
+  return { ok: true, supplierId, procedureId };
+}
+
+function checkContractDates(startDate, endDate) {
+  if (startDate && endDate && String(endDate).slice(0, 10) < String(startDate).slice(0, 10)) {
+    return { ok: false, message: 'End date cannot be before the start date' };
+  }
+  return { ok: true };
+}
+
+async function nextContractNumber(entityId) {
+  const year = new Date().getFullYear();
+  const count = await db.Contract.count({ where: { procuringEntityId: entityId } });
+  return `CTR-${year}-${String(1001 + count)}`;
 }
 
 const listBuyerContracts = async (req, res) => {
@@ -230,18 +291,27 @@ const createContract = async (req, res) => {
     const title = (req.body.title || '').trim();
     if (!title) return res.status(400).json({ message: 'Title is required' });
 
+    const links = await resolveContractLinks(entity, req.body);
+    if (!links.ok) return res.status(links.status).json({ message: links.message });
+    const contractType = CREATABLE_CONTRACT_TYPES.includes(req.body.contractType)
+      ? req.body.contractType
+      : 'standard';
+    const dates = checkContractDates(req.body.startDate || null, req.body.endDate || null);
+    if (!dates.ok) return res.status(400).json({ message: dates.message });
+
     const contract = await db.Contract.create({
       procuringEntityId: entity.id,
-      supplierId: req.body.supplierId || null,
-      procedureId: req.body.procedureId || null,
+      supplierId: links.supplierId,
+      procedureId: links.procedureId,
       title,
-      contractNumber: req.body.contractNumber || null,
-      contractType: req.body.contractType || 'standard',
-      parentContractId: req.body.parentContractId || null,
+      contractNumber: String(req.body.contractNumber || '').trim() || (await nextContractNumber(entity.id)),
+      contractType,
+      parentContractId: null,
       startDate: req.body.startDate || null,
       endDate: req.body.endDate || null,
       valueAmount: req.body.valueAmount ?? null,
-      status: req.body.status || 'draft',
+      // A contract starts as a draft or active. It ends only through the end-contract action.
+      status: req.body.status === 'active' ? 'active' : 'draft',
       notes: req.body.notes || null,
       createdBy: req.user.id
     });
@@ -268,11 +338,50 @@ const updateContract = async (req, res) => {
     if (!contract || contract.procuringEntityId !== entity.id) {
       return res.status(404).json({ message: 'Contract not found' });
     }
+    if (CLOSED_CONTRACT_STATUSES.includes(contract.status)) {
+      return res.status(409).json({ message: 'This contract has ended and can no longer be changed.' });
+    }
+    const isDraft = contract.status === 'draft';
     const updates = {};
-    ['title', 'contractNumber', 'contractType', 'status', 'notes', 'startDate', 'endDate', 'supplierId', 'procedureId'].forEach((k) => {
+    // Always editable while the contract is open.
+    ['title', 'notes', 'endDate'].forEach((k) => {
       if (req.body[k] !== undefined) updates[k] = req.body[k];
     });
-    if (req.body.valueAmount !== undefined) updates.valueAmount = req.body.valueAmount;
+    if (updates.title !== undefined) {
+      updates.title = String(updates.title || '').trim();
+      if (!updates.title) return res.status(400).json({ message: 'Title is required' });
+    }
+    // Terms are fixed once the contract is active.
+    if (isDraft) {
+      ['startDate'].forEach((k) => {
+        if (req.body[k] !== undefined) updates[k] = req.body[k] || null;
+      });
+      if (req.body.status === 'active') updates.status = 'active';
+    }
+    // The value is fixed once set; an award-created contract starts active without one.
+    if (req.body.valueAmount !== undefined && (isDraft || contract.valueAmount == null)) {
+      updates.valueAmount = req.body.valueAmount === '' ? null : req.body.valueAmount;
+    }
+    if (updates.endDate !== undefined) updates.endDate = updates.endDate || null;
+    // Identity of the contract: number, type, supplier and procedure can be filled in
+    // once while empty, and never changed afterwards.
+    if (!contract.contractNumber && req.body.contractNumber) {
+      updates.contractNumber = String(req.body.contractNumber).trim() || null;
+    }
+    if (!contract.supplierId || !contract.procedureId) {
+      const links = await resolveContractLinks(entity, {
+        supplierId: contract.supplierId ? null : req.body.supplierId,
+        procedureId: contract.procedureId ? null : req.body.procedureId
+      });
+      if (!links.ok) return res.status(links.status).json({ message: links.message });
+      if (!contract.supplierId && links.supplierId) updates.supplierId = links.supplierId;
+      if (!contract.procedureId && links.procedureId) updates.procedureId = links.procedureId;
+    }
+    const dates = checkContractDates(
+      updates.startDate !== undefined ? updates.startDate : contract.startDate,
+      updates.endDate !== undefined ? updates.endDate : contract.endDate
+    );
+    if (!dates.ok) return res.status(400).json({ message: dates.message });
     const changedFields = Object.keys(updates).filter((k) => {
       const oldVal = contract.getDataValue(k);
       const newVal = updates[k];
@@ -313,8 +422,8 @@ const createCallOff = async (req, res) => {
     const title = (req.body.title || `${parent.title} — call-off`).trim();
     const callOff = await db.Contract.create({
       procuringEntityId: entity.id,
-      supplierId: req.body.supplierId || parent.supplierId,
-      procedureId: req.body.procedureId || null,
+      supplierId: parent.supplierId,
+      procedureId: parent.procedureId || null,
       title,
       contractType: 'call_off',
       parentContractId: parent.id,
@@ -476,6 +585,57 @@ const analyticsSummary = async (req, res) => {
   }
 };
 
+/** Buyer ends a draft or active contract. A reason is mandatory and is kept on the contract. */
+const terminateContract = async (req, res) => {
+  try {
+    const ent = await assertEntitlement(req.user.id, 'contracts.repository');
+    if (!ent.ok) return res.status(403).json({ message: ent.message });
+    const contract = await db.Contract.findByPk(req.params.contractId);
+    const access = await assertContractAccess(req, contract);
+    if (!access.ok) return res.status(access.status).json({ message: access.message });
+    if (CLOSED_CONTRACT_STATUSES.includes(contract.status)) {
+      return res.status(409).json({ message: 'This contract has already ended.' });
+    }
+    const reason = String(req.body.reason || '').trim();
+    if (reason.length < 10) {
+      return res.status(400).json({ message: 'Give a reason of at least 10 characters for ending the contract.' });
+    }
+    if (reason.length > 2000) {
+      return res.status(400).json({ message: 'The reason can be at most 2000 characters.' });
+    }
+    await contract.update({
+      status: 'terminated',
+      terminationReason: reason,
+      terminatedAt: new Date(),
+      terminatedByUserId: req.user.id
+    });
+    await db.ContractMessage.create({
+      contractId: contract.id,
+      senderUserId: req.user.id,
+      senderRole: 'procuring_entity',
+      kind: 'termination',
+      body: reason
+    });
+    await logAudit({
+      actorUserId: req.user.id,
+      action: 'contract.terminate',
+      entityType: 'contract',
+      entityId: contract.id,
+      meta: { reason }
+    });
+    try {
+      await notifySupplierOnContract(contract, 'The buyer has ended this contract', { reason });
+    } catch (notifyErr) {
+      console.warn('[contracts] notify after termination failed:', notifyErr.message);
+    }
+    const full = await loadContractForDetail(contract.id);
+    res.json({ message: 'Contract ended', contract: serializeContractDetail(full) });
+  } catch (error) {
+    console.error('Terminate contract error:', error);
+    res.status(500).json({ message: 'Error ending contract', error: error.message });
+  }
+};
+
 const getContractDetail = async (req, res) => {
   try {
     const ent = await assertEntitlement(req.user.id, 'contracts.repository');
@@ -494,14 +654,19 @@ const postContractMessage = async (req, res) => {
   try {
     const ent = await assertEntitlement(req.user.id, 'contracts.repository');
     if (!ent.ok) return res.status(403).json({ message: ent.message });
-    await runContractUpload(req, res);
     const contract = await db.Contract.findByPk(req.params.contractId);
     const access = await assertContractAccess(req, contract);
     if (!access.ok) return res.status(access.status).json({ message: access.message });
     if (!contractIsWritable(contract)) {
       return res.status(403).json({ message: 'Contract is read-only' });
     }
-    const body = (req.body.body || req.body.message || '').trim();
+    // Files are only accepted once the sender is known to belong to this contract.
+    try {
+      await runContractUpload(req, res);
+    } catch (uploadErr) {
+      return res.status(400).json({ message: uploadErr.message || 'Upload failed' });
+    }
+    const body = String(req.body.body || req.body.message || '').trim().slice(0, 5000);
     if (!body && (!req.files || !req.files.length)) {
       return res.status(400).json({ message: 'Message or attachment is required' });
     }
@@ -524,9 +689,9 @@ const postContractMessage = async (req, res) => {
     // Notifications must not fail the post — message is already saved
     try {
       if (senderRole === 'supplier') {
-        await notifyBuyerContractActivity(contract, summary);
+        await notifyBuyerContractActivity(contract, summary, { message: body });
       } else {
-        await notifySupplierOnContract(contract, summary);
+        await notifySupplierOnContract(contract, summary, { message: body });
       }
     } catch (notifyErr) {
       console.warn('[contracts] notify after message failed:', notifyErr.message);
@@ -667,6 +832,7 @@ module.exports = {
   listBuyerContracts,
   listSupplierContracts,
   getContractDetail,
+  terminateContract,
   createContract,
   updateContract,
   postContractMessage,

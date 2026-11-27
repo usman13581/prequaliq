@@ -855,9 +855,24 @@ const submitResponse = async (req, res) => {
 
     // Save/update answers - update existing or create new, but don't create duplicates
     if (answers && answers.length > 0) {
-      console.log('Saving/updating answers...');
+      // Only questions of this questionnaire, and only the supplier's own files, are accepted.
+      const validQuestionIds = new Set(
+        (await db.Question.findAll({ where: { questionnaireId }, attributes: ['id'] })).map((q) => String(q.id))
+      );
+      const requestedDocIds = [...new Set(answers.map((a) => a && a.documentId).filter(Boolean).map(String))];
+      const ownDocIds = new Set(
+        requestedDocIds.length
+          ? (await db.Document.findAll({
+            where: { id: { [Op.in]: requestedDocIds }, supplierId: supplier.id },
+            attributes: ['id']
+          })).map((d) => String(d.id))
+          : []
+      );
       for (const answerData of answers) {
-        console.log('Processing answer for question:', answerData.questionId, 'text:', answerData.answerText);
+        if (!answerData || !validQuestionIds.has(String(answerData.questionId))) continue;
+        if (answerData.documentId && !ownDocIds.has(String(answerData.documentId))) {
+          return res.status(403).json({ message: 'An attached document does not belong to your company.' });
+        }
         // Find existing answer for this question
         const existingAnswer = await db.Answer.findOne({
           where: {
@@ -867,7 +882,6 @@ const submitResponse = async (req, res) => {
         });
 
         if (existingAnswer) {
-          console.log('Updating existing answer ID:', existingAnswer.id);
           // Update existing answer
           await existingAnswer.update({
             answerText: answerData.answerText,
@@ -875,29 +889,22 @@ const submitResponse = async (req, res) => {
             documentId: answerData.documentId
           });
         } else {
-          console.log('Creating new answer');
           // Create new answer
-          const newAnswer = await db.Answer.create({
+          await db.Answer.create({
             responseId: response.id,
             questionId: answerData.questionId,
             answerText: answerData.answerText,
             answerValue: answerData.answerValue,
             documentId: answerData.documentId
           });
-          console.log('Created answer ID:', newAnswer.id);
         }
       }
-      console.log('Finished saving answers');
-    } else {
-      console.log('No answers to save');
     }
 
-    // Bid completeness check before final submit
+    // Required answers must be filled in before a final submit (plain validation, no AI involved).
     if (status === 'submitted') {
       try {
-        const { getEntitlementsForUser } = require('../services/entitlementService');
-        const ents = await getEntitlementsForUser(req.user.id);
-        if (ents['ai.completeness_conflict'] !== false) {
+        {
           const questions = await db.Question.findAll({
             where: { questionnaireId },
             attributes: ['id', 'isRequired']
@@ -951,8 +958,49 @@ const submitResponse = async (req, res) => {
               meta: { procedureId, supplierId: supplier.id }
             });
           }
+
+          // Both sides also get an email, and the supplier a receipt in the bell.
+          const { sendBidReceivedEmail, sendBidConfirmationEmail } = require('../services/emailService');
+          const { createNotification } = require('../services/supplierNotificationService');
+          const submittedAt = response.submittedAt || new Date();
+          const [buyerUser, supplierUser, buyerEntity, bidCount, savedForReceipt] = await Promise.all([
+            buyerUserId ? db.User.findByPk(buyerUserId, { attributes: ['email', 'firstName'] }) : null,
+            db.User.findByPk(req.user.id, { attributes: ['email', 'firstName'] }),
+            db.ProcuringEntity.findByPk(proc?.procuringEntityId, { attributes: ['entityName'] }),
+            db.QuestionnaireResponse.count({ where: { procedureId, status: 'submitted' } }),
+            db.Answer.findAll({ where: { responseId: response.id }, attributes: ['documentId'] })
+          ]);
+          await createNotification(supplier.id, {
+            type: 'bid_submitted',
+            title: 'Bid submitted',
+            message: `Your bid for ${proc?.title || 'the tender'} was submitted and is sealed until the bid deadline.`,
+            linkTab: 'tenders',
+            meta: { procedureId }
+          });
+          if (buyerUser?.email) {
+            sendBidReceivedEmail(buyerUser.email, buyerUser.firstName, {
+              supplierName: supplier.companyName,
+              procedureTitle: proc?.title,
+              reference: proc?.referenceNumber,
+              submittedAt,
+              bidCount,
+              bidDeadline: proc?.bidDeadline
+            }).catch((err) => console.error('Bid received email failed:', err.message));
+          }
+          if (supplierUser?.email) {
+            sendBidConfirmationEmail(supplierUser.email, supplierUser.firstName, {
+              companyName: supplier.companyName,
+              buyerName: buyerEntity?.entityName,
+              procedureTitle: proc?.title,
+              reference: proc?.referenceNumber,
+              submittedAt,
+              answerCount: savedForReceipt.length,
+              attachmentCount: savedForReceipt.filter((a) => a.documentId).length,
+              bidDeadline: proc?.bidDeadline
+            }).catch((err) => console.error('Bid confirmation email failed:', err.message));
+          }
         } catch (e) {
-          console.warn('[notifications] buyer notify on bid failed:', e.message);
+          console.warn('[notifications] notify on bid failed:', e.message);
         }
       }
     } else {

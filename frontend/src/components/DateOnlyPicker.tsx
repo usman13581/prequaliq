@@ -64,8 +64,11 @@ export const DateOnlyPicker: React.FC<DateOnlyPickerProps> = ({
       dropdownMode="select"
       calendarClassName="date-only-picker-calendar"
       popperClassName="date-only-picker-popper"
-      /* Avoid clipping inside SlideOver / overflow containers */
+      /* Avoid clipping inside SlideOver / overflow containers: rendered at the page root,
+         positioned against the window, and flipped above the field when there is no room below. */
       portalId="prequaliq-datepicker-portal"
+      popperPlacement="bottom-start"
+      popperProps={{ strategy: 'fixed' }}
     />
   );
 };

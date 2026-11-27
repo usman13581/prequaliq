@@ -45,7 +45,7 @@ export function SupplierDocumentList({
 }: {
   documents: SupplierDoc[];
   getDocumentUrl: (d: SupplierDoc) => string;
-  onDelete: (id: string) => void;
+  onDelete?: (id: string) => void;
   onUpdateMetadata?: (id: string, metadata: DocumentMetadata) => void;
   showDelete?: boolean;
 }) {
@@ -141,7 +141,7 @@ export function SupplierDocumentList({
                   {t('supplierPortal.editMetadata')}
                 </button>
               )}
-              {showDelete && (
+              {showDelete && onDelete && (
                 <button
                   type="button"
                   onClick={() => onDelete(doc.id)}

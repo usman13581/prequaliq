@@ -26,6 +26,9 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'none'
     },
     notes: { type: DataTypes.TEXT, allowNull: true },
+    terminationReason: { type: DataTypes.TEXT, allowNull: true },
+    terminatedAt: { type: DataTypes.DATE, allowNull: true },
+    terminatedByUserId: { type: DataTypes.UUID, allowNull: true },
     createdBy: { type: DataTypes.UUID, allowNull: true }
   }, { tableName: 'contracts', timestamps: true });
 

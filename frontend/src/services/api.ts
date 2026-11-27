@@ -1,5 +1,6 @@
 import axios, { type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios';
 import { beginGlobalBusy, endGlobalBusy } from '../lib/globalBusy';
+import i18n from '../i18n';
 
 // In production use VITE_API_URL (e.g. https://prequaliq-production.up.railway.app); in dev use /api (Vite proxy)
 const baseURL = import.meta.env.VITE_API_URL || '/api';
@@ -72,6 +73,9 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // The language picked in the app follows every request, so AI drafts and
+    // server-written text come back in it even where a screen does not pass it itself.
+    config.headers['Accept-Language'] = (i18n.language || 'en').slice(0, 2);
     if (shouldTrackBusy(config)) {
       config.__busyTracked = true;
       beginGlobalBusy();

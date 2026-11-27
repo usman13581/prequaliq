@@ -472,50 +472,296 @@ const sendNewQuestionnaireEmail = async (email, firstName, lastName, questionnai
   return sendEmail(email, subject, html);
 };
 
+/* ------------------------------------------------------------------ */
+/* Procurement notices: one consistent, informative layout              */
+/* ------------------------------------------------------------------ */
+
+const esc = (v) =>
+  String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/** 2026-12-07 or a Date -> "7 December 2026". Date-only values are not shifted by time zone. */
+const fmtDate = (v) => {
+  if (!v) return null;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? new Date(`${v}T12:00:00Z`) : new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+};
+const fmtDateTime = (v) => {
+  const d = v ? new Date(v) : new Date();
+  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
+};
+
+const TONES = {
+  blue: { title: '#1e3a8a', bg: '#eff6ff', border: '#3b82f6' },
+  green: { title: '#166534', bg: '#f0fdf4', border: '#22c55e' },
+  amber: { title: '#92400e', bg: '#fffbeb', border: '#f59e0b' },
+  red: { title: '#991b1b', bg: '#fef2f2', border: '#ef4444' }
+};
+
+/**
+ * Builds a notice email: greeting, what happened, a table of facts, an optional quoted
+ * message, what to do next, and one button into the app. Every value is escaped.
+ *
+ * @param {object} o
+ * @param {string} [o.name] recipient first name
+ * @param {string} o.heading one-line statement of what happened
+ * @param {string} o.intro one or two sentences of context
+ * @param {Array<[string, any]>} [o.facts] label/value rows; empty values are left out
+ * @param {{label: string, text: string}} [o.quote] text written by the other party
+ * @param {string[]} [o.steps] what the recipient should do next
+ * @param {string} [o.where] where in the app to find it, e.g. "Tenders"
+ * @param {string} [o.buttonText]
+ * @param {string} [o.tone] blue | green | amber | red
+ */
+const noticeEmail = ({ name, heading, intro, facts = [], quote, steps = [], where, buttonText, tone = 'blue' }) => {
+  const c = TONES[tone] || TONES.blue;
+  const rows = facts
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
+    .map(
+      ([label, value]) => `
+        <tr>
+          <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280; font-size: 13px; width: 38%; vertical-align: top;">${esc(label)}</td>
+          <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; color: #111827; font-size: 14px; font-weight: 600; vertical-align: top;">${esc(value)}</td>
+        </tr>`
+    )
+    .join('');
+  const content = `
+      <h2 style="margin: 0 0 16px 0; font-size: 20px; line-height: 1.3; color: ${c.title};">${esc(heading)}</h2>
+      <p style="margin: 0 0 12px 0;">Hello ${esc(name || 'there')},</p>
+      <p style="margin: 0 0 20px 0;">${esc(intro)}</p>
+      ${rows ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid #e5e7eb; border-radius: 8px; border-collapse: separate; overflow: hidden; margin: 0 0 20px 0;">${rows}</table>` : ''}
+      ${quote && quote.text ? `
+      <div style="background: ${c.bg}; border-left: 4px solid ${c.border}; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 0 0 20px 0;">
+        <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: ${c.title}; text-transform: uppercase; letter-spacing: 0.4px;">${esc(quote.label)}</p>
+        <p style="margin: 0; white-space: pre-wrap; color: #111827;">${esc(String(quote.text).slice(0, 1200))}</p>
+      </div>` : ''}
+      ${steps.length ? `
+      <p style="margin: 0 0 8px 0; font-weight: 600; color: #111827;">What to do next</p>
+      <ol style="margin: 0 0 4px 0; padding-left: 20px;">${steps.map((st) => `<li style="margin: 0 0 6px 0;">${esc(st)}</li>`).join('')}</ol>` : ''}
+      ${where ? `<p style="margin: 16px 0 0 0; font-size: 13px; color: #6b7280;">Where to find it: sign in to ${esc(APP_NAME)} and open <strong>${esc(where)}</strong>.</p>` : ''}`;
+  return emailLayout(content, {
+    titleColor: c.title,
+    showLoginButton: true,
+    buttonText: buttonText || `Open ${APP_NAME}`,
+    buttonHref: FRONTEND_URL
+  });
+};
+
+const PROCEDURE_TYPE_LABEL = {
+  open: 'Open procedure', restricted: 'Restricted procedure', negotiated: 'Negotiated procedure',
+  direct: 'Direct award', framework: 'Framework agreement', dis: 'Dynamic purchasing system', other: 'Other'
+};
+
+/** Plain HTML fragments from older callers are wrapped in the standard layout. */
 const sendSimpleHtmlEmail = async (email, subject, htmlBody) => {
-  return sendEmail(email, subject, htmlBody);
+  const html = /<html[\s>]/i.test(String(htmlBody)) ? htmlBody : emailLayout(htmlBody, { showLoginButton: true });
+  return sendEmail(email, subject, html);
 };
 
-const sendTenderInviteEmail = async (email, firstName, procedureTitle, referenceNumber) => {
-  const name = firstName || 'Supplier';
-  const subject = `You are invited to tender: ${procedureTitle}`;
-  const html = `<p>Hello ${name},</p><p>You have been invited to participate in <strong>${procedureTitle}</strong>${referenceNumber ? ` (${referenceNumber})` : ''}.</p><p>Please log in to PrequaliQ to view the underlag and submit your bid.</p>`;
-  return sendSimpleHtmlEmail(email, subject, html);
+/** details: { buyerName, procedureType, qaDeadline, bidDeadline, description } */
+const sendTenderInviteEmail = async (email, firstName, procedureTitle, referenceNumber, details = {}) => {
+  const subject = `Invitation to tender: ${procedureTitle}${referenceNumber ? ` (${referenceNumber})` : ''}`;
+  const html = noticeEmail({
+    name: firstName,
+    heading: 'You are invited to submit a bid',
+    intro: `${details.buyerName || 'A contracting authority'} has published a procurement and invited your company to take part.`,
+    facts: [
+      ['Procurement', procedureTitle],
+      ['Reference', referenceNumber],
+      ['Buyer', details.buyerName],
+      ['Procedure type', PROCEDURE_TYPE_LABEL[details.procedureType] || null],
+      ['Questions to the buyer until', fmtDate(details.qaDeadline)],
+      ['Bids must be submitted before', fmtDate(details.bidDeadline)]
+    ],
+    quote: details.description ? { label: 'About the procurement', text: details.description } : null,
+    steps: [
+      'Open the tender and read the documentation.',
+      'Send any questions to the buyer through the private chat before the question deadline.',
+      'Submit the ESPD declaration, answer the questions, attach the requested documents and press Submit.'
+    ],
+    where: 'Tenders',
+    buttonText: 'Open the tender'
+  });
+  return sendEmail(email, subject, html);
 };
 
-const sendAwardDecisionEmail = async (email, firstName, procedureTitle, isWinner, standstillEndsAt) => {
-  const name = firstName || 'Supplier';
+/** details: { buyerName, reference, winnerName } */
+const sendAwardDecisionEmail = async (email, firstName, procedureTitle, isWinner, standstillEndsAt, details = {}) => {
   const subject = isWinner
-    ? `Award decision — you are the intended winner: ${procedureTitle}`
-    : `Award decision — ${procedureTitle}`;
-  const html = isWinner
-    ? `<p>Hello ${name},</p><p>The contracting authority intends to award <strong>${procedureTitle}</strong> to your company.</p>${standstillEndsAt ? `<p>Standstill ends: ${standstillEndsAt}</p>` : ''}<p>Please log in to PrequaliQ for details.</p>`
-    : `<p>Hello ${name},</p><p>An award decision has been made for <strong>${procedureTitle}</strong>. Your tender was not selected.</p>${standstillEndsAt ? `<p>Standstill ends: ${standstillEndsAt}</p>` : ''}<p>Please log in to PrequaliQ for details.</p>`;
-  return sendSimpleHtmlEmail(email, subject, html);
+    ? `Award decision: your company is the intended winner of ${procedureTitle}`
+    : `Award decision: ${procedureTitle}`;
+  const html = noticeEmail({
+    name: firstName,
+    tone: isWinner ? 'green' : 'blue',
+    heading: isWinner ? 'Your company is the intended winner' : 'An award decision has been made',
+    intro: isWinner
+      ? `${details.buyerName || 'The buyer'} intends to award this contract to your company.`
+      : `${details.buyerName || 'The buyer'} has decided to award this contract to another supplier. Thank you for your bid.`,
+    facts: [
+      ['Procurement', procedureTitle],
+      ['Reference', details.reference],
+      ['Buyer', details.buyerName],
+      ['Awarded to', isWinner ? 'Your company' : details.winnerName],
+      ['Standstill period ends', fmtDate(standstillEndsAt)]
+    ],
+    steps: isWinner
+      ? [
+          'A contract has been created and is waiting for you under Contracts.',
+          'Use the contract messages to agree the remaining details with the buyer.'
+        ]
+      : ['You can read the decision on the tender. The procurement is listed under History once it is closed.'],
+    where: isWinner ? 'Contracts' : 'History',
+    buttonText: isWinner ? 'Open the contract' : 'View the decision'
+  });
+  return sendEmail(email, subject, html);
 };
 
-const sendComplementRequestEmail = async (email, firstName, procedureTitle, deadline) => {
-  const name = firstName || 'Supplier';
-  const subject = `Complement request — ${procedureTitle}`;
-  const html = `<p>Hello ${name},</p><p>The buyer has requested a complement for <strong>${procedureTitle}</strong>.</p>${deadline ? `<p>Deadline: ${deadline}</p>` : ''}<p>Please log in to PrequaliQ to respond.</p>`;
-  return sendSimpleHtmlEmail(email, subject, html);
+/** details: { buyerName, reference, message } */
+const sendComplementRequestEmail = async (email, firstName, procedureTitle, deadline, details = {}) => {
+  const subject = `Complement requested for your bid: ${procedureTitle}`;
+  const html = noticeEmail({
+    name: firstName,
+    tone: 'amber',
+    heading: 'The buyer asks you to complement your bid',
+    intro: `${details.buyerName || 'The buyer'} needs a clarification or an additional document before your bid can be evaluated further.`,
+    facts: [
+      ['Procurement', procedureTitle],
+      ['Reference', details.reference],
+      ['Buyer', details.buyerName],
+      ['Reply no later than', fmtDate(deadline)]
+    ],
+    quote: details.message ? { label: 'The buyer wrote', text: details.message } : null,
+    steps: [
+      'Open the tender and go to Complement requests.',
+      'Write your reply, attach any documents and press Submit complement.'
+    ],
+    where: 'Tenders',
+    buttonText: 'Reply to the request'
+  });
+  return sendEmail(email, subject, html);
+};
+
+/** To the buyer when a supplier submits a bid. info: { supplierName, procedureTitle, reference, submittedAt, bidDeadline, bidCount } */
+const sendBidReceivedEmail = async (email, firstName, info = {}) => {
+  const subject = `New bid received: ${info.procedureTitle}${info.reference ? ` (${info.reference})` : ''}`;
+  const html = noticeEmail({
+    name: firstName,
+    heading: 'A new bid has been submitted',
+    intro: `${info.supplierName || 'A supplier'} has submitted a bid. The content stays sealed until the bid deadline has passed.`,
+    facts: [
+      ['Procurement', info.procedureTitle],
+      ['Reference', info.reference],
+      ['Supplier', info.supplierName],
+      ['Submitted', fmtDateTime(info.submittedAt)],
+      ['Bids received so far', info.bidCount],
+      ['Bid deadline', fmtDate(info.bidDeadline)]
+    ],
+    steps: [
+      'No action is needed now.',
+      'After the bid deadline, open the procedure, press Unseal bids and evaluate the answers.'
+    ],
+    where: 'Procedures',
+    buttonText: 'Open the procedure'
+  });
+  return sendEmail(email, subject, html);
+};
+
+/** Receipt to the supplier who submitted the bid. info: { companyName, buyerName, procedureTitle, reference, submittedAt, bidDeadline, answerCount, attachmentCount } */
+const sendBidConfirmationEmail = async (email, firstName, info = {}) => {
+  const subject = `Bid submitted: ${info.procedureTitle}${info.reference ? ` (${info.reference})` : ''}`;
+  const html = noticeEmail({
+    name: firstName,
+    tone: 'green',
+    heading: 'Your bid has been submitted',
+    intro: 'This is your receipt. The bid is locked and can no longer be changed. The buyer cannot open it until the bid deadline has passed.',
+    facts: [
+      ['Procurement', info.procedureTitle],
+      ['Reference', info.reference],
+      ['Buyer', info.buyerName],
+      ['Submitted by', info.companyName],
+      ['Submitted', fmtDateTime(info.submittedAt)],
+      ['Answers', info.answerCount],
+      ['Attached documents', info.attachmentCount],
+      ['Bid deadline', fmtDate(info.bidDeadline)]
+    ],
+    steps: [
+      'Keep this email as proof of submission.',
+      'You will be notified if the buyer asks for a complement and when the award decision is made.'
+    ],
+    where: 'Tenders',
+    buttonText: 'View your bid'
+  });
+  return sendEmail(email, subject, html);
+};
+
+/** Contract activity for either side. info: { contractTitle, contractNumber, counterpart, counterpartLabel, summary, message, reason } */
+const sendContractActivityEmail = async (email, firstName, info = {}) => {
+  const subject = `Contract update: ${info.contractTitle}${info.contractNumber ? ` (${info.contractNumber})` : ''}`;
+  const html = noticeEmail({
+    name: firstName,
+    tone: info.reason ? 'red' : 'blue',
+    heading: info.summary || 'There is an update on your contract',
+    intro: `There is new activity on a contract with ${info.counterpart || 'the other party'}.`,
+    facts: [
+      ['Contract', info.contractTitle],
+      ['Contract number', info.contractNumber],
+      [info.counterpartLabel || 'Other party', info.counterpart],
+      ['What happened', info.summary],
+      ['When', fmtDateTime()]
+    ],
+    quote: info.reason
+      ? { label: 'Reason given', text: info.reason }
+      : info.message
+        ? { label: 'Message', text: info.message }
+        : null,
+    steps: ['Open the contract to read the full thread, view attached files and reply.'],
+    where: 'Contracts',
+    buttonText: 'Open the contract'
+  });
+  return sendEmail(email, subject, html);
 };
 
 const sendOrgInviteEmail = async (email, orgName, acceptUrl) => {
-  const subject = `Invitation to join ${orgName} on PrequaliQ`;
-  const html = `<p>You have been invited to join <strong>${orgName}</strong> on PrequaliQ.</p><p><a href="${acceptUrl}">Accept invitation</a></p><p>If you do not have an account, register with this email first, then open the link again.</p>`;
-  return sendSimpleHtmlEmail(email, subject, html);
+  const subject = `Invitation to join ${orgName} on ${APP_NAME}`;
+  const html = emailLayout(
+    `
+      <h2 style="margin: 0 0 16px 0; font-size: 20px; color: #1e3a8a;">You are invited to join ${esc(orgName)}</h2>
+      <p style="margin: 0 0 12px 0;">Hello,</p>
+      <p style="margin: 0 0 16px 0;"><strong>${esc(orgName)}</strong> has invited you to work with them on ${esc(APP_NAME)}.</p>
+      <ol style="margin: 0 0 4px 0; padding-left: 20px;">
+        <li style="margin: 0 0 6px 0;">If you do not have an account yet, register with this email address first.</li>
+        <li style="margin: 0 0 6px 0;">Then press the button below to accept the invitation.</li>
+      </ol>`,
+    { showLoginButton: true, buttonText: 'Accept invitation', buttonHref: acceptUrl }
+  );
+  return sendEmail(email, subject, html);
 };
 
 const sendDocumentExpiringEmail = async (email, firstName, count) => {
-  const name = firstName || 'Supplier';
-  const subject = `${count} document(s) expiring soon — PrequaliQ`;
-  const html = `<p>Hello ${name},</p><p>${count} of your documents will expire within 30 days. Please update them in your supplier profile.</p>`;
-  return sendSimpleHtmlEmail(email, subject, html);
+  const subject = `Profile documents expiring soon: ${count}`;
+  const html = noticeEmail({
+    name: firstName,
+    tone: 'amber',
+    heading: 'Some of your profile documents expire soon',
+    intro: 'Documents in your supplier profile will expire within 30 days. An expired document can put your qualification on hold.',
+    facts: [['Documents expiring within 30 days', count]],
+    steps: [
+      'Open your profile and press Edit profile.',
+      'Upload the renewed document under the question it belongs to and set its new expiry date.'
+    ],
+    where: 'Profile',
+    buttonText: 'Open your profile'
+  });
+  return sendEmail(email, subject, html);
 };
 
 module.exports = {
   sendEmail,
+  sendSimpleHtmlEmail,
+  sendBidReceivedEmail,
+  sendBidConfirmationEmail,
+  sendContractActivityEmail,
+  noticeEmail,
   sendAccountCreatedEmail,
   sendAccountActivatedEmail,
   sendAccountDeactivatedEmail,

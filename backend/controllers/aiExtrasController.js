@@ -1,4 +1,5 @@
 const db = require('../models');
+const { requestLanguage } = require('../utils/requestLanguage');
 const { Op } = require('sequelize');
 const { getEffectiveEntitlementsForUser } = require('../services/entitlementService');
 const { isAiConfigured, callAi } = require('../services/aiExtractionService');
@@ -10,24 +11,6 @@ async function assertEntitlement(userId, key) {
   } catch (_e) {}
   return { ok: true };
 }
-
-const completenessCheck = async (req, res) => {
-  try {
-    const ent = await assertEntitlement(req.user.id, 'ai.completeness_conflict');
-    if (!ent.ok) return res.status(403).json({ message: ent.message });
-
-    const { runCompletenessAiCheck } = require('../services/supplierCompletenessAiService');
-    const language = String(req.query.language || req.headers['accept-language'] || 'en').slice(0, 2);
-    const result = await runCompletenessAiCheck(req.user.id, { language });
-    res.json(result);
-  } catch (error) {
-    console.error('Completeness check error:', error);
-    if (error.code === 'SUPPLIER_NOT_FOUND') {
-      return res.status(404).json({ message: 'Supplier not found', code: error.code });
-    }
-    res.status(500).json({ message: 'Error running completeness check', error: error.message });
-  }
-};
 
 const qualificationRisk = async (req, res) => {
   try {
@@ -57,7 +40,7 @@ const evaluationCopilot = async (req, res) => {
     const entity = await db.ProcuringEntity.findOne({ where: { userId: req.user.id } });
     if (!entity) return res.status(404).json({ message: 'Procuring entity not found' });
 
-    const language = String(req.query.language || req.body?.language || 'en').slice(0, 2);
+    const language = requestLanguage(req);
     const procedure = await db.Procedure.findByPk(req.params.procedureId, {
       include: [
         {
@@ -80,6 +63,15 @@ const evaluationCopilot = async (req, res) => {
     if (['awarded', 'standstill', 'closed'].includes(procedure.status)) {
       return res.status(403).json({
         message: 'Evaluation is read-only after award.',
+      });
+    }
+    // Sealed bids stay unread, by the AI as well, until the procedure is unsealed.
+    const sealedUntil = procedure.sealedUntil ? new Date(procedure.sealedUntil) : null;
+    if (procedure.isSealed && (!sealedUntil || sealedUntil > new Date())) {
+      return res.status(403).json({
+        message: 'Bids are sealed until the deadline. AI evaluation is available after unsealing.',
+        sealed: true,
+        sealedUntil: procedure.sealedUntil,
       });
     }
 
@@ -250,7 +242,7 @@ const qaDraftReply = async (req, res) => {
 
     const procedureId = req.body.procedureId || req.body.procedure_id;
     const threadSupplierId = req.body.threadSupplierId || req.body.supplierId || null;
-    const language = String(req.body.language || 'en').slice(0, 2);
+    const language = requestLanguage(req);
     let question = String(req.body.question || '').trim();
 
     if (!procedureId) {
@@ -410,7 +402,7 @@ const announcementDraft = async (req, res) => {
     const entity = await db.ProcuringEntity.findOne({ where: { userId: req.user.id } });
     if (!entity) return res.status(404).json({ message: 'Procuring entity not found' });
 
-    const language = String(req.query.language || req.body?.language || 'en').slice(0, 2);
+    const language = requestLanguage(req);
     const procedure = await db.Procedure.findByPk(req.params.procedureId);
     if (!procedure || procedure.procuringEntityId !== entity.id) {
       return res.status(404).json({ message: 'Procedure not found' });
@@ -469,7 +461,7 @@ const awardMemoDraft = async (req, res) => {
     const entity = await db.ProcuringEntity.findOne({ where: { userId: req.user.id } });
     if (!entity) return res.status(404).json({ message: 'Procuring entity not found' });
 
-    const language = String(req.query.language || req.body?.language || 'en').slice(0, 2);
+    const language = requestLanguage(req);
     const winnerSupplierId = String(
       req.query.winnerSupplierId || req.body?.winnerSupplierId || ''
     ).trim();
@@ -664,7 +656,6 @@ const supplierMatching = async (req, res) => {
 };
 
 module.exports = {
-  completenessCheck,
   qualificationRisk,
   evaluationCopilot,
   qaDraftReply,

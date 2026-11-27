@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { useEntitlement } from '../../contexts/EntitlementContext';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { DateOnlyPicker } from '../../components/DateOnlyPicker';
@@ -36,7 +35,8 @@ import { QuestionnaireSlimRow, StatusBadge, RowActionButton } from '../../compon
 import { 
   FileText, History, Upload, Edit2, Eye, 
   Save, XCircle, Calendar, Building2, CheckCircle, Camera,
-  LayoutDashboard, Download, Briefcase, ScrollText
+  LayoutDashboard, Download, Briefcase, ScrollText,
+  Loader2
 } from 'lucide-react';
 import type { AnswerSuggestion } from '../../components/supplier/SupplierQuestionnaireAnswerAiAssist';
 import { uploadsUrl } from '../../utils/uploadsUrl';
@@ -140,10 +140,9 @@ const SUPPLIER_PORTAL_TABS = [
 ] as const;
 
 const SupplierDashboard = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { user, refreshUser } = useAuth();
   const { showToast } = useToast();
-  const { enabled: canAiCompleteness } = useEntitlement('ai.completeness_conflict');
   const [activeTab, setActiveTab] = usePortalTab('overview', SUPPLIER_PORTAL_TABS);
   const [loading, setLoading] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -220,13 +219,17 @@ const SupplierDashboard = () => {
   } | null>(null);
 
   // Fetch profile
-  const fetchProfile = async (opts?: { silent?: boolean }) => {
+  // keepForm: refresh documents and status only, leaving what the user is typing untouched.
+  const editingProfileRef = useRef(false);
+  editingProfileRef.current = editingProfile;
+  const fetchProfile = async (opts?: { silent?: boolean; keepForm?: boolean }) => {
     try {
       if (!opts?.silent) setLoading(true);
       const response = await api.get('/supplier/profile');
       const supplier = response.data.supplier;
       setProfile(supplier);
-      setProfileData({
+      const keepForm = !!opts?.keepForm && editingProfileRef.current;
+      if (!keepForm) setProfileData({
         firstName: supplier.user?.firstName || '',
         lastName: supplier.user?.lastName || '',
         email: supplier.user?.email || '',
@@ -295,7 +298,7 @@ const SupplierDashboard = () => {
       const res = await api.post('/supplier/profile/submit');
       showToast(res.data?.message || t('supplierPortal.profileSubmitted'), 'success');
       setShowSubmitModal(false);
-      await fetchProfile();
+      await fetchProfile({ silent: true, keepForm: true });
       await fetchCompleteness();
       await fetchDashboard();
     } catch (error: any) {
@@ -313,7 +316,7 @@ const SupplierDashboard = () => {
     try {
       await api.put(`/documents/supplier/${id}/metadata`, metadata);
       showToast(t('supplierPortal.metadataSaved'), 'success');
-      await fetchProfile();
+      await fetchProfile({ silent: true, keepForm: true });
       await fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('common.error'), 'error');
@@ -546,7 +549,7 @@ const SupplierDashboard = () => {
       setProfile(res.data.supplier);
       setSelectedCPVCodes(res.data.supplier.cpvCodes?.map((c: CPVCode) => c.id) || merged);
     } else {
-      await fetchProfile();
+      await fetchProfile({ silent: true, keepForm: true });
     }
     fetchCompleteness();
   };
@@ -562,7 +565,7 @@ const SupplierDashboard = () => {
       setProfile(res.data.supplier);
       setSelectedNUTSCodes(res.data.supplier.nutsCodes?.map((n: NUTSCode) => n.id) || merged);
     } else {
-      await fetchProfile();
+      await fetchProfile({ silent: true, keepForm: true });
     }
     fetchCompleteness();
   };
@@ -634,7 +637,7 @@ const SupplierDashboard = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       await refreshUser();
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
       showToast(t('msg.profilePictureUpdated'), 'success');
       if (profilePictureRef.current) profilePictureRef.current.value = '';
     } catch (error: any) {
@@ -648,7 +651,7 @@ const SupplierDashboard = () => {
     try {
       await api.delete('/auth/profile-picture');
       await refreshUser();
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
       showToast(t('msg.profilePictureRemoved'), 'success');
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedRemoveProfilePicture'), 'error');
@@ -662,7 +665,7 @@ const SupplierDashboard = () => {
       const res = await api.put('/supplier/cpv-codes', { cpvCodeIds: selectedCPVCodes });
       showToast(res.data?.message || t('msg.cpvSaved'), 'success');
       setShowCPVSelector(false);
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
       fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedUpdateCPV'), 'error');
@@ -678,7 +681,7 @@ const SupplierDashboard = () => {
       const res = await api.put('/supplier/nuts-codes', { nutsCodeIds: selectedNUTSCodes });
       showToast(res.data?.message || t('msg.nutsSaved'), 'success');
       setShowNUTSSelector(false);
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
       fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('nutsCodes.failedToUpdate'), 'error');
@@ -694,7 +697,7 @@ const SupplierDashboard = () => {
     try {
       await api.delete(`/documents/${documentId}`);
       showToast(t('msg.documentDeleted'), 'success');
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
       fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedDeleteDocument'), 'error');
@@ -728,33 +731,37 @@ const SupplierDashboard = () => {
     profile.status === 'requalification_required'
   );
 
+  // Uploading, removing and editing document details belong to edit mode; viewing lists the files only.
   const renderProfileDocuments = (docType: string) => (
-    <div className="mt-3">
-      <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-all duration-200 font-medium text-sm">
-        <input
-          type="file"
-          className="hidden"
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-          onChange={(e) => handleProfileQuestionDocumentUpload(docType, e)}
-          disabled={!!uploadingQuestionDoc}
-        />
-        <Upload size={16} />
-        {uploadingQuestionDoc === docType ? t('sections.uploading') : t('sections.upload')}
-      </label>
-      <div className="mt-2 max-w-xs">
-        <label className="block text-xs text-muted mb-1">{t('supplierPortal.documentExpiry')}</label>
-        <DateOnlyPicker
-          value={documentExpiryDates[docType] || ''}
-          onChange={(dateStr) => setDocumentExpiryDates({ ...documentExpiryDates, [docType]: dateStr })}
-          placeholder={t('supplierPortal.documentExpiry')}
-          className="text-sm px-3 py-2"
-        />
-      </div>
+    <div className="mt-2">
+      {editingProfile && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="cursor-pointer inline-flex items-center gap-2 px-3 h-9 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-lg transition-colors font-medium text-sm">
+            <input
+              type="file"
+              className="hidden"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+              onChange={(e) => handleProfileQuestionDocumentUpload(docType, e)}
+              disabled={!!uploadingQuestionDoc}
+            />
+            {uploadingQuestionDoc === docType ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+            {uploadingQuestionDoc === docType ? t('sections.uploading') : t('sections.upload')}
+          </label>
+          <div className="w-44">
+            <DateOnlyPicker
+              value={documentExpiryDates[docType] || ''}
+              onChange={(dateStr) => setDocumentExpiryDates({ ...documentExpiryDates, [docType]: dateStr })}
+              placeholder={t('supplierPortal.documentExpiry')}
+              className="text-sm px-3 py-2"
+            />
+          </div>
+        </div>
+      )}
       <SupplierDocumentList
         documents={getDocumentsForQuestion(docType)}
         getDocumentUrl={getDocumentUrl}
-        onDelete={handleDeleteDocument}
-        onUpdateMetadata={handleUpdateDocumentMetadata}
+        onDelete={editingProfile ? handleDeleteDocument : undefined}
+        onUpdateMetadata={editingProfile ? handleUpdateDocumentMetadata : undefined}
       />
     </div>
   );
@@ -779,7 +786,7 @@ const SupplierDashboard = () => {
       });
       showToast(res.data?.message || t('msg.documentSaved'), 'success');
       setDocumentExpiryDates({ ...documentExpiryDates, [documentType]: '' });
-      fetchProfile();
+      fetchProfile({ silent: true, keepForm: true });
       fetchCompleteness();
     } catch (error: any) {
       showToast(error.response?.data?.message || t('msg.failedUploadDocument'), 'error');
@@ -951,56 +958,6 @@ const SupplierDashboard = () => {
               rejectionReason={profile?.rejectionReason}
               roleLabel={t('nav.supplier')}
             />
-
-            {activeTab === 'profile' && canAiCompleteness ? (
-              <div className="mb-4">
-                <button
-                  type="button"
-                  className="px-4 py-2 rounded-xl text-sm font-semibold bg-violet-600 text-white hover:bg-violet-700"
-                  onClick={async () => {
-                    try {
-                      const res = await api.get('/ai-extras/completeness', {
-                        params: { language: (i18n.language || 'en').slice(0, 2) },
-                      });
-                      const data = res.data || {};
-                      const issues = data.issues || [];
-                      const conflicts = data.conflicts || [];
-                      const percent = data.percent ?? null;
-                      await fetchCompleteness();
-                      if (data.ready) {
-                        showToast(
-                          data.summary ||
-                            t('supplierPortal.completenessOk', {
-                              defaultValue: 'Profile looks complete ({{percent}}%)',
-                              percent: percent ?? 100,
-                            }),
-                          'success'
-                        );
-                        return;
-                      }
-                      const gapLines = [
-                        ...issues.slice(0, 4).map((i: { message?: string }) => i.message),
-                        ...conflicts.slice(0, 2).map((c: { message?: string }) => c.message),
-                      ].filter(Boolean);
-                      const header = t('supplierPortal.completenessGaps', {
-                        defaultValue: 'Profile {{percent}}% complete — {{count}} gap(s)',
-                        percent: percent ?? '—',
-                        count: issues.length + conflicts.length,
-                      });
-                      showToast(
-                        data.summary ||
-                          (gapLines.length ? `${header}: ${gapLines.join('; ')}` : header),
-                        'warning'
-                      );
-                    } catch (error: any) {
-                      showToast(error.response?.data?.message || t('msg.failedSave'), 'error');
-                    }
-                  }}
-                >
-                  {t('supplierPortal.aiCompletenessCheck', { defaultValue: 'AI completeness check' })}
-                </button>
-              </div>
-            ) : null}
 
             {/* Overview */}
             {activeTab === 'overview' && (
@@ -1176,13 +1133,6 @@ const SupplierDashboard = () => {
 
                 <SupplierProfileCompletenessMobile completeness={completeness} />
 
-                {profile?.status === 'rejected' && profile?.rejectionReason && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                    <p className="font-semibold text-red-800">{t('supplierPortal.rejectionTitle')}</p>
-                    <p className="text-sm text-red-700 mt-1">{profile.rejectionReason}</p>
-                  </div>
-                )}
-
                 {profile?.status === 'requalification_required' && (
                   <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
                     <p className="font-semibold text-orange-800">{t('supplierPortal.requalificationTitle')}</p>
@@ -1206,104 +1156,93 @@ const SupplierDashboard = () => {
                 ) : (
                   <div className="flex flex-col lg:flex-row gap-6 items-start mt-0">
                     <div className="flex-1 min-w-0 space-y-6">
-                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl border border-gray-200/50 flex flex-col max-h-[calc(100vh-var(--portal-header-height)-5.5rem)] lg:max-h-[calc(100vh-var(--portal-header-height)-4rem)] min-h-[280px]">
-                        {/* Sticky: photo + edit/save/cancel + qualification status */}
-                        <div className="shrink-0 px-3 sm:px-4 pt-3 pb-2 border-b border-gray-200 bg-white/95 backdrop-blur-sm rounded-t-2xl z-10">
-                          <h3 className="text-base font-bold text-gray-900 mb-3">{t('common.profile')} Information</h3>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                              <div className="relative group shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-gray-200">
-                                <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
-                                  {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
-                                    <img
-                                      src={uploadsUrl(profile?.user?.profilePicture ?? user?.profilePicture) || undefined}
-                                      alt="Profile"
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
-                                  )}
-                                </div>
-                                <input
-                                  ref={profilePictureRef}
-                                  type="file"
-                                  accept="image/jpeg,image/jpg,image/png"
-                                  onChange={handleProfilePictureUpload}
-                                  className="hidden"
+                      <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl border border-gray-200/50 flex flex-col">
+                        {/* One compact row: photo, name, qualification status, edit/save/cancel. Stays in view while the page scrolls. */}
+                        <div className="sticky top-[var(--portal-header-height)] z-10 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 sm:px-4 py-2 lg:h-14 border-b border-gray-200 bg-white rounded-t-2xl">
+                          <div className="relative group shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-gray-200">
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-sm font-bold">
+                              {(profile?.user?.profilePicture ?? user?.profilePicture) ? (
+                                <img
+                                  src={uploadsUrl(profile?.user?.profilePicture ?? user?.profilePicture) || undefined}
+                                  alt="Profile"
+                                  className="w-full h-full object-cover"
                                 />
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                  <button
-                                    type="button"
-                                    onClick={() => profilePictureRef.current?.click()}
-                                    disabled={uploadingPicture}
-                                    className="p-2 bg-white/90 rounded-lg hover:bg-white"
-                                  >
-                                    <Camera size={18} className="text-gray-800" />
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="min-w-0">
-                                <button
-                                  type="button"
-                                  onClick={() => profilePictureRef.current?.click()}
-                                  disabled={uploadingPicture}
-                                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                                >
-                                  <Upload size={14} />
-                                  {uploadingPicture ? t('common.loading') : ((profile?.user?.profilePicture ?? user?.profilePicture) ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto'))}
-                                </button>
-                                {(profile?.user?.profilePicture ?? user?.profilePicture) && (
-                                  <button
-                                    type="button"
-                                    onClick={handleRemoveProfilePicture}
-                                    className="block mt-1 text-sm text-gray-500 hover:text-red-600 text-left"
-                                  >
-                                    {t('supplierPortal.removePhoto')}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-                              {editingProfile ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={handleUpdateProfile}
-                                    disabled={loading}
-                                    className="btn-save flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
-                                  >
-                                    <Save size={16} />
-                                    {t('actions.saveChanges')}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingProfile(false);
-                                      fetchProfile();
-                                    }}
-                                    className="btn-cancel px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
-                                  >
-                                    {t('common.cancel')}
-                                  </button>
-                                </>
                               ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingProfile(true)}
-                                  className="btn-save flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold"
-                                >
-                                  <Edit2 size={16} />
-                                  {t('actions.editProfile')}
-                                </button>
+                                <span>{profileData.firstName?.[0] || user?.firstName?.[0]}{profileData.lastName?.[0] || user?.lastName?.[0]}</span>
                               )}
                             </div>
+                            <input
+                              ref={profilePictureRef}
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png"
+                              onChange={handleProfilePictureUpload}
+                              className="hidden"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => profilePictureRef.current?.click()}
+                              disabled={uploadingPicture}
+                              title={(profile?.user?.profilePicture ?? user?.profilePicture) ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto')}
+                              aria-label={(profile?.user?.profilePicture ?? user?.profilePicture) ? t('supplierPortal.changePhoto') : t('supplierPortal.uploadPhoto')}
+                              className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10"
+                            >
+                              {uploadingPicture ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                            </button>
                           </div>
-                          <div className="mt-3 pt-3 border-t border-gray-100">
-                            <SupplierQualificationStatusBar profile={profile} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-gray-900 truncate leading-tight">
+                              {profileData.companyName || t('common.profile')}
+                            </p>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <SupplierQualificationStatusBar profile={profile} />
+                              {(profile?.user?.profilePicture ?? user?.profilePicture) && editingProfile ? (
+                                <button
+                                  type="button"
+                                  onClick={handleRemoveProfilePicture}
+                                  className="text-xs text-gray-500 hover:text-red-600 whitespace-nowrap"
+                                >
+                                  {t('supplierPortal.removePhoto')}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {editingProfile ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={handleUpdateProfile}
+                                  disabled={loading}
+                                  className="btn-save flex items-center gap-1.5 px-3 sm:px-4 h-9 rounded-xl text-sm font-semibold disabled:opacity-50"
+                                >
+                                  {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                  {t('actions.saveChanges')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingProfile(false);
+                                    fetchProfile();
+                                  }}
+                                  className="btn-cancel px-3 sm:px-4 h-9 rounded-xl text-sm font-semibold"
+                                >
+                                  {t('common.cancel')}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setEditingProfile(true)}
+                                className="btn-save flex items-center gap-1.5 px-3 sm:px-4 h-9 rounded-xl text-sm font-semibold"
+                              >
+                                <Edit2 size={16} />
+                                {t('actions.editProfile')}
+                              </button>
+                            )}
                           </div>
                         </div>
 
-                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                        <div className="flex flex-col">
                         <SupplierAiProfileAssist.Root
                           enabled={editingProfile}
                           onApply={handleAiProfileApply}
@@ -1311,21 +1250,21 @@ const SupplierDashboard = () => {
                           onApplyNuts={handleAiProfileApplyNuts}
                           onStartEdit={() => { if (!editingProfile) setEditingProfile(true); }}
                         >
-                          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                          <div className="flex flex-col">
                             {editingProfile && (
                               <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 border-b border-gray-100 bg-white/80 space-y-2">
                                 <SupplierAiProfileAssist.UploadBar />
                               </div>
                             )}
-                            <div className="flex flex-col flex-1 min-w-0 min-h-0">
-                              <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-gray-100 bg-white/80">
+                            <div className="flex flex-col min-w-0">
+                              <div className="px-3 sm:px-4 py-1.5 border-b border-gray-100 bg-white lg:sticky lg:top-[calc(var(--portal-header-height)+3.5rem)] z-[9]">
                                 <SupplierProfileTabsNav
                                   activeTab={activeProfileTab}
                                   onTabChange={setActiveProfileTab}
                                   completeness={completeness}
                                 />
                               </div>
-                              <div className="flex-1 overflow-y-auto min-h-0 overscroll-behavior-contain px-3 sm:px-4 py-4">
+                              <div className="px-3 sm:px-4 py-4">
                           {activeProfileTab === 'basic' && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>

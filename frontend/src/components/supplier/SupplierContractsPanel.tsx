@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Building2, Calendar, ChevronRight, Hash } from 'lucide-react';
+import { Ban, Building2, Calendar, ChevronRight, Hash } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useEntitlement } from '../../contexts/EntitlementContext';
@@ -10,6 +10,7 @@ import { ListPagination } from '../ui/ListPagination';
 import { SlideOver } from '../ui/SlideOver';
 import { ContractThread, type ContractThreadMessage } from '../contracts/ContractThread';
 import { DynamicFilterBar } from '../search/DynamicFilterBar';
+import { StatusPills } from '../ui/StatusPills';
 import { emptyFilters, filterValueAsString, type FilterFieldDef, type FilterValues } from '../search/filterTypes';
 
 function contractStatusTone(status: string): 'green' | 'yellow' | 'red' | 'gray' | 'blue' {
@@ -26,17 +27,6 @@ const CONTRACT_FILTER_FIELDS: FilterFieldDef[] = [
     type: 'keyword',
     labelKey: 'common.search',
     placeholderKey: 'contracts.searchPlaceholder'
-  },
-  {
-    key: 'status',
-    type: 'select',
-    labelKey: 'common.status',
-    options: [
-      { value: 'draft', labelKey: 'contracts.status.draft' },
-      { value: 'active', labelKey: 'contracts.status.active' },
-      { value: 'expired', labelKey: 'contracts.status.expired' },
-      { value: 'terminated', labelKey: 'contracts.status.terminated' }
-    ]
   }
 ];
 
@@ -53,6 +43,8 @@ type Contract = {
   messages?: ContractThreadMessage[];
   procuringEntity?: { entityName?: string } | null;
   procedure?: { id?: string; title?: string; referenceNumber?: string | null } | null;
+  terminationReason?: string | null;
+  terminatedAt?: string | null;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -73,11 +65,21 @@ export function SupplierContractsPanel() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [filters, setFilters] = useState<FilterValues>(() => emptyFilters(CONTRACT_FILTER_FIELDS));
 
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const statusPills = useMemo(
+    () =>
+      ['all', 'draft', 'active', 'expired', 'terminated'].map((id) => ({
+        id,
+        label: id === 'all' ? t('common.all') : t(`contracts.status.${id}`),
+        count: id === 'all' ? contracts.length : contracts.filter((c) => c.status === id).length
+      })),
+    [contracts, t]
+  );
+
   const filtered = useMemo(() => {
     const q = filterValueAsString(filters, 'keyword').trim().toLowerCase();
-    const status = filterValueAsString(filters, 'status').trim();
     return contracts.filter((c) => {
-      if (status && c.status !== status) return false;
+      if (statusFilter !== 'all' && c.status !== statusFilter) return false;
       if (!q) return true;
       return (
         c.title?.toLowerCase().includes(q) ||
@@ -86,20 +88,22 @@ export function SupplierContractsPanel() {
         (c.procedure?.title || '').toLowerCase().includes(q)
       );
     });
-  }, [contracts, filters]);
+  }, [contracts, filters, statusFilter]);
 
   const pager = useListPagination(filtered);
 
-  const loadDetail = async (id: string) => {
+  /** silent: background refresh of an open contract (new messages) without the loading state. */
+  const loadDetail = async (id: string, silent = false) => {
     try {
-      setDetailLoading(true);
-      const res = await api.get(`/contracts/${id}`);
+      if (!silent) setDetailLoading(true);
+      const res = await api.get(`/contracts/${id}`, { silentBusy: true });
       setDetail(res.data.contract || null);
     } catch (error: any) {
+      if (silent) return;
       showToast(error.response?.data?.message || t('msg.failedLoadContracts'), 'error');
       setDetail(null);
     } finally {
-      setDetailLoading(false);
+      if (!silent) setDetailLoading(false);
     }
   };
 
@@ -147,6 +151,8 @@ export function SupplierContractsPanel() {
         values={filters}
         onChange={setFilters}
       />
+
+      <StatusPills pills={statusPills} value={statusFilter} onChange={setStatusFilter} />
 
       <div className="space-y-3">
         {loading ? (
@@ -234,50 +240,85 @@ export function SupplierContractsPanel() {
         }}
         title={selected?.title || ''}
         subtitle={selected?.procuringEntity?.entityName}
+        widthClass="max-w-full lg:max-w-[62%]"
       >
-        {selected ? (
-          <div className="space-y-3 text-sm">
-            <p><span className="text-muted">{t('contracts.number')}:</span> {selected.contractNumber || '—'}</p>
-            <p><span className="text-muted">{t('common.type')}:</span> {t(`contracts.types.${selected.contractType}`, { defaultValue: selected.contractType })}</p>
-            <p className="flex items-center gap-2">
-              <span className="text-muted">{t('common.status')}:</span>
-              <StatusBadge
-                tone={
-                  selected.status === 'active'
-                    ? 'green'
-                    : selected.status === 'expired'
-                      ? 'yellow'
-                      : selected.status === 'terminated'
-                        ? 'red'
-                        : 'gray'
-                }
-              >
-                {t(STATUS_LABEL[selected.status] || 'contracts.status.draft')}
-              </StatusBadge>
-            </p>
-            {selected.procedure?.title ? (
-              <p><span className="text-muted">{t('procedures.nav')}:</span> {selected.procedure.title}</p>
-            ) : null}
-            <p><span className="text-muted">{t('common.start')}:</span> {selected.startDate || '—'}</p>
-            <p><span className="text-muted">{t('common.end')}:</span> {selected.endDate || '—'}</p>
-            {selected.notes ? <p className="whitespace-pre-wrap border-t border-border pt-3">{selected.notes}</p> : null}
-            {detailLoading ? (
-              <p className="text-sm text-muted">{t('common.loading')}</p>
-            ) : detail ? (
-              <ContractThread
-                contractId={detail.id}
-                messages={detail.messages || []}
-                deliveryStatus={detail.deliveryStatus || 'none'}
-                mode="supplier"
-                readOnly={detail.status !== 'active'}
-                onUpdated={() => {
-                  loadDetail(detail.id);
-                  load();
-                }}
-              />
-            ) : null}
-          </div>
-        ) : null}
+        {selected ? (() => {
+          const current = detail || selected;
+          return (
+            <div className="space-y-4 text-sm">
+              {current.status === 'terminated' ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-sm font-bold text-red-800 inline-flex items-center gap-1.5">
+                    <Ban size={15} /> {t('contracts.end.endedTitle')}
+                    {current.terminatedAt ? (
+                      <span className="font-normal text-xs text-red-700">
+                        · {new Date(current.terminatedAt).toLocaleDateString()}
+                      </span>
+                    ) : null}
+                  </p>
+                  {current.terminationReason ? (
+                    <p className="mt-1 text-sm text-red-900 whitespace-pre-wrap">
+                      <span className="font-semibold">{t('contracts.end.reasonLabel')}:</span> {current.terminationReason}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <section className="rounded-2xl border border-border bg-surface p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t('contracts.fixed.supplierTitle')}</p>
+                  <StatusBadge tone={contractStatusTone(current.status)}>
+                    {t(STATUS_LABEL[current.status] || 'contracts.status.draft')}
+                  </StatusBadge>
+                </div>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                  {[
+                    { label: t('contracts.number'), value: current.contractNumber },
+                    {
+                      label: t('common.type'),
+                      value: t(`contracts.types.${current.contractType}`, { defaultValue: current.contractType })
+                    },
+                    { label: t('contracts.buyerField'), value: current.procuringEntity?.entityName },
+                    {
+                      label: t('procedures.nav'),
+                      value: current.procedure?.title
+                        ? [current.procedure.referenceNumber, current.procedure.title].filter(Boolean).join(' · ')
+                        : null
+                    },
+                    { label: t('common.start'), value: current.startDate },
+                    { label: t('common.end'), value: current.endDate }
+                  ].map((row) => (
+                    <div key={row.label} className="min-w-0">
+                      <dt className="text-xs text-muted">{row.label}</dt>
+                      <dd className="text-sm font-semibold text-foreground break-words">{row.value || '—'}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {current.notes ? (
+                  <p className="mt-3 pt-3 border-t border-border whitespace-pre-wrap text-foreground">{current.notes}</p>
+                ) : null}
+              </section>
+
+              {detailLoading ? (
+                <p className="text-sm text-muted">{t('common.loading')}</p>
+              ) : detail ? (
+                <ContractThread
+                  contractId={detail.id}
+                  messages={detail.messages || []}
+                  deliveryStatus={detail.deliveryStatus || 'none'}
+                  mode="supplier"
+                  contractStatus={detail.status}
+                  readOnly={detail.status !== 'active'}
+                  onUpdated={() => {
+                    loadDetail(detail.id, true);
+                    load();
+                  }}
+                  onRefresh={() => loadDetail(detail.id, true)}
+                />
+              ) : null}
+            </div>
+          );
+        })() : null}
       </SlideOver>
     </div>
   );

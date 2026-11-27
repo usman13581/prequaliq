@@ -218,12 +218,19 @@ async function extractAuto(text, options = {}) {
     fileName: options.fileName,
   };
 
+  let result;
   try {
-    return await callAi('/extract/auto', payload);
+    result = await callAi('/extract/auto', payload);
   } catch (err) {
     if (err.status !== 404) throw err;
-    return extractAutoOrchestrated(text, options);
+    result = await extractAutoOrchestrated(text, options);
   }
+  // The profile section follows from the document type. The model sometimes returns a
+  // mismatched pair (an ISO 9001 certificate filed under finance), so the type decides.
+  if (result && SECTION_FOR_TYPE[result.documentType]) {
+    result.section = SECTION_FOR_TYPE[result.documentType];
+  }
+  return result;
 }
 
 async function checkAiHealth() {

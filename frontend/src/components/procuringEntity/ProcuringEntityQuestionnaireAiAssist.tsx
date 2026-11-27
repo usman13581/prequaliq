@@ -8,8 +8,10 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Building2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   FileText,
   Sparkles,
   XCircle,
@@ -431,9 +433,18 @@ function UnderstandConfirmModal() {
   );
 }
 
+const AI_BOX_COLLAPSED_KEY = 'pq.aiQuestionnaireBoxCollapsed';
+
 function InputBar() {
   const { t } = useTranslation();
   const ctx = useContext(QuestionnaireAiContext);
+  // The box can be folded away to leave more room for the list; the choice is remembered on this device.
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(AI_BOX_COLLAPSED_KEY) === '1');
+  const toggleCollapsed = () =>
+    setCollapsed((prev) => {
+      localStorage.setItem(AI_BOX_COLLAPSED_KEY, prev ? '0' : '1');
+      return !prev;
+    });
   if (!ctx) return null;
   const {
     loading,
@@ -458,13 +469,26 @@ function InputBar() {
     !loading;
 
   return (
-    <div className="rounded-xl border border-violet-200/70 bg-gradient-to-br from-violet-50/50 to-white p-4 space-y-3">
-      <div className="flex items-start gap-2">
-        <Sparkles size={18} className="text-violet-600 shrink-0 mt-0.5" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-gray-900">{t('entityPortal.aiQuestionnaireTitle')}</p>
-          <p className="text-xs text-muted mt-0.5">{t('entityPortal.aiQuestionnaireSubtitle')}</p>
-        </div>
+    <div className={`rounded-xl border border-violet-200/70 bg-gradient-to-br from-violet-50/50 to-white ${collapsed ? 'px-4 py-2' : 'p-4 space-y-3'}`}>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed}
+          aria-controls="ai-questionnaire-body"
+          title={collapsed ? t('entityPortal.aiQuestionnaireExpand') : t('entityPortal.aiQuestionnaireCollapse')}
+          className="flex items-center gap-2 min-w-0 flex-1 text-left"
+        >
+          <Sparkles size={18} className="text-violet-600 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1 text-sm font-semibold text-gray-900 truncate">
+            {t('entityPortal.aiQuestionnaireTitle')}
+            <span className="ml-2 text-xs font-normal text-muted">{t('entityPortal.aiQuestionnaireSubtitle')}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 shrink-0">
+            {collapsed ? t('entityPortal.aiQuestionnaireExpand') : t('entityPortal.aiQuestionnaireCollapse')}
+            {collapsed ? <ChevronDown size={16} aria-hidden /> : <ChevronUp size={16} aria-hidden />}
+          </span>
+        </button>
         {hasResult && (
           <button
             type="button"
@@ -476,13 +500,15 @@ function InputBar() {
           </button>
         )}
       </div>
+      {!collapsed && (
+        <div id="ai-questionnaire-body" className="space-y-3">
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        rows={3}
+        rows={2}
         maxLength={descriptionMaxChars}
         placeholder={t('entityPortal.aiQuestionnairePlaceholder')}
-        className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:ring-2 focus:ring-violet-500 resize-y min-h-[4.5rem] ${
+        className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-violet-500 resize-y min-h-[3.25rem] ${
           validationError
             ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
             : 'border-gray-300 focus:border-violet-500'
@@ -490,25 +516,22 @@ function InputBar() {
         aria-invalid={Boolean(validationError)}
         aria-describedby="ai-questionnaire-desc-hint ai-questionnaire-desc-error"
       />
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <p id="ai-questionnaire-desc-hint" className="text-muted">
-          {t('entityPortal.aiQuestionnaireCharLimit', { max: descriptionMaxChars })}
-        </p>
-        <p
-          className={`tabular-nums ${
-            descriptionCharCount > descriptionMaxChars * 0.9 ? 'text-amber-700' : 'text-muted'
-          }`}
-        >
-          {descriptionCharCount}/{descriptionMaxChars}
-        </p>
-      </div>
       {validationError && (
         <p id="ai-questionnaire-desc-error" className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
           {validationError}
         </p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted">{t('entityPortal.aiQuestionnaireHint')}</p>
+        <p id="ai-questionnaire-desc-hint" className="text-xs text-muted min-w-0 flex-1">
+          <span
+            className={`tabular-nums font-semibold mr-2 ${
+              descriptionCharCount > descriptionMaxChars * 0.9 ? 'text-amber-700' : ''
+            }`}
+          >
+            {descriptionCharCount}/{descriptionMaxChars}
+          </span>
+          {t('entityPortal.aiQuestionnaireHint')}
+        </p>
         <AiBusyButton
           disabled={!canGenerate && !loading}
           busy={loading}
@@ -531,6 +554,8 @@ function InputBar() {
             selected: selectedQuestionCount,
           })}
         </p>
+      )}
+        </div>
       )}
     </div>
   );
@@ -579,7 +604,7 @@ function Drawer() {
       )}
 
       <aside
-        className={`fixed right-0 top-[var(--portal-header-height)] z-40 flex flex-col h-[calc(100vh-var(--portal-header-height))] w-[30vw] min-w-[17.5rem] max-w-[28rem] bg-gradient-to-b from-violet-50/95 to-white border-l border-violet-200/80 shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed right-0 top-[var(--portal-header-height)] z-40 flex flex-col h-[calc(100vh-var(--portal-header-height))] w-full sm:w-[52vw] sm:min-w-[26rem] sm:max-w-[52rem] bg-gradient-to-b from-violet-50/95 to-white border-l border-violet-200/80 shadow-2xl transition-transform duration-300 ease-in-out ${
           drawerOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         aria-hidden={!drawerOpen}
@@ -599,7 +624,7 @@ function Drawer() {
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-5 py-4 space-y-4">
             <div className="rounded-lg bg-white border border-gray-200 p-3">
               <p className="text-xs font-semibold text-gray-700 mb-1">{t('sections.basicInformation')}</p>
               <p className="text-xs text-muted mb-2">{t('entityPortal.aiQuestionnaireSupplierPreviewHint')}</p>
